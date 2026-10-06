@@ -259,6 +259,63 @@ class ClientCompatTest {
         assertEquals(tags, current.song().album!!.tags)
     }
 
+    private fun versionedAlbum(name: String, tags: List<TitleTag> = emptyList(), versions: List<Album> = emptyList()) = Album(
+        id = UUID.randomUUID(),
+        name = name,
+        artists = emptyList(),
+        releaseDate = null,
+        totalDuration = 1000,
+        tags = tags,
+        versions = versions,
+    )
+
+    private val deluxe = TitleTag(TitleTagKind.VERSION, "Deluxe Edition")
+    private val remaster = TitleTag(TitleTagKind.REMASTER, "2011 Remaster")
+
+    private fun groupedAlbums() = listOf(
+        versionedAlbum(
+            "A",
+            versions = listOf(versionedAlbum("A", listOf(deluxe)), versionedAlbum("A", listOf(remaster))),
+        ),
+        versionedAlbum("B"),
+    )
+
+    private val flatAlbumNames = listOf("A", "A (Deluxe Edition)", "A (2011 Remaster)", "B")
+
+    @Test
+    fun `clients below api version 9 get one album entry per edition with tags in the name`() {
+        val shaped = ResponseShaper(ClientInfo(8)).shape(PaginatedResponse(groupedAlbums(), total = 2)) as PaginatedResponse<*>
+
+        val albums = shaped.data.map { it as Album }
+        assertEquals(flatAlbumNames, albums.map { it.name })
+        assertTrue(albums.all { it.versions.isEmpty() && it.tags.isEmpty() })
+        assertEquals(4, shaped.total)
+    }
+
+    @Test
+    fun `a plain album list is flattened for clients below api version 9`() {
+        val shaped = ResponseShaper(ClientInfo(8)).shape(groupedAlbums()) as List<*>
+        val albums = shaped.map { it as Album }
+
+        assertEquals(flatAlbumNames, albums.map { it.name })
+        assertTrue(albums.all { it.versions.isEmpty() })
+    }
+
+    @Test
+    fun `a single album with versions has them emptied for clients below api version 9`() {
+        val shaped = ResponseShaper(ClientInfo(8)).shape(groupedAlbums().first()) as Album
+
+        assertEquals("A", shaped.name)
+        assertTrue(shaped.versions.isEmpty())
+    }
+
+    @Test
+    fun `current clients keep the folded album editions`() {
+        val page = PaginatedResponse(groupedAlbums(), total = 2)
+        assertEquals(page, ResponseShaper(ClientInfo(ApiVersion.CURRENT)).shape(page))
+        assertEquals(page.data, ResponseShaper(ClientInfo(ApiVersion.CURRENT)).shape(page.data))
+    }
+
     private fun recentRelease(title: String) = RecentRelease(
         releaseId = UUID.randomUUID(),
         artistId = UUID.randomUUID(),

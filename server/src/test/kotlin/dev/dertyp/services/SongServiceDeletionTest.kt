@@ -10,11 +10,14 @@ import dev.dertyp.services.metadata.*
 import dev.dertyp.testing.FakeCredentialProvider
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -22,10 +25,12 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.koin.core.context.loadKoinModules
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
+import org.koin.test.get
 import java.io.File
 import java.util.UUID
 
@@ -116,6 +121,7 @@ class SongServiceDeletionTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        runBlocking { songService.stopService() }
         stopKoin()
         TestDatabase.cleanUp()
     }
@@ -176,6 +182,41 @@ class SongServiceDeletionTest : KoinTest {
             verify { storageService.invalidate(StorageCategory.TOTAL) }
             verify { redisSearchService.remove(SearchIndexEntityType.SONG, listOf(songId)) }
             verify { redisSearchService.remove(SearchIndexEntityType.ALBUM, match { albumId in it }) }
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `deleteSongs rebuilds the album version groups when it removes an anchor album`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val spied = spyk(get<AlbumService>())
+            coEvery { spied.rebuildVersionGroups() } returns 0
+            loadKoinModules(module { single<AlbumService> { spied } })
+
+            val anchorAlbum = insertAlbum()
+            val memberAlbum = insertAlbum()
+            val anchorSong = insertSong(anchorAlbum, "/missing/anchor.flac")
+            val memberSong = insertSong(memberAlbum, "/missing/member-a.flac")
+            insertSong(memberAlbum, "/missing/member-b.flac")
+            transaction(database) {
+                AlbumTable.update({ AlbumTable.id inList listOf(anchorAlbum, memberAlbum) }) {
+                    it[versionGroupId] = anchorAlbum
+                }
+            }
+
+            assertTrue(songService.deleteSongs(listOf(memberSong)))
+            coVerify(exactly = 0) { spied.rebuildVersionGroups() }
+
+            assertTrue(songService.deleteSongs(listOf(anchorSong)))
+
+            coVerify(timeout = 5000, exactly = 1) { spied.rebuildVersionGroups() }
+            transaction(database) {
+                assertEquals(0, AlbumTable.selectAll().where { AlbumTable.id eq anchorAlbum }.count())
+                assertEquals(
+                    null,
+                    AlbumTable.selectAll().where { AlbumTable.id eq memberAlbum }.single()[AlbumTable.versionGroupId]
+                )
+            }
         }
 
     @ParameterizedTest

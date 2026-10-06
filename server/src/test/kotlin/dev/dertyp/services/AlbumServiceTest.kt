@@ -13,6 +13,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
@@ -447,6 +448,8 @@ class AlbumServiceTest : KoinTest {
             title = "Release 1",
             releaseGroup = MusicBrainzReleaseGroup(id = releaseGroupId, title = "Release Group")
         )
+
+        service.rebuildVersionGroups()
 
         val versions = service.versions(albumId1)
         assertEquals(1, versions.size)
@@ -1998,5 +2001,380 @@ class AlbumServiceTest : KoinTest {
         assertNotEquals(stored, result.albumToIds[input])
         assertEquals(setOf(input), result.newlyCreated)
         assertEquals(2L, transaction(database) { AlbumTable.selectAll().count() })
+    }
+
+    private val deluxeTag = TitleTag(TitleTagKind.VERSION, "Deluxe Edition")
+    private val remasterTag = TitleTag(TitleTagKind.REMASTER, "2011 Remaster")
+
+    private fun insertCreditedArtist(label: String): UUID = transaction(database) {
+        ArtistTable.insertAndGetId { it[name] = label }.value
+    }
+
+    private fun insertReleaseGroup(label: String): UUID = transaction(database) {
+        MBReleaseGroupTable.insertAndGetId { it[title] = label }.value
+    }
+
+    private fun linkToReleaseGroup(linkedAlbum: UUID, releaseGroup: UUID) = transaction(database) {
+        val releaseId = MBReleaseTable.insertAndGetId {
+            it[title] = "Release"
+            it[releaseGroupId] = releaseGroup
+        }
+        AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
+            it[albumId] = linkedAlbum
+            it[musicBrainzId] = releaseId
+        }
+    }
+
+    private fun insertEdition(
+        albumName: String,
+        creditedTo: UUID? = null,
+        editionTags: List<TitleTag> = emptyList(),
+        tracks: Int = 10,
+        released: String? = null,
+        releaseGroup: UUID? = null,
+        withExplicitSong: Boolean = false
+    ): UUID {
+        val editionId = transaction(database) {
+            val newId = AlbumTable.insertAndGetId {
+                it[name] = albumName
+                it[titleTags] = encodeTitleTags(editionTags)
+                it[songCount] = tracks
+                it[releaseDate] = released
+            }
+            if (creditedTo != null) {
+                AlbumArtistTable.insert {
+                    it[albumId] = newId
+                    it[artistId] = creditedTo
+                }
+            }
+            SongTable.insert {
+                it[title] = "Song"
+                it[albumId] = newId
+                it[filePath] = "/music/${newId.value}.flac"
+                it[explicit] = withExplicitSong
+            }
+            newId.value
+        }
+        if (releaseGroup != null) linkToReleaseGroup(editionId, releaseGroup)
+        return editionId
+    }
+
+    private fun versionGroupOf(memberId: UUID): UUID? = albumRow(memberId)[AlbumTable.versionGroupId]?.value
+
+    private fun lowestId(vararg ids: UUID): UUID = ids.minBy { it.toString() }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byArtistGrouped pages over groups and folds the editions into the main album`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val artist = insertCreditedArtist("Grouped Artist")
+            val otherArtist = insertCreditedArtist("Other Artist")
+            val releaseGroup = insertReleaseGroup("Album")
+
+            val standard = insertEdition("Album", artist, released = "2015-03-01", releaseGroup = releaseGroup)
+            val deluxe = insertEdition("Album", artist, listOf(deluxeTag), released = "2016-03-01")
+            val remaster =
+                insertEdition("Album", artist, listOf(remasterTag), released = "2020-03-01", releaseGroup = releaseGroup)
+            val second = insertEdition("Second", artist, released = "2018-01-01")
+            val third = insertEdition("Third", artist, released = "2010-01-01")
+            val single = insertEdition("Album", artist, tracks = 1, released = "2015-02-01")
+            insertEdition("Album", otherArtist, released = "2015-03-01")
+
+            service.rebuildVersionGroups()
+
+            val firstPage = service.byArtistGrouped(0, 2, artist, singles = false, explicit = true)
+            assertEquals(3, firstPage.total)
+            assertTrue(firstPage.hasNextPage)
+            assertEquals(listOf(standard, second), firstPage.data.map { it.id })
+            assertEquals(listOf(deluxe, remaster), firstPage.data[0].versions.map { it.id })
+            assertTrue(firstPage.data[0].versions.all { it.versions.isEmpty() })
+            assertEquals(listOf(deluxeTag), firstPage.data[0].versions[0].tags)
+            assertEquals(1, firstPage.data[0].versions[0].artists.size)
+            assertTrue(firstPage.data[1].versions.isEmpty())
+
+            val secondPage = service.byArtistGrouped(1, 2, artist, singles = false, explicit = true)
+            assertEquals(3, secondPage.total)
+            assertFalse(secondPage.hasNextPage)
+            assertEquals(listOf(third), secondPage.data.map { it.id })
+
+            val singles = service.byArtistGrouped(0, 10, artist, singles = true, explicit = true)
+            assertEquals(1, singles.total)
+            assertEquals(listOf(single), singles.data.map { it.id })
+            assertTrue(singles.data[0].versions.isEmpty())
+
+            val flat = service.byArtist(0, 10, artist, singles = false)
+            assertEquals(5, flat.total)
+            assertTrue(flat.data.all { it.versions.isEmpty() })
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allAlbumsGrouped pages over groups in group order with the group total`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artist = insertCreditedArtist("Grouped Artist")
+
+        val standard = insertEdition("Album", artist, released = "2015-03-01")
+        val deluxe = insertEdition("Album", artist, listOf(deluxeTag), released = "2016-03-01")
+        val remaster = insertEdition("Album", artist, listOf(deluxeTag, remasterTag), released = "2014-03-01")
+        val second = insertEdition("Second", artist)
+        val third = insertEdition("Third", artist)
+
+        service.rebuildVersionGroups()
+
+        val expectedOrder = listOf(lowestId(standard, deluxe, remaster) to standard, second to second, third to third)
+            .sortedBy { it.first.toString() }
+            .map { it.second }
+
+        val firstPage = service.allAlbumsGrouped(0, 2, explicit = true)
+        val secondPage = service.allAlbumsGrouped(1, 2, explicit = true)
+        assertEquals(3, firstPage.total)
+        assertEquals(3, secondPage.total)
+        assertTrue(firstPage.hasNextPage)
+        assertFalse(secondPage.hasNextPage)
+        assertEquals(2, firstPage.data.size)
+        assertEquals(1, secondPage.data.size)
+
+        val entries = firstPage.data + secondPage.data
+        assertEquals(expectedOrder, entries.map { it.id })
+        assertEquals(listOf(deluxe, remaster), entries.single { it.id == standard }.versions.map { it.id })
+        assertTrue(entries.filter { it.id != standard }.all { it.versions.isEmpty() })
+        assertTrue(entries.flatMap { it.versions }.all { it.versions.isEmpty() })
+
+        val everything = service.allAlbumsGrouped(0, Int.MAX_VALUE, explicit = true)
+        assertEquals(3, everything.total)
+        assertEquals(expectedOrder, everything.data.map { it.id })
+        val returnedIds = everything.data.flatMap { entry -> listOf(entry.id) + entry.versions.map { it.id } }
+        assertEquals(5, returnedIds.size)
+        assertEquals(setOf(standard, deluxe, remaster, second, third), returnedIds.toSet())
+
+        assertEquals(5, service.allAlbums(0, 10).total)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `the main version follows the explicit preference`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artist = insertCreditedArtist("Grouped Artist")
+
+        val clean = insertEdition("Album", artist, released = "2015-03-01")
+        val explicitDeluxe =
+            insertEdition("Album", artist, listOf(deluxeTag), released = "2016-03-01", withExplicitSong = true)
+        val allClean = insertEdition("Quiet", artist)
+        val allCleanDeluxe = insertEdition("Quiet", artist, listOf(deluxeTag))
+
+        service.rebuildVersionGroups()
+
+        val preferExplicit = rpcService.byArtist(0, 10, artist, singles = false, explicit = true)
+        assertEquals(2, preferExplicit.total)
+        assertEquals(setOf(explicitDeluxe, allClean), preferExplicit.data.map { it.id }.toSet())
+        assertEquals(listOf(clean), preferExplicit.data.single { it.id == explicitDeluxe }.versions.map { it.id })
+        assertEquals(listOf(allCleanDeluxe), preferExplicit.data.single { it.id == allClean }.versions.map { it.id })
+
+        val preferClean = rpcService.byArtist(0, 10, artist, singles = false, explicit = false)
+        assertEquals(setOf(clean, allClean), preferClean.data.map { it.id }.toSet())
+        assertEquals(listOf(explicitDeluxe), preferClean.data.single { it.id == clean }.versions.map { it.id })
+
+        assertEquals(
+            setOf(explicitDeluxe, allClean),
+            rpcService.allAlbums(0, 10, explicit = true).data.map { it.id }.toSet()
+        )
+        assertEquals(
+            setOf(clean, allClean),
+            rpcService.allAlbums(0, 10, explicit = false).data.map { it.id }.toSet()
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `versions agrees with the grouped lists and is empty before grouping`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artist = insertCreditedArtist("Grouped Artist")
+
+        val standard = insertEdition("Album", artist, released = "2015-03-01")
+        val explicitDeluxe =
+            insertEdition("Album", artist, listOf(deluxeTag), released = "2016-03-01", withExplicitSong = true)
+        val remaster = insertEdition("Album", artist, listOf(remasterTag), released = "2020-03-01")
+        val alone = insertEdition("Alone", artist)
+
+        assertEquals(emptyList<Album>(), service.versions(standard))
+        assertEquals(4, service.allAlbumsGrouped(0, 10, explicit = true).total)
+
+        service.rebuildVersionGroups()
+
+        val entry = service.byArtistGrouped(0, 10, artist, singles = false, explicit = true)
+            .data.single { it.versions.isNotEmpty() }
+        assertEquals(explicitDeluxe, entry.id)
+        assertEquals(listOf(standard, remaster), entry.versions.map { it.id })
+
+        assertEquals(entry.versions.map { it.id }, service.versions(entry.id).map { it.id })
+        assertEquals(listOf(explicitDeluxe, remaster), service.versions(standard).map { it.id })
+        assertEquals(listOf(explicitDeluxe, standard), rpcService.versions(remaster).map { it.id })
+        assertTrue(service.versions(standard).all { it.versions.isEmpty() })
+        assertEquals(emptyList<Album>(), service.versions(alone))
+        assertEquals(emptyList<Album>(), service.versions(UUID.randomUUID()))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rebuildVersionGroups anchors a group at its lowest id and only writes changes`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val artist = insertCreditedArtist("Grouped Artist")
+
+            val first = insertEdition("Album", artist)
+            val second = insertEdition("Album", artist, listOf(deluxeTag))
+            val alone = insertEdition("Alone", artist)
+
+            assertEquals(2, service.rebuildVersionGroups())
+            assertEquals(lowestId(first, second), versionGroupOf(first))
+            assertEquals(lowestId(first, second), versionGroupOf(second))
+            assertEquals(null, versionGroupOf(alone))
+
+            assertEquals(0, service.rebuildVersionGroups())
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `version groups rebuild after an insert`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artist = insertCreditedArtist("Grouped Artist")
+
+        val first = insertEdition("Album", artist)
+        val second = insertEdition("Album", artist, listOf(deluxeTag))
+        service.rebuildVersionGroups()
+
+        val third = insertEdition("Album", artist, listOf(remasterTag))
+        assertEquals(null, versionGroupOf(third))
+        assertEquals(2, service.byArtistGrouped(0, 10, artist, singles = false, explicit = true).total)
+
+        service.rebuildVersionGroups()
+
+        val grouped = service.byArtistGrouped(0, 10, artist, singles = false, explicit = true)
+        assertEquals(1, grouped.total)
+        assertEquals(first, grouped.data.single().id)
+        assertEquals(setOf(second, third), grouped.data.single().versions.map { it.id }.toSet())
+        assertEquals(lowestId(first, second, third), versionGroupOf(third))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `version groups rebuild after a MusicBrainz link change`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artist = insertCreditedArtist("Grouped Artist")
+        val otherArtist = insertCreditedArtist("Other Artist")
+        val releaseGroup = insertReleaseGroup("One")
+        val otherReleaseGroup = insertReleaseGroup("Two")
+
+        val first = insertEdition("One", artist, releaseGroup = releaseGroup)
+        val second = insertEdition("One Again", otherArtist, releaseGroup = releaseGroup)
+        val third = insertEdition("Two", otherArtist, releaseGroup = otherReleaseGroup)
+        service.rebuildVersionGroups()
+
+        assertEquals(listOf(second), service.versions(first).map { it.id })
+        assertEquals(emptyList<Album>(), service.versions(third))
+
+        linkToReleaseGroup(second, otherReleaseGroup)
+        service.rebuildVersionGroups()
+
+        assertEquals(emptyList<Album>(), service.versions(first))
+        assertEquals(null, versionGroupOf(first))
+        assertEquals(listOf(second), service.versions(third).map { it.id })
+        assertEquals(lowestId(second, third), versionGroupOf(second))
+        assertEquals(2, service.allAlbumsGrouped(0, 10, explicit = true).total)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `version groups rebuild after an edition was merged away`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artist = insertCreditedArtist("Grouped Artist")
+
+        val first = insertEdition("Album", artist)
+        val second = insertEdition("Album", artist, listOf(deluxeTag))
+        val third = insertEdition("Album", artist, listOf(remasterTag))
+        service.rebuildVersionGroups()
+
+        val anchor = lowestId(first, second, third)
+        val merged = listOf(first, second, third).filter { it != anchor }.maxBy { it.toString() }
+        val kept = listOf(first, second, third).single { it != anchor && it != merged }
+        transaction(database) {
+            SongTable.update({ SongTable.albumId eq merged }) { it[albumId] = kept }
+            AlbumTable.deleteWhere { AlbumTable.id eq merged }
+        }
+
+        service.rebuildVersionGroups()
+
+        assertEquals(anchor, versionGroupOf(anchor))
+        assertEquals(anchor, versionGroupOf(kept))
+        assertEquals(listOf(kept), service.versions(anchor).map { it.id })
+        val grouped = service.allAlbumsGrouped(0, 10, explicit = true)
+        assertEquals(1, grouped.total)
+        assertEquals(1, grouped.data.single().versions.size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `version groups rebuild after the anchor album was deleted`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artist = insertCreditedArtist("Grouped Artist")
+
+        val first = insertEdition("Album", artist)
+        val second = insertEdition("Album", artist, listOf(deluxeTag))
+        val third = insertEdition("Album", artist, listOf(remasterTag))
+        service.rebuildVersionGroups()
+
+        val anchor = lowestId(first, second, third)
+        val remaining = listOf(first, second, third).filter { it != anchor }
+        transaction(database) {
+            SongTable.deleteWhere { SongTable.albumId eq anchor }
+            AlbumTable.deleteWhere { AlbumTable.id eq anchor }
+        }
+
+        remaining.forEach { assertEquals(null, versionGroupOf(it)) }
+        assertEquals(emptyList<Album>(), service.versions(remaining[0]))
+        assertEquals(2, service.allAlbumsGrouped(0, 10, explicit = true).total)
+
+        service.rebuildVersionGroups()
+
+        val newAnchor = lowestId(remaining[0], remaining[1])
+        remaining.forEach { assertEquals(newAnchor, versionGroupOf(it)) }
+        assertEquals(listOf(remaining[1]), service.versions(remaining[0]).map { it.id })
+        assertEquals(1, service.allAlbumsGrouped(0, 10, explicit = true).total)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `album changes trigger a version group rebuild`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val spied = spyk(service)
+        coEvery { spied.rebuildVersionGroups() } returns 0
+        val mbId = UUID.randomUUID()
+        coEvery { musicBrainzService.fetchReleaseById(mbId, any()) } returns MusicBrainzRelease(
+            id = mbId,
+            title = "Album"
+        )
+
+        val incoming = InsertableAlbum("Fresh Album", listOf("Fresh Artist"), releaseDate = LocalDate.of(2020, 1, 1))
+        val created = spied.getOrBulkCreateWithResult(listOf(incoming))
+        val createdId = created.albumToIds.values.single()
+        assertEquals(setOf(incoming), created.newlyCreated)
+        coVerify(timeout = 5000, exactly = 1) { spied.rebuildVersionGroups() }
+
+        assertEquals(emptySet<InsertableAlbum>(), spied.getOrBulkCreateWithResult(listOf(incoming)).newlyCreated)
+        coVerify(timeout = 5000, exactly = 1) { spied.rebuildVersionGroups() }
+
+        spied.setMusicBrainzId(createdId, mbId, triggerMerge = false, triggerSync = false)
+        coVerify(timeout = 5000, exactly = 2) { spied.rebuildVersionGroups() }
+
+        spied.upsertAlbum(spied.byId(createdId)!!.copy(name = "Renamed Album"))
+        coVerify(timeout = 5000, exactly = 3) { spied.rebuildVersionGroups() }
+
+        assertEquals(1, spied.deleteEmptyAlbums())
+        coVerify(timeout = 5000, exactly = 4) { spied.rebuildVersionGroups() }
+
+        val withSong = insertEdition("Deleted Album")
+        assertTrue(spied.deleteAlbums(listOf(withSong)))
+        coVerify(timeout = 5000, exactly = 5) { spied.rebuildVersionGroups() }
     }
 }

@@ -1,7 +1,7 @@
 PUT /album/album IAlbumService.updateAlbum | Update album metadata. | album | UserAuth | - | body:yes
 DELETE /album/albums IAlbumService.deleteAlbums | Delete multiple albums from the library. | album | UserAuth | ids:query | body:no
-GET /album/allAlbums IAlbumService.allAlbums | Get all albums in the library. | album | UserAuth | page:query,pageSize:query | body:no
-GET /album/byArtist/{artistId} IAlbumService.byArtist | List albums by artist. | album | UserAuth | page:query,pageSize:query,artistId:path,singles:query | body:no
+GET /album/allAlbums IAlbumService.allAlbums | Get all albums in the library, grouped into editions. Each entry is the main edition of an album and carries the other editions in versions. | album | UserAuth | page:query,pageSize:query,explicit:query | body:no
+GET /album/byArtist/{artistId} IAlbumService.byArtist | List albums by artist, grouped into editions. Each entry is the main edition of an album and carries the other editions in versions. | album | UserAuth | page:query,pageSize:query,artistId:path,singles:query,explicit:query | body:no
 GET /album/byColor IAlbumService.byColor | Search for albums by color. | album | UserAuth | page:query,pageSize:query,color:query,range:query | body:no
 GET /album/byId/{id} IAlbumService.byId | Get album by ID. | album | UserAuth | id:path | body:no
 GET /album/byIds IAlbumService.byIds | Get multiple albums by their IDs. | album | UserAuth | ids:query | body:no
@@ -14,7 +14,7 @@ GET /album/extendedMetadata/{id} IAlbumService.extendedMetadata | Get extended m
 POST /album/musicBrainzId/{id} IAlbumService.fetchMusicBrainzId | Fetch and link MusicBrainz ID for an album. | album | UserAuth | id:path | body:no
 PUT /album/musicBrainzId/{id} IAlbumService.setMusicBrainzId | Manually set MusicBrainz ID for an album. | album | UserAuth | id:path,musicBrainzId:query | body:no
 GET /album/search IAlbumService.rankedSearch | Ranked album search. | album | UserAuth | page:query,pageSize:query,query:query | body:no
-GET /album/versions/{id} IAlbumService.versions | List different versions of an album. | album | UserAuth | id:path | body:no
+GET /album/versions/{id} IAlbumService.versions | List the other editions of an album, main edition first. | album | UserAuth | id:path | body:no
 POST /animatedImage/animatedImage IAnimatedImageService.createAnimatedImage | Store a new animated image on the server. | animatedImage | - | origin:query | body:yes
 POST /animatedImage/batch IAnimatedImageService.createBatch | Store multiple animated images on the server in a single operation. | animatedImage | - | - | body:yes
 GET /animatedImage/byHash IAnimatedImageService.byHash | Find animated image metadata by its content hash. | animatedImage | - | hash:query | body:no

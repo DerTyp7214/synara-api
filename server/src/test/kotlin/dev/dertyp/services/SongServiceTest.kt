@@ -34,6 +34,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
+import io.mockk.spyk
 import io.mockk.unmockkObject
 import kotlinx.coroutines.flow.toList
 import org.junit.jupiter.api.io.TempDir
@@ -51,10 +52,12 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.koin.core.context.loadKoinModules
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
+import org.koin.test.get
 import java.util.UUID
 
 class SongServiceTest : KoinTest {
@@ -3218,4 +3221,38 @@ class SongServiceTest : KoinTest {
         assertEquals(expected, result)
         assertEquals(emptyList<UUID>(), songService.songIdsByArtist(unlinkedArtistId).toList())
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch rebuilds the album version groups when its cleanup removes an album`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val spied = spyk(get<AlbumService>())
+            coEvery { spied.rebuildVersionGroups() } returns 0
+            loadKoinModules(module { single<AlbumService> { spied } })
+
+            fun incoming(albumName: String) = InsertableSong(
+                title = "Song of $albumName",
+                artists = listOf("Cleanup Artist"),
+                album = InsertableAlbum(albumName, listOf("Cleanup Artist")),
+                duration = 100,
+                explicit = false,
+                path = "/path/$albumName",
+                audio = AudioInfo("flac", 44100, 16, 128000, 0, 2)
+            )
+
+            assertEquals(1, songService.createBatch(listOf(incoming("First"))).size)
+            coVerify(timeout = 5000, exactly = 1) { spied.rebuildVersionGroups() }
+
+            val emptyAlbum = transaction(database) {
+                AlbumTable.insertAndGetId { it[name] = "Empty" }.value
+            }
+
+            assertEquals(1, songService.createBatch(listOf(incoming("Second"))).size)
+
+            coVerify(timeout = 5000, exactly = 3) { spied.rebuildVersionGroups() }
+            transaction(database) {
+                assertEquals(0, AlbumTable.selectAll().where { AlbumTable.id eq emptyAlbum }.count())
+            }
+        }
 }

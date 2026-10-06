@@ -13,18 +13,21 @@ import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.LinkResolverService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.release.AlbumVersionGroups
 import dev.dertyp.utils.Barcodes
 import dev.dertyp.utils.LogParam
 import dev.dertyp.utils.parsers.ParserFactory
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.util.*
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -54,8 +57,8 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
     ): PaginatedResponse<Album> =
         albumService.rankedSearch(page, pageSize, query, user.id)
 
-    override suspend fun allAlbums(page: Int, pageSize: Int): PaginatedResponse<Album> =
-        albumService.allAlbums(page, pageSize, user.id)
+    override suspend fun allAlbums(page: Int, pageSize: Int, explicit: Boolean?): PaginatedResponse<Album> =
+        albumService.allAlbumsGrouped(page, pageSize, explicit ?: true, user.id)
 
     override suspend fun byColor(
         page: Int,
@@ -73,8 +76,10 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
         page: Int,
         pageSize: Int,
         artistId: UUID,
-        singles: Boolean
-    ): PaginatedResponse<Album> = albumService.byArtist(page, pageSize, artistId, singles, user.id)
+        singles: Boolean,
+        explicit: Boolean?
+    ): PaginatedResponse<Album> =
+        albumService.byArtistGrouped(page, pageSize, artistId, singles, explicit ?: true, user.id)
 
     override suspend fun fetchMusicBrainzId(id: UUID): Album? =
         albumService.fetchMusicBrainzId(id, user.id, HttpClientPriority.HIGH)
@@ -85,6 +90,8 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
     override suspend fun extendedMetadata(id: UUID): AlbumExtendedMetadata? =
         albumService.extendedMetadata(id)
 }
+
+private const val VERSION_GROUP_UPDATE_CHUNK_SIZE = 1000
 
 class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : AlbumLibrary, Service() {
     private val musicBrainzService by inject<MusicBrainzService>()
@@ -103,6 +110,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     val albumArtistCreditedAlias = ArtistAliasTable.alias("albumArtistCreditedAlias")
     val albumAnimatedImageAlias = AnimatedImageTable.alias("albumAnimatedImage")
     val albumAnimatedFrameAlias = ImageTable.alias("albumAnimatedFrame")
+
+    private val versionGroupMutex = Mutex()
+    private val versionGroupPending = AtomicBoolean(false)
+    private val versionGroupKey = Coalesce(AlbumTable.versionGroupId, AlbumTable.id)
 
     companion object {
         fun mapAlbum(
@@ -477,6 +488,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             scope.launch {
                 libraryMergeService.mergeDuplicateAlbums()
             }
+        }
+
+        scope.launch {
+            rebuildVersionGroups()
         }
 
         return byId(id, userId)
@@ -861,30 +876,175 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         }
 
     suspend fun versions(id: UUID, userId: UUID? = null): List<Album> {
-        val album = byId(id, userId) ?: return emptyList()
+        val memberIds = dbQuery {
+            val groupId = AlbumTable
+                .select(AlbumTable.versionGroupId)
+                .where { AlbumTable.id eq id }
+                .singleOrNull()
+                ?.get(AlbumTable.versionGroupId)
+                ?: return@dbQuery emptyList()
 
-        if (album.musicBrainzId != null) {
-            val release = cachedMusicBrainzService.getRelease(album.musicBrainzId!!)
-            val releaseGroupId = release?.releaseGroup?.id
-            if (releaseGroupId != null) {
-                val otherAlbumIds = dbQuery {
-                    AlbumMusicBrainzTable
-                        .innerJoin(
-                            MBReleaseTable,
-                            onColumn = { AlbumMusicBrainzTable.musicBrainzId },
-                            otherColumn = { MBReleaseTable.id })
-                        .select(AlbumMusicBrainzTable.albumId)
-                        .where { (MBReleaseTable.releaseGroupId eq releaseGroupId) and (AlbumMusicBrainzTable.albumId neq id) }
-                        .map { it[AlbumMusicBrainzTable.albumId].value }
+            AlbumTable
+                .select(AlbumTable.id)
+                .where { versionGroupKey eq groupId }
+                .map { it[AlbumTable.id].value }
+        }
+        if (memberIds.size < 2) return emptyList()
+
+        return mainFirst(byIds(memberIds, userId), albumIdsWithExplicitSong(memberIds), explicit = true)
+            .filter { it.id != id }
+    }
+
+    suspend fun rebuildVersionGroups(): Int {
+        versionGroupPending.set(true)
+        var updated = 0
+        while (versionGroupPending.get() && versionGroupMutex.tryLock()) {
+            try {
+                while (versionGroupPending.getAndSet(false)) {
+                    updated += rebuildVersionGroupsPass()
                 }
+            } finally {
+                versionGroupMutex.unlock()
+            }
+        }
+        return updated
+    }
 
-                if (otherAlbumIds.isNotEmpty()) {
-                    return byIds(otherAlbumIds, userId)
+    private suspend fun rebuildVersionGroupsPass(): Int {
+        val current = mutableMapOf<UUID, UUID?>()
+        val editions = dbQuery {
+            val artistIds = AlbumArtistTable
+                .select(AlbumArtistTable.albumId, AlbumArtistTable.artistId)
+                .groupBy({ it[AlbumArtistTable.albumId].value }, { it[AlbumArtistTable.artistId].value })
+
+            AlbumTable
+                .leftJoin(AlbumMusicBrainzTable)
+                .leftJoin(
+                    MBReleaseTable,
+                    onColumn = { AlbumMusicBrainzTable.musicBrainzId },
+                    otherColumn = { MBReleaseTable.id })
+                .select(
+                    AlbumTable.id,
+                    AlbumTable.name,
+                    AlbumTable.titleTags,
+                    AlbumTable.cover,
+                    AlbumTable.releaseDate,
+                    AlbumTable.versionGroupId,
+                    MBReleaseTable.releaseGroupId
+                )
+                .map { row ->
+                    val albumId = row[AlbumTable.id].value
+                    current[albumId] = row[AlbumTable.versionGroupId]?.value
+                    AlbumVersionGroups.Edition(
+                        id = albumId,
+                        name = row[AlbumTable.name],
+                        tags = row.albumTitleTags(),
+                        artistIds = artistIds[albumId].orEmpty().toSet(),
+                        coverId = row[AlbumTable.cover]?.value,
+                        releaseGroupId = row.getOrNull(MBReleaseTable.releaseGroupId)?.value,
+                        releaseDate = getDateFromISO(row[AlbumTable.releaseDate]),
+                        explicit = false
+                    )
+                }
+        }
+
+        val changes = AlbumVersionGroups.groups(editions).mapNotNull { group ->
+            val anchor = if (group.size > 1) group.minOfWith(uuidOrder) { it.id } else null
+            val changed = group.map { it.id }.filter { current[it] != anchor }
+            if (changed.isEmpty()) null else anchor to changed
+        }
+
+        changes.chunked(VERSION_GROUP_UPDATE_CHUNK_SIZE).forEach { chunk ->
+            dbQuery {
+                for ((anchor, albumIds) in chunk) {
+                    albumIds.chunked(VERSION_GROUP_UPDATE_CHUNK_SIZE).forEach { ids ->
+                        AlbumTable.update({ AlbumTable.id inList ids }) {
+                            it[versionGroupId] = anchor?.let { anchorId -> EntityID(anchorId, AlbumTable) }
+                        }
+                    }
                 }
             }
         }
 
-        return emptyList()
+        val updated = changes.sumOf { it.second.size }
+        if (updated > 0) logger.info("Rebuilt album version groups, updated $updated album(s)")
+        return updated
+    }
+
+    private suspend fun albumIdsWithExplicitSong(albumIds: List<UUID>): Set<UUID> = dbQuery {
+        SongTable
+            .select(SongTable.albumId)
+            .where { SongTable.albumId inList albumIds }
+            .andWhere { SongTable.explicit eq true }
+            .withDistinct()
+            .mapTo(mutableSetOf()) { it[SongTable.albumId].value }
+    }
+
+    private fun mainFirst(albums: List<Album>, explicitAlbumIds: Set<UUID>, explicit: Boolean): List<Album> {
+        val albumsById = albums.associateBy { it.id }
+        val editions = albums.map { album ->
+            AlbumVersionGroups.Edition(
+                id = album.id,
+                name = album.name,
+                tags = album.tags,
+                artistIds = album.artists.mapTo(mutableSetOf()) { it.id },
+                coverId = album.coverId,
+                releaseGroupId = null,
+                releaseDate = album.releaseDate,
+                explicit = album.id in explicitAlbumIds
+            )
+        }
+        return AlbumVersionGroups.mainFirst(editions, explicit).map { albumsById.getValue(it.id) }
+    }
+
+    private suspend fun queryVersionGroups(
+        page: Int,
+        pageSize: Int,
+        explicit: Boolean,
+        userId: UUID?,
+        newestFirst: Boolean,
+        filter: Query.() -> Query
+    ): PaginatedResponse<Album> {
+        val groupCount = Count(versionGroupKey, distinct = true)
+        val newestReleaseDate = AlbumTable.releaseDate.max()
+        val paged = pageSize != Int.MAX_VALUE
+
+        val (total, groupMemberIds) = dbQuery {
+            val total = AlbumTable.select(groupCount).filter().first()[groupCount]
+            if (total == 0L) return@dbQuery 0L to emptyList()
+
+            val keyQuery = AlbumTable
+                .select(versionGroupKey, newestReleaseDate)
+                .filter()
+                .groupBy(versionGroupKey)
+            if (newestFirst) keyQuery.orderBy(newestReleaseDate, SortOrder.DESC_NULLS_LAST)
+            keyQuery.orderBy(versionGroupKey, SortOrder.ASC)
+            if (paged) keyQuery.limit(pageSize).offset((page * pageSize).toLong())
+            val keys = keyQuery.map { it[versionGroupKey] }
+
+            val memberQuery = AlbumTable.select(AlbumTable.id, versionGroupKey).filter()
+            if (paged) memberQuery.andWhere { versionGroupKey inList keys }
+            val membersByKey = memberQuery.groupBy({ it[versionGroupKey] }, { it[AlbumTable.id].value })
+
+            total to keys.map { membersByKey[it].orEmpty() }
+        }
+
+        val memberIds = groupMemberIds.flatten()
+        val albumsById = if (memberIds.isEmpty()) emptyMap() else byIds(memberIds, userId).associateBy { it.id }
+        val explicitAlbumIds = if (memberIds.isEmpty()) emptySet() else albumIdsWithExplicitSong(memberIds)
+
+        val data = groupMemberIds.mapNotNull { ids ->
+            val ordered = mainFirst(ids.mapNotNull { albumsById[it] }, explicitAlbumIds, explicit)
+            ordered.firstOrNull()?.copy(versions = ordered.drop(1))
+        }
+
+        return PaginatedResponse(
+            data = data,
+            total = total.toInt(),
+            page = page,
+            pageSize = pageSize,
+            hasNextPage = (page + 1).toLong() * pageSize < total,
+        )
     }
 
     suspend fun byName(
@@ -913,6 +1073,23 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             else where { AlbumTable.songCount eq 1 }
             andWhere { AlbumTable.id inList albumIds }
             orderBy(AlbumTable.releaseDate, SortOrder.DESC_NULLS_LAST)
+        }
+
+    suspend fun byArtistGrouped(
+        page: Int,
+        pageSize: Int,
+        artistId: UUID,
+        singles: Boolean,
+        explicit: Boolean,
+        userId: UUID? = null
+    ): PaginatedResponse<Album> =
+        queryVersionGroups(page, pageSize, explicit, userId, newestFirst = true) {
+            where { if (singles) AlbumTable.songCount eq 1 else AlbumTable.songCount greater 1 }
+                .andWhere {
+                    AlbumTable.id inSubQuery AlbumArtistTable
+                        .select(AlbumArtistTable.albumId)
+                        .where { AlbumArtistTable.artistId eq artistId }
+                }
         }
 
     suspend fun rankedSearch(
@@ -1004,6 +1181,14 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         userId: UUID? = null
     ): PaginatedResponse<Album> = queryAlbums(page, pageSize, userId = userId)
 
+    suspend fun allAlbumsGrouped(
+        page: Int,
+        pageSize: Int,
+        explicit: Boolean,
+        userId: UUID? = null
+    ): PaginatedResponse<Album> =
+        queryVersionGroups(page, pageSize, explicit, userId, newestFirst = false) { this }
+
     suspend fun byColor(
         page: Int,
         pageSize: Int,
@@ -1065,6 +1250,11 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     .map { it[SongTable.id].value }
             }
             libraryFileDeleter.deleteSongRows(songIds).deletedAlbumIds.count { it in requested }
+        }
+        if (deletedAlbums > 0) {
+            scope.launch {
+                rebuildVersionGroups()
+            }
         }
         return deletedAlbums == requested.size
     }
@@ -1607,6 +1797,12 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             inputAlbum to finalCombinedIdMap[key]
         }.filterValueNotNull()
 
+        if (newRows.isNotEmpty()) {
+            scope.launch {
+                rebuildVersionGroups()
+            }
+        }
+
         val insertedAlbums = newAlbumsToInsert.toSet()
         val newlyCreated = inputAlbums.zip(albums).filter { it.second in insertedAlbums }.map { it.first }.toSet()
 
@@ -1616,8 +1812,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     suspend fun getOrBulkCreate(albums: List<InsertableAlbum>): Map<InsertableAlbum, UUID> =
         getOrBulkCreateWithResult(albums).albumToIds
 
-    suspend fun deleteEmptyAlbums(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int =
-        dbQuery {
+    suspend fun deleteEmptyAlbums(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int {
+        val deleted = dbQuery {
             val emptyAlbums = AlbumTable
                 .select(AlbumTable.id)
                 .where {
@@ -1649,6 +1845,13 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             logger.info("Deleted ${emptyAlbums.size} empty albums")
             emptyAlbums.size
         }
+        if (deleted > 0) {
+            scope.launch {
+                rebuildVersionGroups()
+            }
+        }
+        return deleted
+    }
 
     suspend fun upsertAlbum(inputAlbum: Album, triggerSync: Boolean = false, triggerMerge: Boolean = true) {
         val album = inputAlbum.withSplitTitleTags()
@@ -1730,6 +1933,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     libraryMergeService.mergeDuplicateAlbums()
                 }
             }
+        }
+
+        scope.launch {
+            rebuildVersionGroups()
         }
     }
 }

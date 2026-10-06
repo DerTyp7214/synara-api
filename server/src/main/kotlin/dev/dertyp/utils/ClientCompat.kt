@@ -80,10 +80,11 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun shapeList(list: List<*>): List<Any?> =
-        if (list.isNotEmpty() && list.all { it is RecentRelease }) shapeRecentReleases(list as List<RecentRelease>) else list.map(
-            ::shape
-        )
+    private fun shapeList(list: List<*>): List<Any?> = when {
+        list.isNotEmpty() && list.all { it is RecentRelease } -> shapeRecentReleases(list as List<RecentRelease>)
+        list.isNotEmpty() && list.all { it is Album } -> shapeAlbums(list as List<Album>).map(::shapeAlbum)
+        else -> list.map(::shape)
+    }
 
     private fun shapePaginated(response: PaginatedResponse<Any?>): PaginatedResponse<Any?> {
         val data = shapeList(response.data)
@@ -93,8 +94,13 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
     protected open fun shapeRecentReleases(releases: List<RecentRelease>): List<RecentRelease> =
         activeRules.fold(releases) { shaped, rule -> rule.shapeRecentReleases(shaped) }
 
-    protected open fun shapeAlbum(album: Album): Album =
-        activeRules.fold(album) { shaped, rule -> rule.shapeAlbum(shaped) }
+    protected open fun shapeAlbums(albums: List<Album>): List<Album> =
+        activeRules.fold(albums) { shaped, rule -> rule.shapeAlbums(shaped) }
+
+    protected open fun shapeAlbum(album: Album): Album {
+        val shaped = activeRules.fold(album) { current, rule -> rule.shapeAlbum(current) }
+        return shaped.copy(versions = shaped.versions.map(::shapeAlbum))
+    }
 
     protected open fun shapeSong(song: Song): Song = activeRules.fold(song) { shaped, rule -> rule.shapeSong(shaped) }
 

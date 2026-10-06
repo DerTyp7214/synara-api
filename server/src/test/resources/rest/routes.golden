@@ -1,6 +1,6 @@
 DELETE /album/albums IAlbumService.deleteAlbums [q:ids] JSON
-GET /album/allAlbums IAlbumService.allAlbums [q:page? q:pageSize?] JSON
-GET /album/byArtist/{artistId} IAlbumService.byArtist [q:page? q:pageSize? p:artistId q:singles?] JSON
+GET /album/allAlbums IAlbumService.allAlbums [q:page? q:pageSize? q:explicit?] JSON
+GET /album/byArtist/{artistId} IAlbumService.byArtist [q:page? q:pageSize? p:artistId q:singles? q:explicit?] JSON
 GET /album/byColor IAlbumService.byColor [q:page? q:pageSize? q:color q:range?] JSON
 GET /album/byId/{id} IAlbumService.byId [p:id] JSON
 GET /album/byIds IAlbumService.byIds [q:ids] JSON

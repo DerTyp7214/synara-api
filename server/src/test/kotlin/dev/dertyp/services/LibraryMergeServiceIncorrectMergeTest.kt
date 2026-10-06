@@ -8,6 +8,7 @@ import dev.dertyp.db.*
 import dev.dertyp.plugins.PluginManager
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.ResultRow
@@ -42,6 +43,7 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
         songService = mockk()
         albumService = mockk {
             coEvery { syncAlbumSongsWithMusicBrainz(any(), any()) } returns Unit
+            coEvery { rebuildVersionGroups() } returns 0
         }
         pluginManager = mockk()
 
@@ -480,5 +482,45 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
 
             assertEquals(0, similarity)
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fixIncorrectMerges rebuilds the album version groups after a split`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        transaction(database) {
+            val cover1 = ImageTable.insert {
+                it[id] = UUID.randomUUID()
+                it[path] = "cover1"; it[imageHash] = "hash1"; it[origin] = "o"
+            }[ImageTable.id]
+            val cover2 = ImageTable.insert {
+                it[id] = UUID.randomUUID()
+                it[path] = "cover2"; it[imageHash] = "hash2"; it[origin] = "o"
+            }[ImageTable.id]
+
+            val albumId = AlbumTable.insert {
+                it[name] = "Album"
+                it[cover] = cover1
+                it[songCount] = 2
+            }[AlbumTable.id]
+
+            SongTable.insert {
+                it[title] = "Song 1"
+                it[this.albumId] = albumId
+                it[cover] = cover1
+                it[filePath] = "p1"
+            }
+            SongTable.insert {
+                it[title] = "Song 2"
+                it[this.albumId] = albumId
+                it[cover] = cover2
+                it[filePath] = "p2"
+            }
+        }
+
+        assertEquals(1, service.fixIncorrectMerges())
+
+        coVerify(timeout = 5000) { albumService.rebuildVersionGroups() }
     }
 }

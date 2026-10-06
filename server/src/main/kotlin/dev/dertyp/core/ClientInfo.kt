@@ -63,6 +63,12 @@ enum class ClientFeature(val minApiVersion: Int, val maxApiVersion: Int? = null)
         fallback = "`name` is put back together into the full original name and `tags` is emptied.",
     )
     ALBUM_TITLE_TAGS(9),
+
+    @FeatureDoc(
+        introduces = "`versions` on @Album: the editions of one album (deluxe, anniversary, remastered, explicit or clean) are folded under a single entry in the album lists.",
+        fallback = "Every edition is its own entry, following the entry it was folded into, and `versions` is empty.",
+    )
+    ALBUM_VERSIONS(9),
 }
 
 data class ClientInfo(

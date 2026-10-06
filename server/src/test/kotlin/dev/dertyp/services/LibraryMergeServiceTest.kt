@@ -41,6 +41,7 @@ class LibraryMergeServiceTest : KoinTest {
         environment = mockk()
         songService = mockk()
         albumService = mockk()
+        coEvery { albumService.rebuildVersionGroups() } returns 0
         pluginManager = mockk()
         tidalService = mockk()
 
@@ -730,4 +731,47 @@ class LibraryMergeServiceTest : KoinTest {
             assertEquals(listOf(keptAlbum), albums)
         }
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeDuplicateAlbums rebuilds the album version groups after a merge`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(any(), any()) } returns tidalService
+        coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
+        coEvery { albumService.fetchMusicBrainzId(any()) } returns null
+        every { pluginManager.getAllImporters() } returns emptyList()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = UUID.randomUUID(); it[name] = "Album"; it[originalId] = "tidal:orig"; it[songCount] = 10
+            }
+            AlbumTable.insert {
+                it[id] = UUID.randomUUID(); it[name] = "Album (dup)"; it[originalId] = "tidal:orig"; it[songCount] = 12
+            }
+        }
+
+        assertEquals(1, service.mergeDuplicateAlbums())
+
+        coVerify(timeout = 5000) { albumService.rebuildVersionGroups() }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeDuplicateAlbums leaves the album version groups alone when nothing merged`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            every { pluginManager.getAllImporters() } returns emptyList()
+
+            transaction(database) {
+                AlbumTable.insert {
+                    it[id] = UUID.randomUUID(); it[name] = "Only Album"; it[songCount] = 10
+                }
+            }
+
+            assertEquals(0, service.mergeDuplicateAlbums())
+
+            coVerify(exactly = 0) { albumService.rebuildVersionGroups() }
+        }
 }

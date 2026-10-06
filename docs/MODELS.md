@@ -353,6 +353,7 @@ Contains metadata about a collection of songs released together.
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 | `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Edition markers split off the name, e.g. Deluxe Edition, 10th Anniversary or 2011 Remaster, in order of extraction. The name never contains them. |
+| `versions` | `List`<[Album](#devdertypdataalbum)> | Other editions of the same album folded under this entry, such as deluxe, anniversary, remastered, explicit or clean variants. Each keeps its own identifiers and cover. Their own versions lists are always empty. Only filled by calls that return albums grouped into editions. |
 
 ### AlbumExtendedMetadata <a name="devdertypdataalbumextendedmetadata"></a>
 Extended metadata for an album.

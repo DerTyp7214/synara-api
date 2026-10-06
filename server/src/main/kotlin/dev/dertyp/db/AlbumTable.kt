@@ -15,8 +15,10 @@ object AlbumTable : UUIDTable("album") {
     val lastMetadataCheck = long("lastMetadataCheck").default(0L)
     val lastProviderEnrichment = long("lastProviderEnrichment").default(0L)
     val searchVector = tsvector("search_vector").nullable()
+    val versionGroupId = reference("versionGroupId", id, onDelete = ReferenceOption.SET_NULL).nullable()
 
     init {
         index(false, originalId)
+        index(false, versionGroupId)
     }
 }

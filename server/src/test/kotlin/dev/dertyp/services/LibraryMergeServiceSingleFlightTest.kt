@@ -36,6 +36,7 @@ class LibraryMergeServiceSingleFlightTest : KoinTest {
 
     fun setup(dialect: DbDialect) {
         albumService = mockk()
+        coEvery { albumService.rebuildVersionGroups() } returns 0
         val pluginManager = mockk<PluginManager>()
         every { pluginManager.getAllImporters() } returns emptyList()
 

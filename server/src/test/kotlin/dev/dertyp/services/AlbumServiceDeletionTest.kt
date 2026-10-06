@@ -90,6 +90,7 @@ class AlbumServiceDeletionTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        runBlocking { service.stopService() }
         stopKoin()
         TestDatabase.cleanUp()
     }

@@ -28,6 +28,7 @@ class LibraryMergeServiceChunkedFixTest : KoinTest {
     fun setup(dialect: DbDialect) {
         val albumService = mockk<AlbumService> {
             coEvery { syncAlbumSongsWithMusicBrainz(any(), any()) } returns Unit
+            coEvery { rebuildVersionGroups() } returns 0
         }
         val pluginManager = mockk<PluginManager>()
 

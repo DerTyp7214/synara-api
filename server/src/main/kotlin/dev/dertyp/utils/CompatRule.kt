@@ -17,6 +17,7 @@ interface CompatRule {
     fun shapeSong(song: Song): Song = song
     fun shapeUserSong(song: UserSong): UserSong = song
     fun shapeUiComponent(component: UiComponent, client: ClientInfo): UiComponent = component
+    fun shapeAlbums(albums: List<Album>): List<Album> = albums
     fun shapeRecentReleases(releases: List<RecentRelease>): List<RecentRelease> = releases
 }
 
@@ -51,7 +52,16 @@ object ReleaseVersionsCompat : CompatRule {
         }
 }
 
+object AlbumVersionsCompat : CompatRule {
+    override val feature = ClientFeature.ALBUM_VERSIONS
+
+    override fun shapeAlbum(album: Album): Album = album.copy(versions = emptyList())
+
+    override fun shapeAlbums(albums: List<Album>): List<Album> =
+        albums.flatMap { album -> listOf(album.copy(versions = emptyList())) + album.versions.map { it.copy(versions = emptyList()) } }
+}
+
 object CompatRules {
     val all: List<CompatRule> =
-        listOf(TitleTagsCompat, ReleaseVersionsCompat, AlbumTitleTagsCompat, UiSchemaCompat())
+        listOf(TitleTagsCompat, ReleaseVersionsCompat, AlbumTitleTagsCompat, AlbumVersionsCompat, UiSchemaCompat())
 }

@@ -112,6 +112,13 @@ class ClientInfoTest {
     }
 
     @Test
+    fun `album versions require api version 9`() {
+        assertFalse(ClientInfo.LEGACY.supports(ClientFeature.ALBUM_VERSIONS))
+        assertFalse(ClientInfo(8).supports(ClientFeature.ALBUM_VERSIONS))
+        assertTrue(ClientInfo(9).supports(ClientFeature.ALBUM_VERSIONS))
+    }
+
+    @Test
     fun `album title tags require api version 9`() {
         assertFalse(ClientInfo.LEGACY.supports(ClientFeature.ALBUM_TITLE_TAGS))
         assertFalse(ClientInfo(8).supports(ClientFeature.ALBUM_TITLE_TAGS))

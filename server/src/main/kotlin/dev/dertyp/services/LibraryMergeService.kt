@@ -7,6 +7,7 @@ import dev.dertyp.core.db.SchemaTables
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.release.AlbumEditions
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
@@ -246,6 +247,12 @@ class LibraryMergeService : Service() {
                 albumMergeMutex.unlock()
             }
         }
+        if (merged > 0) {
+            val albumService = get<AlbumService>()
+            scope.launch {
+                albumService.rebuildVersionGroups()
+            }
+        }
         return merged
     }
 
@@ -429,6 +436,12 @@ class LibraryMergeService : Service() {
                 fixedInChunk
             }
             progress.forEach { (percent, message) -> onProgress(percent, message) }
+        }
+        if (totalFixed > 0) {
+            val albumService = get<AlbumService>()
+            scope.launch {
+                albumService.rebuildVersionGroups()
+            }
         }
         return totalFixed
     }

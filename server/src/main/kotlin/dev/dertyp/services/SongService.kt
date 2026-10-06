@@ -1590,6 +1590,12 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
     suspend fun deleteSongs(ids: List<UUID>): Boolean {
         val deletion = dbQuery { libraryFileDeleter.deleteSongRows(ids) }
+        if (deletion.deletedAlbumIds.isNotEmpty()) {
+            val albumService = get<AlbumService>()
+            scope.launch {
+                albumService.rebuildVersionGroups()
+            }
+        }
         return deletion.deletedSongs == ids.size
     }
 
@@ -2719,13 +2725,18 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             }
             logBlock("Song-Artist links")
 
-            dbQuery {
+            val removedAlbums = dbQuery {
                 AlbumTable.deleteWhere {
                     notExists(
                         SongTable.select(SongTable.id).where {
                             SongTable.albumId eq AlbumTable.id
                         }
                     )
+                }
+            }
+            if (removedAlbums > 0) {
+                scope.launch {
+                    albumService.rebuildVersionGroups()
                 }
             }
             logBlock("Album cleanup")
