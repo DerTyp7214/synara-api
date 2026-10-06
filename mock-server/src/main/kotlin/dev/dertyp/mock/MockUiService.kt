@@ -568,8 +568,4 @@ class MockUiService : IUiService {
         pinned.value = contributionIds
         return layout()
     }
-
-    override fun getHomeCardsFlow(): Flow<UiHomeLayout> = flow {
-        pinned.collect { emit(layout()) }
-    }
 }
