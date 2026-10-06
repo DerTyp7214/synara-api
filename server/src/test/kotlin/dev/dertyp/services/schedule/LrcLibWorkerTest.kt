@@ -79,7 +79,10 @@ class LrcLibWorkerTest : KoinTest {
         every { songMetadata.id } returns songId
         every { songMetadata.title } returns "Test Song"
         every { songMetadata.artists } returns listOf(mockArtist)
-        every { songMetadata.album } returns mockk { every { name } returns "Test Album" }
+        every { songMetadata.album } returns mockk {
+            every { name } returns "Test Album"
+            every { tags } returns emptyList()
+        }
         every { songMetadata.duration } returns 180000L
 
         coEvery { songService.byId(songId) } returns songMetadata
