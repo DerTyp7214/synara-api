@@ -2,6 +2,7 @@ package dev.dertyp.db.migrations
 
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.AlbumVersionGroupTable
 import dev.dertyp.db.SongTable
 import org.flywaydb.core.api.migration.BaseJavaMigration
 import org.flywaydb.core.api.migration.Context
@@ -11,7 +12,8 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 class V1_51__AddAnimatedCoverToSongAndAlbum : BaseJavaMigration() {
     override fun migrate(context: Context) {
         val statements = tempConnection {
-            SchemaUtils.addMissingColumnsStatements(SongTable, AlbumTable)
+            SchemaUtils.createStatements(AlbumVersionGroupTable) +
+                    SchemaUtils.addMissingColumnsStatements(SongTable, AlbumTable)
         }
         context.connection.createStatement().use { statement ->
             for (sql in statements) {

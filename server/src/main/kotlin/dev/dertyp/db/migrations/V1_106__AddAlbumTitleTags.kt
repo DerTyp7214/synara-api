@@ -4,6 +4,7 @@ import dev.dertyp.core.db.Dialect
 import dev.dertyp.core.tempConnection
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.AlbumTitleTagTable
+import dev.dertyp.db.AlbumVersionGroupTable
 import org.flywaydb.core.api.migration.BaseJavaMigration
 import org.flywaydb.core.api.migration.Context
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -11,7 +12,8 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 class V1_106__AddAlbumTitleTags : BaseJavaMigration() {
     override fun migrate(context: Context) {
         val statements = tempConnection {
-            SchemaUtils.addMissingColumnsStatements(AlbumTable) +
+            SchemaUtils.createStatements(AlbumVersionGroupTable) +
+                    SchemaUtils.addMissingColumnsStatements(AlbumTable) +
                     SchemaUtils.createStatements(AlbumTitleTagTable)
         }.map {
             it.replaceFirst("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ")
