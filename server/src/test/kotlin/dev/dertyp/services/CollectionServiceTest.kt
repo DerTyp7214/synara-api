@@ -12,6 +12,7 @@ import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.testing.insertAlbum
 import dev.dertyp.testing.insertArtist
 import dev.dertyp.testing.linkSongArtist
+import dev.dertyp.testing.entityChangeTables
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.every
 import io.mockk.mockk
@@ -47,7 +48,12 @@ class CollectionServiceTest : KoinTest {
     private lateinit var service: CollectionService
 
     private fun setup(dialect: DbDialect) {
-        startKoin { modules(module { single<dev.dertyp.plugins.HookBus> { HookService() } }) }
+        startKoin {
+            modules(module {
+                single<dev.dertyp.plugins.HookBus> { HookService() }
+                single { EntityChangeRecorder() }
+            })
+        }
         database = TestDatabase.connect(dialect, "collection_test")
         transaction(database) {
             SchemaUtils.create(
@@ -65,6 +71,7 @@ class CollectionServiceTest : KoinTest {
                 CollectionAlbumTable,
                 CollectionArtistTable,
                 CollectionPlaylistTable,
+                *entityChangeTables,
             )
         }
         service = CollectionService()
@@ -520,6 +527,7 @@ class CollectionServiceTest : KoinTest {
         CollectionArtistTable,
         CollectionPlaylistTable,
         *allMusicBrainzTables,
+        *entityChangeTables,
     )
 
     private fun setupSearch(dialect: DbDialect) {
@@ -528,6 +536,7 @@ class CollectionServiceTest : KoinTest {
         startKoin {
             modules(module {
                 single<dev.dertyp.plugins.HookBus> { HookService() }
+                single { EntityChangeRecorder() }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { mockk<CachedMusicBrainzService>(relaxed = true) }

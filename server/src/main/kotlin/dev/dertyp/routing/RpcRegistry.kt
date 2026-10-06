@@ -179,6 +179,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val subsonicCredentialService = koin.get<SubsonicCredentialService>()
     val uiService = koin.get<UiService>()
     val changeNotifier = koin.get<ChangeNotifier>()
+    val entityChangeService = koin.get<EntityChangeService>()
 
     registrar.register(IUiService::class) {
         RpcUiService(
@@ -458,5 +459,11 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
             user,
             changeNotifier
         ).withAuthorization<IChangeService>(user).withLogging<IChangeService>(call)
+    }
+    registrar.register(IEntityChangeService::class) {
+        RpcEntityChangeService(
+            user,
+            entityChangeService
+        ).withAuthorization<IEntityChangeService>(user).withLogging<IEntityChangeService>(call)
     }
 }

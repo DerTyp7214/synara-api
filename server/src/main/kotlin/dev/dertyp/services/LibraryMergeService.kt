@@ -1,11 +1,14 @@
 package dev.dertyp.services
 
 import dev.dertyp.core.SplitTitle
+import dev.dertyp.core.date.getISOFromDate
 import dev.dertyp.core.splitAlbumTitleTags
+import dev.dertyp.data.EntityType
 import dev.dertyp.db.*
 import dev.dertyp.core.db.SchemaTables
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.PluginManager
+import dev.dertyp.plugins.parsePartialDate
 import dev.dertyp.services.release.AlbumEditions
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -14,12 +17,14 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.get
 import org.koin.core.component.inject
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 class LibraryMergeService : Service() {
     private val pluginManager by inject<PluginManager>()
     private val libraryFileDeleter by inject<LibraryFileDeleter>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
 
     private val albumMergeMutex = Mutex()
     private val albumMergePending = AtomicBoolean(false)
@@ -129,6 +134,8 @@ class LibraryMergeService : Service() {
             ?: keptSongRow[SongTable.title]
         val bestTags = (bestTitleRow ?: keptSongRow).titleTags()
 
+        entityChangeRecorder.merging(EntityType.SONG, keptSongId, songsToMerge.map { it[SongTable.id].value })
+
         if (bestTitle != keptSongRow[SongTable.title] ||
             anyExplicit != keptSongRow[SongTable.explicit] ||
             bestTags != keptSongRow.titleTags()
@@ -150,6 +157,7 @@ class LibraryMergeService : Service() {
             SongTable.deleteWhere { SongTable.id eq oldSongId }
             mergedInGroup++
         }
+        entityChangeRecorder.updated(EntityType.SONG, listOf(keptSongId), containersChanged = true)
         libraryFileDeleter.removeFromSearchIndex(
             SearchIndexEntityType.SONG,
             songsToMerge.map { it[SongTable.id].value })
@@ -207,6 +215,8 @@ class LibraryMergeService : Service() {
             }
             val cleanTitle = keptSongRow[SongTable.title].replace("\uD83C\uDD74", "").trim()
 
+            entityChangeRecorder.merging(EntityType.SONG, keptSongId, songsToMerge.map { it[SongTable.id].value })
+
             if (cleanTitle != keptSongRow[SongTable.title] || anyExplicit != keptSongRow[SongTable.explicit]) {
                 SongTable.update({ SongTable.id eq keptSongId }) {
                     it[title] = cleanTitle
@@ -222,6 +232,7 @@ class LibraryMergeService : Service() {
                 allSongsToDelete.add(oldSongId)
                 totalMerged++
             }
+            entityChangeRecorder.updated(EntityType.SONG, listOf(keptSongId), containersChanged = true)
         }
 
         if (allSongsToDelete.isNotEmpty()) {
@@ -256,6 +267,18 @@ class LibraryMergeService : Service() {
         return merged
     }
 
+    private fun adoptKnownReleaseDate(keptAlbum: ResultRow, mergedAlbums: List<ResultRow>) {
+        if (keptAlbum[AlbumTable.releaseDate] != null && !keptAlbum[AlbumTable.releaseDateEstimated]) return
+        val dated = mergedAlbums.firstOrNull {
+            it[AlbumTable.releaseDate] != null && !it[AlbumTable.releaseDateEstimated]
+        } ?: return
+
+        AlbumTable.update({ AlbumTable.id eq keptAlbum[AlbumTable.id] }) {
+            it[releaseDate] = dated[AlbumTable.releaseDate]
+            it[releaseDateEstimated] = false
+        }
+    }
+
     private suspend fun mergeDuplicateAlbumsPass(): Int {
         logger.info("Starting duplicate album merge check")
         var totalMerged = 0
@@ -270,7 +293,7 @@ class LibraryMergeService : Service() {
         for ((mbId, group) in mbIdGroups) {
             val sortedGroup = group.sortedByDescending {
                 var score = 0
-                if (it[AlbumTable.releaseDate] != null) score++
+                if (it[AlbumTable.releaseDate] != null && !it[AlbumTable.releaseDateEstimated]) score++
                 if (it[AlbumTable.cover] != null) score++
                 (score * 1000) + it[AlbumTable.songCount]
             }
@@ -281,11 +304,14 @@ class LibraryMergeService : Service() {
 
             logger.info("Merging ${albumsToMerge.size} albums with musicBrainzId $mbId into $keptAlbumId")
 
+            entityChangeRecorder.merging(EntityType.ALBUM, keptAlbumId, albumsToMerge.map { it[AlbumTable.id].value })
             for (oldAlbum in albumsToMerge) {
                 mergeAlbumReferences(oldAlbum[AlbumTable.id].value, keptAlbumId)
                 AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
                 totalMerged++
             }
+            adoptKnownReleaseDate(keptAlbum, albumsToMerge)
+            entityChangeRecorder.updated(EntityType.ALBUM, listOf(keptAlbumId), containersChanged = true)
             libraryFileDeleter.removeFromSearchIndex(
                 SearchIndexEntityType.ALBUM,
                 albumsToMerge.map { it[AlbumTable.id].value })
@@ -316,7 +342,7 @@ class LibraryMergeService : Service() {
 
             val sortedGroup = group.sortedByDescending {
                 var score = 0
-                if (it[AlbumTable.releaseDate] != null) score++
+                if (it[AlbumTable.releaseDate] != null && !it[AlbumTable.releaseDateEstimated]) score++
                 if (it[AlbumTable.cover] != null) score++
                 if (it.getOrNull(AlbumMusicBrainzTable.musicBrainzId) != null) score++
                 (score * 1000) + it[AlbumTable.songCount]
@@ -328,11 +354,14 @@ class LibraryMergeService : Service() {
 
             logger.info("Merging ${albumsToMerge.size} albums with originalId $originalId into $keptAlbumId")
 
+            entityChangeRecorder.merging(EntityType.ALBUM, keptAlbumId, albumsToMerge.map { it[AlbumTable.id].value })
             for (oldAlbum in albumsToMerge) {
                 mergeAlbumReferences(oldAlbum[AlbumTable.id].value, keptAlbumId)
                 AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
                 totalMerged++
             }
+            adoptKnownReleaseDate(keptAlbum, albumsToMerge)
+            entityChangeRecorder.updated(EntityType.ALBUM, listOf(keptAlbumId), containersChanged = true)
             libraryFileDeleter.removeFromSearchIndex(
                 SearchIndexEntityType.ALBUM,
                 albumsToMerge.map { it[AlbumTable.id].value })
@@ -387,7 +416,7 @@ class LibraryMergeService : Service() {
 
             val sortedGroup = group.sortedByDescending {
                 var score = 0
-                if (it[AlbumTable.releaseDate] != null) score++
+                if (it[AlbumTable.releaseDate] != null && !it[AlbumTable.releaseDateEstimated]) score++
                 if (it[AlbumTable.cover] != null) score++
                 if (it.getOrNull(AlbumMusicBrainzTable.musicBrainzId) != null) score++
                 (score * 1000) + it[AlbumTable.songCount]
@@ -399,11 +428,14 @@ class LibraryMergeService : Service() {
 
             logger.info("Merging ${albumsToMerge.size} albums into $keptAlbumId")
 
+            entityChangeRecorder.merging(EntityType.ALBUM, keptAlbumId, albumsToMerge.map { it[AlbumTable.id].value })
             for (oldAlbum in albumsToMerge) {
                 mergeAlbumReferences(oldAlbum[AlbumTable.id].value, keptAlbumId)
                 AlbumTable.deleteWhere { AlbumTable.id eq oldAlbum[AlbumTable.id].value }
                 totalMerged++
             }
+            adoptKnownReleaseDate(keptAlbum, albumsToMerge)
+            entityChangeRecorder.updated(EntityType.ALBUM, listOf(keptAlbumId), containersChanged = true)
             libraryFileDeleter.removeFromSearchIndex(
                 SearchIndexEntityType.ALBUM,
                 albumsToMerge.map { it[AlbumTable.id].value })
@@ -458,6 +490,7 @@ class LibraryMergeService : Service() {
                 SongTable.cover,
                 SongTable.discNumber,
                 SongTable.trackNumber,
+                SongTable.releaseDate,
                 SongMusicBrainzTable.musicBrainzId
             )
             .where { SongTable.albumId eq albumId }
@@ -548,6 +581,7 @@ class LibraryMergeService : Service() {
 
         if (existingAlbumId != null) {
             val songIds = songs.map { it[SongTable.id].value }
+            entityChangeRecorder.leavingContainers(EntityType.SONG, songIds)
             SongTable.update({ SongTable.id inList songIds }) {
                 it[albumId] = EntityID(existingAlbumId, AlbumTable)
             }
@@ -561,6 +595,8 @@ class LibraryMergeService : Service() {
             AlbumTable.update({ AlbumTable.id eq existingAlbumId }) {
                 it[songCount] = newTargetCount
             }
+            entityChangeRecorder.updated(EntityType.SONG, songIds, containersChanged = true)
+            entityChangeRecorder.updated(EntityType.ALBUM, listOf(originalAlbumId, existingAlbumId))
 
             get<AlbumService>().syncAlbumSongsWithMusicBrainz(existingAlbumId, suggestedMbId)
             return
@@ -583,13 +619,19 @@ class LibraryMergeService : Service() {
             ?.splitAlbumTitleTags()
             ?: SplitTitle(originalAlbum[AlbumTable.name], originalAlbum.albumTitleTags())
 
+        val originalReleaseDate = originalAlbum[AlbumTable.releaseDate]
+        val knownReleaseDate = getISOFromDate(parsePartialDate(mbRelease?.get(MBReleaseTable.date)))
+            ?: originalReleaseDate.takeUnless { originalAlbum[AlbumTable.releaseDateEstimated] }
+            ?: getISOFromDate(songs.mapNotNull { parsePartialDate(it[SongTable.releaseDate]) }.minOrNull())
+
         val newGroupId = AlbumVersionGroupTable.insertAndGetId { }
         AlbumTable.insert { album ->
             album[id] = EntityID(newAlbumId, AlbumTable)
             album[versionGroupId] = newGroupId
             album[name] = edition.title
             album[titleTags] = encodeTitleTags(edition.tags)
-            album[releaseDate] = mbRelease?.get(MBReleaseTable.date) ?: originalAlbum[AlbumTable.releaseDate]
+            album[releaseDate] = knownReleaseDate ?: originalReleaseDate ?: getISOFromDate(LocalDate.now())
+            album[releaseDateEstimated] = knownReleaseDate == null
             album[songCount] = mbTrackCount?.takeIf { it > 0 } ?: songs.size
             album[cover] = newCover?.let { id -> EntityID(id, ImageTable) }
             album[originalId] = null
@@ -627,8 +669,10 @@ class LibraryMergeService : Service() {
             this[AlbumGenreTable.albumId] = EntityID(newAlbumId, AlbumTable)
             this[AlbumGenreTable.genreId] = row[AlbumGenreTable.genreId]
         }
+        entityChangeRecorder.created(EntityType.ALBUM, listOf(newAlbumId))
 
         val songIds = songs.map { it[SongTable.id].value }
+        entityChangeRecorder.leavingContainers(EntityType.SONG, songIds)
         SongTable.update({ SongTable.id inList songIds }) {
             it[albumId] = EntityID(newAlbumId, AlbumTable)
         }
@@ -637,6 +681,8 @@ class LibraryMergeService : Service() {
         AlbumTable.update({ AlbumTable.id eq originalAlbumId }) {
             it[songCount] = remainingCount
         }
+        entityChangeRecorder.updated(EntityType.SONG, songIds, containersChanged = true)
+        entityChangeRecorder.updated(EntityType.ALBUM, listOf(originalAlbumId))
 
         if (suggestedMbId != null) {
             get<AlbumService>().syncAlbumSongsWithMusicBrainz(newAlbumId, suggestedMbId)
@@ -670,7 +716,9 @@ class LibraryMergeService : Service() {
         val nameA = albumA[AlbumTable.name]
         val nameB = albumB[AlbumTable.name]
         val dateA = albumA.getOrNull(AlbumTable.releaseDate)
+            .takeUnless { albumA.getOrNull(AlbumTable.releaseDateEstimated) == true }
         val dateB = albumB.getOrNull(AlbumTable.releaseDate)
+            .takeUnless { albumB.getOrNull(AlbumTable.releaseDateEstimated) == true }
         if (nameA.equals(nameB, ignoreCase = true) && dateA != null && dateA == dateB) {
             score += 70
         }
@@ -778,6 +826,8 @@ class LibraryMergeService : Service() {
 
         logger.info("Found ${duplicates.size} groups of duplicate images")
 
+        val repointed = mutableMapOf<EntityType, MutableSet<UUID>>()
+
         for (duplicateGroup in duplicates) {
             val hash = duplicateGroup[ImageTable.imageHash]
             val imagesInGroup = ImageTable
@@ -792,12 +842,44 @@ class LibraryMergeService : Service() {
 
             logger.info("Merging ${imagesToMerge.size} images with hash $hash into $keptImageId")
 
+            val animatedIds = AnimatedImageTable
+                .select(AnimatedImageTable.id)
+                .where { AnimatedImageTable.imageId inList imagesToMerge }
+                .map { it[AnimatedImageTable.id].value }
+            repointed.getOrPut(EntityType.SONG) { mutableSetOf() } += SongTable
+                .select(SongTable.id)
+                .where { SongTable.cover inList imagesToMerge }
+                .orWhere { SongTable.animatedCover inList animatedIds }
+                .map { it[SongTable.id].value }
+            repointed.getOrPut(EntityType.ALBUM) { mutableSetOf() } += AlbumTable
+                .select(AlbumTable.id)
+                .where { AlbumTable.cover inList imagesToMerge }
+                .orWhere { AlbumTable.animatedCover inList animatedIds }
+                .map { it[AlbumTable.id].value }
+            repointed.getOrPut(EntityType.ARTIST) { mutableSetOf() } += ArtistTable
+                .select(ArtistTable.id)
+                .where { ArtistTable.image inList imagesToMerge }
+                .map { it[ArtistTable.id].value }
+            repointed.getOrPut(EntityType.PLAYLIST) { mutableSetOf() } += PlaylistTable
+                .select(PlaylistTable.id)
+                .where { PlaylistTable.imageId inList imagesToMerge }
+                .map { it[PlaylistTable.id].value }
+            repointed.getOrPut(EntityType.USER_PLAYLIST) { mutableSetOf() } += UserPlaylistTable
+                .select(UserPlaylistTable.id)
+                .where { UserPlaylistTable.imageId inList imagesToMerge }
+                .map { it[UserPlaylistTable.id].value }
+            repointed.getOrPut(EntityType.COLLECTION) { mutableSetOf() } += CollectionTable
+                .select(CollectionTable.id)
+                .where { CollectionTable.imageId inList imagesToMerge }
+                .map { it[CollectionTable.id].value }
+
             for (oldImageId in imagesToMerge) {
                 mergeImageReferences(oldImageId, keptImageId)
                 ImageTable.deleteWhere { ImageTable.id eq oldImageId }
                 totalMerged++
             }
         }
+        repointed.forEach { (type, ids) -> entityChangeRecorder.updated(type, ids) }
         logger.info("Duplicate image merge completed")
         return totalMerged
     }
@@ -856,6 +938,7 @@ class LibraryMergeService : Service() {
                 UserSongTable.update({ (UserSongTable.songId eq oldSongId) and (UserSongTable.userId eq userId) }) {
                     it[UserSongTable.songId] = keptSongId
                 }
+                entityChangeRecorder.likesChanged(userId, EntityType.SONG, listOf(keptSongId))
             } else {
                 val keptFav = kept[UserSongTable.isFavourite]
                 val keptSuperLikedAt = kept[UserSongTable.superLikedAt]
@@ -866,6 +949,7 @@ class LibraryMergeService : Service() {
                         it[UserSongTable.isFavourite] = mergedFav
                         it[UserSongTable.superLikedAt] = mergedSuperLikedAt
                     }
+                    entityChangeRecorder.likesChanged(userId, EntityType.SONG, listOf(keptSongId))
                 }
             }
         }

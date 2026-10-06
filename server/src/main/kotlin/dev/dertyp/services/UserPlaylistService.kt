@@ -34,6 +34,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
     private val hooks by inject<HookBus>()
     private val redisSearchService by inject<RedisSearchService>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
 
     companion object {
         fun mapPlaylist(resultRow: ResultRow): UserPlaylist {
@@ -157,6 +158,10 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     }.flowOn(Dispatchers.IO)
 
     override suspend fun delete(id: UUID): Boolean = dbQuery {
+        if (UserPlaylistTable.select(UserPlaylistTable.id).where { UserPlaylistTable.id eq id }.empty()) {
+            return@dbQuery false
+        }
+        entityChangeRecorder.deleting(EntityType.USER_PLAYLIST, listOf(id))
         UserPlaylistTable.deleteWhere { UserPlaylistTable.id eq id } == 1
     }
 
@@ -176,7 +181,9 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 this[UserPlaylistTable.imageId] = coverImageId?.id?.let { EntityID(it, ImageTable) }
                 this[UserPlaylistTable.imageSource] = coverImageId?.let { ImageSource.USER }
                 this[UserPlaylistTable.origin] = playlist.origin
-            }.first()[UserPlaylistTable.id].value
+            }.first()[UserPlaylistTable.id].value.also {
+                entityChangeRecorder.created(EntityType.USER_PLAYLIST, listOf(it))
+            }
         }
         if (coverImageId == null) hooks.emit(HookEvent.PlaylistChanged(id))
         return id
@@ -190,11 +197,12 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 .andWhere { UserPlaylistSongTable.songId inList songIds.values }
                 .map { Pair(it[UserPlaylistSongTable.addedAt], it[UserPlaylistSongTable.songId].value) }
 
-            UserPlaylistSongTable.batchInsert(songIds.minusOnce(existing.toSet())) { (addedAt, songId) ->
+            val added = UserPlaylistSongTable.batchInsert(songIds.minusOnce(existing.toSet())) { (addedAt, songId) ->
                 this[UserPlaylistSongTable.playlistId] = id
                 this[UserPlaylistSongTable.songId] = songId
                 this[UserPlaylistSongTable.addedAt] = addedAt
             }
+            if (added.isNotEmpty()) entityChangeRecorder.membersChanged(EntityType.USER_PLAYLIST, listOf(id))
         }
         hooks.emit(HookEvent.PlaylistChanged(id))
     }
@@ -223,6 +231,8 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         val removed = dbQuery {
             UserPlaylistSongTable.deleteWhere {
                 (UserPlaylistSongTable.playlistId eq id) and (UserPlaylistSongTable.songId inList songIds)
+            }.also {
+                if (it > 0) entityChangeRecorder.membersChanged(EntityType.USER_PLAYLIST, listOf(id))
             }
         }
         hooks.emit(HookEvent.PlaylistChanged(id))
@@ -231,7 +241,8 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
 
     override suspend fun setPlaylistImage(id: UUID, imageId: UUID?): Boolean {
         val updated = dbQuery {
-            UserPlaylistTable.update({ UserPlaylistTable.id eq id }) {
+            val before = entityStates(EntityType.USER_PLAYLIST, listOf(id))
+            val updated = UserPlaylistTable.update({ UserPlaylistTable.id eq id }) {
                 it[UserPlaylistTable.imageId] = imageId
                 it[imageSource] = imageId?.let { ImageSource.USER }
                 if (imageId == null) {
@@ -239,6 +250,8 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                     it[coverSeed] = null
                 }
             } == 1
+            entityChangeRecorder.recordChanges(before)
+            updated
         }
         if (updated && imageId == null) hooks.emit(HookEvent.PlaylistChanged(id))
         return updated
@@ -457,6 +470,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     }
 
     private suspend fun upsertUserPlaylistRows(playlist: UserPlaylist, creatorOverride: UUID?) = dbQuery {
+        val before = entityStates(EntityType.USER_PLAYLIST, listOf(playlist.id))
         val current = UserPlaylistTable
             .select(UserPlaylistTable.imageId, UserPlaylistTable.imageSource)
             .where { UserPlaylistTable.id eq playlist.id }
@@ -521,5 +535,6 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 this[UserPlaylistSongTable.addedAt] = now + index
             }
         }
+        entityChangeRecorder.recordChanges(before)
     }
 }

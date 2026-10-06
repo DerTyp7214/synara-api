@@ -5,12 +5,15 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.Playlist
 import dev.dertyp.db.*
+import dev.dertyp.testing.entityChangeTables
 import io.mockk.mockk
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -31,6 +34,7 @@ class PlaylistServiceTest : KoinTest {
         startKoin {
             modules(module {
                 single { mockk<ImageService>(relaxed = true) }
+                single { EntityChangeRecorder() }
             })
         }
 
@@ -48,7 +52,8 @@ class PlaylistServiceTest : KoinTest {
                 SongArtistTable,
                 AlbumArtistTable,
                 ImageTable,
-                ImageMetadataTable
+                ImageMetadataTable,
+                *entityChangeTables,
             )
         }
         service = PlaylistService()
@@ -148,6 +153,114 @@ class PlaylistServiceTest : KoinTest {
         assertEquals("New Playlist", playlist?.name)
         assertEquals(1, playlist?.songs?.size)
         assertEquals(songId, playlist?.songs?.first())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch should keep the id of a playlist with the same name and replace its songs`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val firstSong = UUID.randomUUID()
+            val secondSong = UUID.randomUUID()
+            val otherPlaylist = UUID.randomUUID()
+            transaction(database) {
+                val album = UUID.randomUUID()
+                AlbumTable.insert {
+                    it[id] = album
+                    it[name] = "Album"
+                }
+                for ((song, path) in listOf(firstSong to "/path/first.mp3", secondSong to "/path/second.mp3")) {
+                    SongTable.insert {
+                        it[id] = song
+                        it[title] = "Song"
+                        it[filePath] = path
+                        it[albumId] = album
+                    }
+                }
+                PlaylistTable.insert {
+                    it[id] = otherPlaylist
+                    it[name] = "Other"
+                }
+                PlaylistSongTable.insert {
+                    it[playlistId] = otherPlaylist
+                    it[songId] = firstSong
+                    it[position] = 1
+                }
+            }
+
+            val created = service.createBatch(listOf(InsertablePlaylist("Mix", songPaths = listOf("/path/first.mp3"))))
+            val again = service.createBatch(
+                listOf(
+                    InsertablePlaylist(
+                        "Mix",
+                        songPaths = listOf("/path/second.mp3", "/path/missing.mp3", "/path/first.mp3", "/path/second.mp3")
+                    )
+                )
+            )
+
+            assertEquals(created, again)
+            assertEquals(listOf(secondSong, firstSong), service.byId(created.single())?.songs)
+            assertEquals(
+                listOf(secondSong to 1, firstSong to 2),
+                transaction(database) {
+                    PlaylistSongTable.selectAll()
+                        .where { PlaylistSongTable.playlistId eq created.single() }
+                        .orderBy(PlaylistSongTable.position)
+                        .map { it[PlaylistSongTable.songId].value to it[PlaylistSongTable.position] }
+                }
+            )
+            assertEquals(2L, transaction(database) { PlaylistTable.selectAll().count() })
+            assertEquals(listOf(firstSong), service.byId(otherPlaylist)?.songs)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBatch should keep one playlist of several with the same name and delete the others with their songs`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val song = UUID.randomUUID()
+        val duplicates = List(3) { UUID.randomUUID() }
+        val other = UUID.randomUUID()
+        transaction(database) {
+            val album = UUID.randomUUID()
+            AlbumTable.insert {
+                it[id] = album
+                it[name] = "Album"
+            }
+            SongTable.insert {
+                it[id] = song
+                it[title] = "Song"
+                it[filePath] = "/path/song.mp3"
+                it[albumId] = album
+            }
+            for ((playlist, playlistName) in duplicates.map { it to "Mix" } + (other to "Other")) {
+                PlaylistTable.insert {
+                    it[id] = playlist
+                    it[name] = playlistName
+                }
+                PlaylistSongTable.insert {
+                    it[playlistId] = playlist
+                    it[songId] = song
+                    it[position] = 1
+                }
+            }
+        }
+        val kept = duplicates.minBy { it.toString() }
+
+        val result = service.createBatch(listOf(InsertablePlaylist("Mix", songPaths = listOf("/path/song.mp3"))))
+
+        assertEquals(listOf(kept), result)
+        assertEquals(
+            setOf(kept, other),
+            transaction(database) { PlaylistTable.selectAll().map { it[PlaylistTable.id].value }.toSet() }
+        )
+        assertEquals(
+            setOf(kept, other),
+            transaction(database) { PlaylistSongTable.selectAll().map { it[PlaylistSongTable.playlistId].value }.toSet() }
+        )
+        assertEquals(listOf(song), service.byId(kept)?.songs)
+        assertEquals(listOf(song), service.byId(other)?.songs)
     }
 
     @ParameterizedTest

@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.Image
 import dev.dertyp.data.MergeArtists
 import dev.dertyp.data.MusicBrainzArtist
 import dev.dertyp.data.SplitArtist
@@ -12,6 +13,7 @@ import dev.dertyp.services.release.ArtistSourceRulePolarity
 import dev.dertyp.services.release.ReleaseArtistService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.testing.entityChangeTables
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -40,14 +42,16 @@ class ArtistServiceTest : KoinTest {
     private lateinit var service: ArtistService
     private val musicBrainzService = mockk<MusicBrainzService>()
     private val metadataFetchingService = mockk<MetadataFetchingService>(relaxed = true)
+    private val imageService = mockk<ImageService>(relaxed = true)
 
     fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { musicBrainzService }
                 single { metadataFetchingService }
                 single { MusicBrainzCacheService() }
-                single { mockk<ImageService>(relaxed = true) }
+                single { imageService }
                 single { CachedMusicBrainzService(get(), get()) }
                 single { SongService() }
                 single { AlbumService() }
@@ -61,6 +65,7 @@ class ArtistServiceTest : KoinTest {
         database = TestDatabase.connect(dialect, "artist_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 UserTable,
                 ArtistTable,
                 ArtistMusicBrainzTable,
@@ -818,6 +823,475 @@ class ArtistServiceTest : KoinTest {
                 .map { it[ArtistMemberTable.artistId].value to it[ArtistMemberTable.groupId].value }.toSet()
         }
         assertEquals(setOf(merged!!.id to groupId, standaloneMemberId to merged.id), memberships)
+    }
+
+    private fun memberships() = transaction(database) {
+        ArtistMemberTable.selectAll()
+            .map { it[ArtistMemberTable.artistId].value to it[ArtistMemberTable.groupId].value }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists of a group and a non-group gives a group that returns its members`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val groupId = UUID.randomUUID()
+            val soloId = UUID.randomUUID()
+            val memberIds = List(2) { UUID.randomUUID() }
+
+            transaction(database) {
+                ArtistTable.insert { it[id] = groupId; it[name] = "Group"; it[isGroup] = true }
+                ArtistTable.insert { it[id] = soloId; it[name] = "Solo" }
+                memberIds.forEachIndexed { index, memberId ->
+                    ArtistTable.insert { it[id] = memberId; it[name] = "Member $index" }
+                    ArtistMemberTable.insert { it[artistId] = memberId; it[this.groupId] = groupId }
+                }
+            }
+
+            val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(soloId, groupId)))
+            assertNotNull(merged)
+
+            assertTrue(merged!!.isGroup)
+            assertEquals(memberIds.toSet(), merged.artists.map { it.id }.toSet())
+
+            val fetched = service.byId(merged.id)
+            assertEquals(true, fetched?.isGroup)
+            assertEquals(memberIds.toSet(), fetched?.artists?.map { it.id }?.toSet())
+            assertEquals(memberIds.toSet(), service.byGroup(0, 10, merged.id).data.map { it.id }.toSet())
+            assertEquals(memberIds.map { it to merged.id }.toSet(), memberships().toSet())
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists of two groups gives the union of their members without duplicates`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val firstGroupId = UUID.randomUUID()
+            val secondGroupId = UUID.randomUUID()
+            val onlyFirstId = UUID.randomUUID()
+            val onlySecondId = UUID.randomUUID()
+            val sharedId = UUID.randomUUID()
+
+            transaction(database) {
+                ArtistTable.insert { it[id] = firstGroupId; it[name] = "First Group"; it[isGroup] = true }
+                ArtistTable.insert { it[id] = secondGroupId; it[name] = "Second Group"; it[isGroup] = true }
+                ArtistTable.insert { it[id] = onlyFirstId; it[name] = "Only First" }
+                ArtistTable.insert { it[id] = onlySecondId; it[name] = "Only Second" }
+                ArtistTable.insert { it[id] = sharedId; it[name] = "Shared" }
+
+                ArtistMemberTable.insert { it[artistId] = onlyFirstId; it[groupId] = firstGroupId }
+                ArtistMemberTable.insert { it[artistId] = sharedId; it[groupId] = firstGroupId }
+                ArtistMemberTable.insert { it[artistId] = onlySecondId; it[groupId] = secondGroupId }
+                ArtistMemberTable.insert { it[artistId] = sharedId; it[groupId] = secondGroupId }
+            }
+
+            val merged = service.mergeArtists(
+                MergeArtists(name = "Merged", artistIds = listOf(firstGroupId, secondGroupId))
+            )
+            assertNotNull(merged)
+
+            val expectedMembers = setOf(onlyFirstId, onlySecondId, sharedId)
+            assertTrue(merged!!.isGroup)
+            assertEquals(3, merged.artists.size)
+            assertEquals(expectedMembers, merged.artists.map { it.id }.toSet())
+
+            val members = service.byGroup(0, 10, merged.id)
+            assertEquals(3, members.data.size)
+            assertEquals(expectedMembers, members.data.map { it.id }.toSet())
+
+            val rows = memberships()
+            assertEquals(3, rows.size)
+            assertEquals(expectedMembers.map { it to merged.id }.toSet(), rows.toSet())
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists of a group and one of its members does not make the artist a member of itself`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val groupId = UUID.randomUUID()
+        val mergedMemberId = UUID.randomUUID()
+        val otherMemberId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = groupId; it[name] = "Group"; it[isGroup] = true }
+            ArtistTable.insert { it[id] = mergedMemberId; it[name] = "Merged Member" }
+            ArtistTable.insert { it[id] = otherMemberId; it[name] = "Other Member" }
+
+            ArtistMemberTable.insert { it[artistId] = mergedMemberId; it[this.groupId] = groupId }
+            ArtistMemberTable.insert { it[artistId] = otherMemberId; it[this.groupId] = groupId }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(groupId, mergedMemberId)))
+        assertNotNull(merged)
+
+        assertTrue(merged!!.isGroup)
+        assertEquals(listOf(otherMemberId), merged.artists.map { it.id })
+        assertEquals(listOf(otherMemberId), service.byGroup(0, 10, merged.id).data.map { it.id })
+        assertEquals(listOf(otherMemberId to merged.id), memberships())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists of two non-groups stays a non-group`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val artistId1 = UUID.randomUUID()
+        val artistId2 = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = artistId1; it[name] = "Artist A" }
+            ArtistTable.insert { it[id] = artistId2; it[name] = "Artist B" }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(artistId1, artistId2)))
+        assertNotNull(merged)
+
+        assertFalse(merged!!.isGroup)
+        assertEquals(emptyList<UUID>(), merged.artists.map { it.id })
+        assertEquals(false, service.byId(merged.id)?.isGroup)
+        assertEquals(emptyList<Pair<UUID, UUID>>(), memberships())
+    }
+
+    private fun insertSelectableImage(imageId: UUID) {
+        transaction(database) {
+            ImageTable.insert {
+                it[id] = imageId
+                it[path] = "$imageId.jpg"
+                it[imageHash] = "hash-$imageId"
+                it[origin] = "test"
+            }
+        }
+        coEvery { imageService.byId(imageId) } returns Image(
+            id = imageId,
+            path = "$imageId.jpg",
+            imageHash = "hash-$imageId",
+            origin = "test"
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists keeps the biography of the artist whose image is chosen`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val firstId = UUID.randomUUID()
+        val secondId = UUID.randomUUID()
+        val firstImageId = UUID.randomUUID()
+        val secondImageId = UUID.randomUUID()
+        insertSelectableImage(firstImageId)
+        insertSelectableImage(secondImageId)
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = firstId; it[name] = "Artist A"; it[about] = "Biography A"; it[image] = firstImageId }
+            ArtistTable.insert { it[id] = secondId; it[name] = "Artist B"; it[about] = "Biography B"; it[image] = secondImageId }
+        }
+
+        val merged = service.mergeArtists(
+            MergeArtists(name = "Artist A", image = secondImageId.toString(), artistIds = listOf(firstId, secondId))
+        )
+        assertNotNull(merged)
+
+        assertEquals(secondImageId, merged!!.imageId)
+        assertEquals("Biography B", merged.about)
+        assertEquals("Biography B", service.byId(merged.id)?.about)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists prefers the artist with the chosen image over artists with the target name`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val firstId = UUID.randomUUID()
+            val secondId = UUID.randomUUID()
+            val firstImageId = UUID.randomUUID()
+            val secondImageId = UUID.randomUUID()
+            insertSelectableImage(firstImageId)
+            insertSelectableImage(secondImageId)
+
+            transaction(database) {
+                ArtistTable.insert { it[id] = firstId; it[name] = "Same Name"; it[about] = "Biography A"; it[image] = firstImageId }
+                ArtistTable.insert { it[id] = secondId; it[name] = "Same Name"; it[about] = "Biography B"; it[image] = secondImageId }
+            }
+
+            val merged = service.mergeArtists(
+                MergeArtists(name = "Same Name", image = secondImageId.toString(), artistIds = listOf(firstId, secondId))
+            )
+            assertNotNull(merged)
+
+            assertEquals(secondImageId, merged!!.imageId)
+            assertEquals("Biography B", merged.about)
+            assertEquals("Biography B", service.byId(merged.id)?.about)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists picks the first artist in list order when several use the chosen image`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val firstId = UUID.randomUUID()
+            val secondId = UUID.randomUUID()
+            val thirdId = UUID.randomUUID()
+            val sharedImageId = UUID.randomUUID()
+            insertSelectableImage(sharedImageId)
+
+            transaction(database) {
+                ArtistTable.insert { it[id] = thirdId; it[name] = "Artist C"; it[about] = "Biography C"; it[image] = sharedImageId }
+                ArtistTable.insert { it[id] = secondId; it[name] = "Artist B"; it[about] = "Biography B"; it[image] = sharedImageId }
+                ArtistTable.insert { it[id] = firstId; it[name] = "Artist A"; it[about] = "Biography A" }
+            }
+
+            val merged = service.mergeArtists(
+                MergeArtists(
+                    name = "Artist A",
+                    image = sharedImageId.toString(),
+                    artistIds = listOf(firstId, secondId, thirdId)
+                )
+            )
+            assertNotNull(merged)
+
+            assertEquals("Biography B", merged!!.about)
+            assertEquals("Biography B", service.byId(merged.id)?.about)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists keeps the biography of the artist with the target name when the image belongs to none`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val firstId = UUID.randomUUID()
+        val secondId = UUID.randomUUID()
+        val firstImageId = UUID.randomUUID()
+        val unrelatedImageId = UUID.randomUUID()
+        insertSelectableImage(firstImageId)
+        insertSelectableImage(unrelatedImageId)
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = firstId; it[name] = "Artist A"; it[about] = "Biography A"; it[image] = firstImageId }
+            ArtistTable.insert { it[id] = secondId; it[name] = "Artist B"; it[about] = "Biography B" }
+        }
+
+        val merged = service.mergeArtists(
+            MergeArtists(name = "Artist B", image = unrelatedImageId.toString(), artistIds = listOf(firstId, secondId))
+        )
+        assertNotNull(merged)
+
+        assertEquals(unrelatedImageId, merged!!.imageId)
+        assertEquals("Biography B", merged.about)
+        assertEquals("Biography B", service.byId(merged.id)?.about)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists keeps the biography of the artist with the target name without an image`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val firstId = UUID.randomUUID()
+            val secondId = UUID.randomUUID()
+
+            transaction(database) {
+                ArtistTable.insert { it[id] = firstId; it[name] = "Artist A"; it[about] = "Biography A" }
+                ArtistTable.insert { it[id] = secondId; it[name] = "Artist B"; it[about] = "Biography B" }
+            }
+
+            val merged = service.mergeArtists(MergeArtists(name = "Artist B", artistIds = listOf(firstId, secondId)))
+            assertNotNull(merged)
+
+            assertEquals("Biography B", merged!!.about)
+            assertEquals("Biography B", service.byId(merged.id)?.about)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists keeps the biography of the first artist in the list when neither image nor name match`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val firstId = UUID.randomUUID()
+        val secondId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = firstId; it[name] = "Artist A"; it[about] = "Biography A" }
+            ArtistTable.insert { it[id] = secondId; it[name] = "Artist B"; it[about] = "Biography B" }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(firstId, secondId)))
+        assertNotNull(merged)
+
+        assertEquals("Biography A", merged!!.about)
+        assertEquals("Biography A", service.byId(merged.id)?.about)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists falls back to another artist's biography when the main artist has none`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val mainId = UUID.randomUUID()
+            val otherId = UUID.randomUUID()
+
+            transaction(database) {
+                ArtistTable.insert { it[id] = mainId; it[name] = "Main"; it[about] = "   " }
+                ArtistTable.insert { it[id] = otherId; it[name] = "Other"; it[about] = "Biography Other" }
+            }
+
+            val merged = service.mergeArtists(MergeArtists(name = "Main", artistIds = listOf(mainId, otherId)))
+            assertNotNull(merged)
+
+            assertEquals("Biography Other", merged!!.about)
+            assertEquals("Biography Other", service.byId(merged.id)?.about)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists falls back to the first other biography in list order when the main artist has none`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val earlierOtherId = UUID.fromString("ffffffff-0000-0000-0000-000000000002")
+        val blankOtherId = UUID.fromString("88888888-0000-0000-0000-000000000002")
+        val mainId = UUID.fromString("77777777-0000-0000-0000-000000000002")
+        val laterOtherId = UUID.fromString("00000000-0000-0000-0000-000000000002")
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = laterOtherId; it[name] = "Later"; it[about] = "Biography Later" }
+            ArtistTable.insert { it[id] = mainId; it[name] = "Main" }
+            ArtistTable.insert { it[id] = blankOtherId; it[name] = "Blank" }
+            ArtistTable.insert { it[id] = earlierOtherId; it[name] = "Earlier"; it[about] = "Biography Earlier" }
+        }
+
+        val merged = service.mergeArtists(
+            MergeArtists(name = "Main", artistIds = listOf(blankOtherId, earlierOtherId, mainId, laterOtherId))
+        )
+        assertNotNull(merged)
+
+        assertEquals("Biography Earlier", merged!!.about)
+        assertEquals("Biography Earlier", service.byId(merged.id)?.about)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists leaves the biography empty when no merged artist has one`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val firstId = UUID.randomUUID()
+        val secondId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = firstId; it[name] = "Artist A" }
+            ArtistTable.insert { it[id] = secondId; it[name] = "Artist B"; it[about] = "" }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Artist A", artistIds = listOf(firstId, secondId)))
+        assertNotNull(merged)
+
+        assertEquals("", merged!!.about)
+        assertEquals("", service.byId(merged.id)?.about)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists takes the main artist from the order of artistIds and not from the database order`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val lowId = UUID.fromString("00000000-0000-0000-0000-000000000001")
+        val middleId = UUID.fromString("77777777-0000-0000-0000-000000000001")
+        val highId = UUID.fromString("ffffffff-0000-0000-0000-000000000001")
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = lowId; it[name] = "Low"; it[about] = "Biography Low" }
+            ArtistTable.insert { it[id] = highId; it[name] = "High"; it[about] = "Biography High" }
+            ArtistTable.insert { it[id] = middleId; it[name] = "Middle"; it[about] = "Biography Middle" }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Merged", artistIds = listOf(middleId, highId, lowId)))
+        assertNotNull(merged)
+
+        assertEquals("Biography Middle", merged!!.about)
+        assertEquals("Biography Middle", service.byId(merged.id)?.about)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists takes the first artist with the target name in the order of artistIds`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val lowId = UUID.fromString("00000000-0000-0000-0000-000000000003")
+            val highId = UUID.fromString("ffffffff-0000-0000-0000-000000000003")
+            val otherId = UUID.fromString("77777777-0000-0000-0000-000000000003")
+
+            transaction(database) {
+                ArtistTable.insert { it[id] = lowId; it[name] = "Same Name"; it[about] = "Biography Low" }
+                ArtistTable.insert { it[id] = highId; it[name] = "Same Name"; it[about] = "Biography High" }
+                ArtistTable.insert { it[id] = otherId; it[name] = "Other"; it[about] = "Biography Other" }
+            }
+
+            val merged = service.mergeArtists(
+                MergeArtists(name = "Same Name", artistIds = listOf(otherId, highId, lowId))
+            )
+            assertNotNull(merged)
+
+            assertEquals("Biography High", merged!!.about)
+            assertEquals("Biography High", service.byId(merged.id)?.about)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists keeps the biography order with duplicated and unknown artist ids`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val lowId = UUID.fromString("00000000-0000-0000-0000-000000000004")
+            val highId = UUID.fromString("ffffffff-0000-0000-0000-000000000004")
+            val unknownId = UUID.fromString("11111111-0000-0000-0000-000000000004")
+
+            transaction(database) {
+                ArtistTable.insert { it[id] = lowId; it[name] = "Low"; it[about] = "Biography Low" }
+                ArtistTable.insert { it[id] = highId; it[name] = "High"; it[about] = "Biography High" }
+            }
+
+            val merged = service.mergeArtists(
+                MergeArtists(name = "Merged", artistIds = listOf(unknownId, highId, highId, lowId, highId))
+            )
+            assertNotNull(merged)
+
+            assertEquals("Biography High", merged!!.about)
+            assertEquals("Biography High", service.byId(merged.id)?.about)
+            assertEquals(null, service.byId(lowId))
+            assertEquals(null, service.byId(highId))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeArtists keeps a merged member in its group as the new artist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val groupId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        val duplicateId = UUID.randomUUID()
+        val bystanderId = UUID.randomUUID()
+
+        transaction(database) {
+            ArtistTable.insert { it[id] = groupId; it[name] = "Group"; it[isGroup] = true }
+            ArtistTable.insert { it[id] = memberId; it[name] = "Member" }
+            ArtistTable.insert { it[id] = duplicateId; it[name] = "Member Duplicate" }
+            ArtistTable.insert { it[id] = bystanderId; it[name] = "Bystander" }
+
+            ArtistMemberTable.insert { it[artistId] = memberId; it[this.groupId] = groupId }
+            ArtistMemberTable.insert { it[artistId] = duplicateId; it[this.groupId] = groupId }
+            ArtistMemberTable.insert { it[artistId] = bystanderId; it[this.groupId] = groupId }
+        }
+
+        val merged = service.mergeArtists(MergeArtists(name = "Member", artistIds = listOf(memberId, duplicateId)))
+        assertNotNull(merged)
+
+        assertFalse(merged!!.isGroup)
+        val group = service.byId(groupId)
+        assertEquals(true, group?.isGroup)
+        assertEquals(2, group?.artists?.size)
+        assertEquals(setOf(merged.id, bystanderId), group?.artists?.map { it.id }?.toSet())
+
+        val rows = memberships()
+        assertEquals(2, rows.size)
+        assertEquals(setOf(merged.id to groupId, bystanderId to groupId), rows.toSet())
     }
 
     @ParameterizedTest

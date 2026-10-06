@@ -4,8 +4,10 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.services.EntityChangeRecorder
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.StorageService
+import dev.dertyp.testing.entityChangeTables
 import dev.dertyp.testing.relaxedTaskLogService
 import io.mockk.every
 import io.mockk.justRun
@@ -50,6 +52,7 @@ class PurgeNonImageCoverFilesTest : KoinTest {
 
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { logService }
                 single { storageService }
                 single { redisConfig }
@@ -60,6 +63,7 @@ class PurgeNonImageCoverFilesTest : KoinTest {
         database = TestDatabase.connect(dialect, "purge_non_image_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 ImageTable,
                 ImageMetadataTable,
                 AlbumTable,

@@ -33,7 +33,6 @@ import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
-import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.io.File
 import java.nio.file.Files
@@ -298,9 +297,13 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     private val musicBrainzCacheService by inject<MusicBrainzCacheService>()
     private val acoustIdService by inject<AcoustIdService>()
     private val artistService by inject<ArtistService>()
+    private val albumService by inject<AlbumService>()
+    private val imageService by inject<ImageService>()
+    private val storageService by inject<StorageService>()
     private val genreService by inject<GenreService>()
     private val linkResolverService by inject<LinkResolverService>()
     private val libraryFileDeleter by inject<LibraryFileDeleter>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
     private val redisSearchService by inject<RedisSearchService>()
     private val transcoder by inject<Transcoder>()
     private val transcodedSongRepository by inject<TranscodedSongRepository>()
@@ -480,6 +483,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         addedAt: Instant?
     ): UserSong? {
         dbQuery {
+            val before = likeState(userId, songId)
             val inserted = UserSongTable.insertIgnore {
                 it[UserSongTable.songId] = songId
                 it[UserSongTable.userId] = userId
@@ -496,6 +500,9 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     it[UserSongTable.updatedAt] = (addedAt ?: Instant.now()).toEpochMilli()
                 }
             }
+            if (likeState(userId, songId) != before) {
+                entityChangeRecorder.likesChanged(userId, EntityType.SONG, listOf(songId))
+            }
         }
 
         return byId(songId, userId)
@@ -511,6 +518,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 .where { condition }
                 .singleOrNull()
 
+            val before = likeState(userId, songId)
             val existing = current()
             val inserted = existing == null && UserSongTable.insertIgnore {
                 it[UserSongTable.songId] = songId
@@ -530,18 +538,42 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     if (wasLiked != liked) it[UserSongTable.updatedAt] = now
                 }
             }
+            if (likeState(userId, songId) != before) {
+                entityChangeRecorder.likesChanged(userId, EntityType.SONG, listOf(songId))
+            }
         }
 
         return byId(songId, userId)
     }
 
+    private fun likeState(userId: UUID, songId: UUID): List<Any?>? = UserSongTable
+        .select(
+            UserSongTable.isFavourite,
+            UserSongTable.superLikedAt,
+            UserSongTable.createdAt,
+            UserSongTable.updatedAt
+        )
+        .where { UserSongTable.userId eq userId }
+        .andWhere { UserSongTable.songId eq songId }
+        .singleOrNull()
+        ?.let {
+            listOf(
+                it[UserSongTable.isFavourite],
+                it[UserSongTable.superLikedAt],
+                it[UserSongTable.createdAt],
+                it[UserSongTable.updatedAt]
+            )
+        }
+
     suspend fun setArtists(id: UUID, artistIds: List<UUID>, userId: UUID): UserSong? = dbQuery {
+        val before = entityStates(EntityType.SONG, listOf(id))
         SongArtistTable.deleteWhere { SongArtistTable.songId eq id }
         SongArtistTable.batchInsert(artistIds.withIndex().toList()) { (index, artistId) ->
             this[SongArtistTable.songId] = id
             this[SongArtistTable.artistId] = artistId
             this[SongArtistTable.position] = index
         }
+        entityChangeRecorder.recordChanges(before)
 
         return@dbQuery byId(id, userId).also {
             it?.let { song ->
@@ -566,9 +598,10 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
     suspend fun setLyrics(id: UUID, userId: UUID, lyrics: List<String>) = dbQuery {
         val lyricsString = lyrics.joinToString("\n")
-        SongTable.update({ SongTable.id eq id }) {
+        val changed = SongTable.update({ SongTable.id eq id }) {
             it[SongTable.lyrics] = lyricsString
         }
+        if (changed > 0) entityChangeRecorder.updated(EntityType.SONG, listOf(id))
 
         return@dbQuery byId(id, userId).also {
             it?.let { song ->
@@ -592,6 +625,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         } else null
 
         dbQuery {
+            val before = entityStates(EntityType.SONG, listOf(id))
             val exists = SongMusicBrainzTable.select(SongMusicBrainzTable.songId)
                 .where { SongMusicBrainzTable.songId eq id }
                 .any()
@@ -617,6 +651,12 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     if (mbIsrc != null) it[isrc] = mbIsrc
                     if (mbDate != null) it[releaseDate] = mbDate
                 }
+            }
+            entityChangeRecorder.recordChanges(before)
+            if (mbDate != null) {
+                albumService.fillUnknownReleaseDatesFromSongsTx(
+                    SongTable.select(SongTable.albumId).where { SongTable.id eq id }.map { it[SongTable.albumId].value }
+                )
             }
         }
 
@@ -647,6 +687,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         setMusicBrainzId(normalized.id, normalized.musicBrainzId, userId)
 
         dbQuery {
+            val before = entityStates(EntityType.SONG, listOf(normalized.id))
+            val artistsBefore = entityStates(EntityType.ARTIST, normalized.artists.map { it.id })
             SongTable.update({ SongTable.id eq normalized.id }) {
                 it[title] = normalized.title
                 it[titleTags] = encodeTitleTags(normalized.tags)
@@ -670,6 +712,16 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 this[SongArtistTable.creditedAliasId] = creditedAliasIds[artist.id]
                 this[SongArtistTable.position] = index
                 this[SongArtistTable.joinPhrase] = artist.joinPhrase
+            }
+            entityChangeRecorder.recordChanges(artistsBefore)
+            entityChangeRecorder.recordChanges(before)
+            if (normalized.releaseDate != null) {
+                albumService.fillUnknownReleaseDatesFromSongsTx(
+                    SongTable
+                        .select(SongTable.albumId)
+                        .where { SongTable.id eq normalized.id }
+                        .map { it[SongTable.albumId].value }
+                )
             }
         }
 
@@ -813,6 +865,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
             if (finalArtists.isNotEmpty()) {
                 dbQuery {
+                    val before = entityStates(EntityType.SONG, listOf(id))
+                    val artistsBefore = entityStates(EntityType.ARTIST, finalArtists.map { it.artist.id })
                     SongArtistTable.deleteWhere { SongArtistTable.songId eq id }
                     val creditedAliasIds = finalArtists.associate { (artist, creditedName) ->
                         artist.id to creditedName?.let { artistService.getOrCreateAliasTx(artist.id, it) }
@@ -824,6 +878,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                         this[SongArtistTable.position] = index
                         this[SongArtistTable.joinPhrase] = credit.joinPhrase
                     }
+                    entityChangeRecorder.recordChanges(artistsBefore)
+                    entityChangeRecorder.recordChanges(before)
                 }
             }
 
@@ -836,11 +892,13 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             if (genres.isNotEmpty()) {
                 val genreIds = genreService.getOrCreateGenres(genres)
                 dbQuery {
+                    val before = entityStates(EntityType.SONG, listOf(id))
                     SongGenreTable.deleteWhere { SongGenreTable.songId eq id }
                     SongGenreTable.batchInsert(genreIds) { genreId ->
                         this[SongGenreTable.songId] = id
                         this[SongGenreTable.genreId] = genreId
                     }
+                    entityChangeRecorder.recordChanges(before)
                 }
             }
         }
@@ -1226,6 +1284,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         val allUrls = (urls + resolvedLinks).distinct()
 
         dbQuery {
+            val before = entityStates(EntityType.SONG, listOf(id))
             allUrls.forEach { url ->
                 val parser = ParserFactory.getParser(url)
                 val parsed = parser?.parse(url)
@@ -1235,7 +1294,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 SongProviderTable.upsert(
                     SongProviderTable.songId,
                     SongProviderTable.provider,
-                    SongProviderTable.externalId
+                    SongProviderTable.externalId,
+                    onUpdateExclude = listOf(SongProviderTable.addedAt)
                 ) {
                     it[SongProviderTable.songId] = id
                     it[SongProviderTable.provider] = provider
@@ -1249,11 +1309,12 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 it[lastProviderEnrichment] = Clock.System.now()
                     .toEpochMilliseconds() + (1.days..5.days).random().inWholeMilliseconds
             }
+            entityChangeRecorder.recordChanges(before)
         }
     }
 
     fun insertVariants(kind: SongVariantKind, variants: List<Triple<UUID, String, AudioInfo?>>) {
-        variants.forEach { (songId, path, given) ->
+        val inserted = variants.filter { (songId, path, given) ->
             val info = given ?: AudioProbe.probe(File(path))
             SongVariantTable.insertIgnore {
                 it[SongVariantTable.songId] = songId
@@ -1265,8 +1326,9 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 it[channels] = info?.channels ?: 0
                 it[bitRate] = info?.bitRate ?: 0
                 it[fileSize] = info?.fileSize ?: 0
-            }
+            }.insertedCount > 0
         }
+        entityChangeRecorder.updated(EntityType.SONG, inserted.map { it.first })
     }
 
     fun mapVariant(row: ResultRow) = AudioInfo(
@@ -1279,23 +1341,40 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     )
 
     suspend fun addProviderUrl(songId: UUID, url: String) = dbQuery {
+        if (writeProviderUrl(songId, url, newSong = false)) {
+            entityChangeRecorder.updated(EntityType.SONG, listOf(songId))
+        }
+    }
+
+    private suspend fun writeProviderUrl(songId: UUID, url: String, newSong: Boolean): Boolean {
         val parser = ParserFactory.getParser(url)
         val parsed = parser?.parse(url)
 
         val provider = parser?.name ?: "unknown"
         val externalId = parsed?.first ?: url
+        val type = parsed?.second?.value ?: Type.SONG.value
+        val unchanged = !newSong && SongProviderTable
+            .select(SongProviderTable.songId)
+            .where { SongProviderTable.songId eq songId }
+            .andWhere { SongProviderTable.provider eq provider }
+            .andWhere { SongProviderTable.externalId eq externalId }
+            .andWhere { SongProviderTable.type eq type }
+            .andWhere { SongProviderTable.rawUrl eq url }
+            .any()
 
         SongProviderTable.upsert(
             SongProviderTable.songId,
             SongProviderTable.provider,
-            SongProviderTable.externalId
+            SongProviderTable.externalId,
+            onUpdateExclude = listOf(SongProviderTable.addedAt)
         ) {
             it[SongProviderTable.songId] = songId
             it[SongProviderTable.provider] = provider
             it[SongProviderTable.externalId] = externalId
-            it[SongProviderTable.type] = parsed?.second?.value ?: Type.SONG.value
+            it[SongProviderTable.type] = type
             it[SongProviderTable.rawUrl] = url
         }
+        return !unchanged
     }
 
     suspend fun byOriginalTracks(
@@ -1591,7 +1670,6 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     suspend fun deleteSongs(ids: List<UUID>): Boolean {
         val deletion = dbQuery { libraryFileDeleter.deleteSongRows(ids) }
         if (deletion.deletedAlbumIds.isNotEmpty()) {
-            val albumService = get<AlbumService>()
             scope.launch {
                 albumService.rebuildVersionGroups()
             }
@@ -1745,7 +1823,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
     private fun anyTagCondition(tags: List<SongTag>): Op<Boolean>? {
         if (tags.isEmpty()) return null
-        val customAudioPath = get<StorageService>().customAudioPath
+        val customAudioPath = storageService.customAudioPath
 
         return tags.distinct().map { tag ->
             when (tag) {
@@ -2500,12 +2578,13 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 lastTime = now
             }
 
-            val artistService = get<ArtistService>()
-            val albumService = get<AlbumService>()
-            val imageService = get<ImageService>()
 
             val uniqueArtistNames = songs.flatMap { it.artists }.distinct()
             val uniqueAlbums = songs.map { it.album }.distinct()
+            val albumSongReleaseDates = songs
+                .mapNotNull { song -> song.releaseDate?.let { song.album to it } }
+                .groupBy({ it.first }, { it.second })
+                .mapValues { (_, dates) -> dates.min() }
             val uniqueCoverHashes = songs.map { it.coverHash }.distinct()
             logBlock("Metadata aggregation")
 
@@ -2528,7 +2607,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 .chunked(maxBatchSize)
                 .map { groups ->
                     async {
-                        albumService.getOrBulkCreate(groups.flatten()).entries
+                        albumService.getOrBulkCreate(groups.flatten(), albumSongReleaseDates).entries
                     }
                 }
                 .awaitAll()
@@ -2576,6 +2655,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                         }
                     }
                     syncSongTitleTags(dirtySongs.map { (song, existing) -> existing.id to song.tags })
+                    entityChangeRecorder.updated(EntityType.SONG, dirtySongs.values.map { it.id })
                 }
                 logBlock("Dirty song updates")
             }
@@ -2647,6 +2727,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     this[SongTable.isrc] = song.isrc
                 }.also { rows ->
                     syncSongTitleTags(rows.mapIndexed { index, row -> row[SongTable.id].value to filteredSongs[index].tags })
+                    entityChangeRecorder.created(EntityType.SONG, rows.map { it[SongTable.id].value })
                 }
             }
             logBlock("Main song insertion")
@@ -2681,13 +2762,18 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                         this[SongMusicBrainzTable.songId] = songId
                         this[SongMusicBrainzTable.musicBrainzId] = mbId
                     }
+                    entityChangeRecorder.updated(EntityType.SONG, musicBrainzBatch.map { it.first })
                 }
                 logBlock("MusicBrainz data")
             }
 
-            insertedSongs.forEach { (songId, songData) ->
-                if (songData.originalUrl.isNotBlank()) {
-                    addProviderUrl(songId, songData.originalUrl)
+            val providerLinks = insertedSongs.filter { (_, songData) -> songData.originalUrl.isNotBlank() }
+            if (providerLinks.isNotEmpty()) {
+                dbQuery {
+                    providerLinks.forEach { (songId, songData) ->
+                        writeProviderUrl(songId, songData.originalUrl, newSong = true)
+                    }
+                    entityChangeRecorder.updated(EntityType.SONG, providerLinks.map { it.first })
                 }
             }
             logBlock("Provider links")
@@ -2702,6 +2788,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                         this[SongAudioDataTable.songId] = songId
                         this[SongAudioDataTable.bpm] = bpmValue
                     }
+                    entityChangeRecorder.updated(EntityType.SONG, audioDataBatch.map { it.first })
                 }
                 logBlock("Audio data insertion")
             }
@@ -2719,13 +2806,36 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     this[SongArtistTable.artistId] = artistId
                     this[SongArtistTable.position] = index
                 }
+                entityChangeRecorder.updated(
+                    EntityType.SONG,
+                    songArtistLinks.map { it.first },
+                    containersChanged = true
+                )
             }
             if (musicBrainzBatch.isNotEmpty()) {
-                dbQuery { applyCachedSongCreditOrder(musicBrainzBatch.map { it.first }) }
+                dbQuery {
+                    val reordered = musicBrainzBatch.map { it.first }
+                    if (applyCachedSongCreditOrder(reordered) > 0) {
+                        entityChangeRecorder.updated(EntityType.SONG, reordered)
+                    }
+                }
             }
             logBlock("Song-Artist links")
 
             val removedAlbums = dbQuery {
+                entityChangeRecorder.deleting(
+                    EntityType.ALBUM,
+                    AlbumTable
+                        .select(AlbumTable.id)
+                        .where {
+                            notExists(
+                                SongTable.select(SongTable.id).where {
+                                    SongTable.albumId eq AlbumTable.id
+                                }
+                            )
+                        }
+                        .map { it[AlbumTable.id].value }
+                )
                 AlbumTable.deleteWhere {
                     notExists(
                         SongTable.select(SongTable.id).where {
@@ -2762,6 +2872,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
     suspend fun upsertSong(remoteSong: Song) = dbQuery {
         val song = remoteSong.withSplitTitleTags()
+        val before = entityStates(EntityType.SONG, listOf(song.id))
 
         SongTable.upsert(SongTable.id) {
             it[id] = song.id
@@ -2815,6 +2926,10 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 }
             }
         }
+        entityChangeRecorder.recordChanges(before)
+        if (song.releaseDate != null) {
+            albumService.fillUnknownReleaseDatesFromSongsTx(listOfNotNull(song.album?.id))
+        }
     }
 
     suspend fun moveSongs(oldPath: String, newPath: String, originalIdPrefix: String? = null): Int =
@@ -2850,6 +2965,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     it[filePath] = newFilePath
                 }
             }
+            entityChangeRecorder.updated(EntityType.SONG, affectedSongs)
 
             songs.size
         }

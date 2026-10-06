@@ -4,6 +4,8 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
 import dev.dertyp.services.AlbumService
+import dev.dertyp.services.EntityChangeRecorder
+import dev.dertyp.testing.entityChangeTables
 import dev.dertyp.testing.relaxedTaskLogService
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -32,6 +34,7 @@ class BuildAlbumVersionGroupsTest : KoinTest {
         albumService = AlbumService()
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { logService }
                 single { albumService }
             })
@@ -40,6 +43,7 @@ class BuildAlbumVersionGroupsTest : KoinTest {
         database = TestDatabase.connect(dialect, "build_album_version_groups_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 ImageTable,
                 AnimatedImageTable,
                 ArtistTable,

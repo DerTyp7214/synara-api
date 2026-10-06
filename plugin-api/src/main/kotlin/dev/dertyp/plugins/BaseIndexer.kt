@@ -13,8 +13,6 @@ import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import java.nio.file.Path
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -85,7 +83,7 @@ abstract class BaseIndexer(
         if (metadata != null && (finalAlbum.songCount == 0 || finalAlbum.releaseDate == null)) {
             finalAlbum = finalAlbum.copy(
                 songCount = if (finalAlbum.songCount == 0) metadata.trackCount else finalAlbum.songCount,
-                releaseDate = metadata.releaseDate ?: finalAlbum.releaseDate,
+                releaseDate = finalAlbum.releaseDate ?: metadata.releaseDate,
                 artists = metadata.artists.ifEmpty { finalAlbum.artists }.sorted()
             )
         }
@@ -143,11 +141,7 @@ abstract class BaseIndexer(
 
                             if (name == null) return@withPermit
 
-                            val releaseDate = try {
-                                LocalDate.parse(year!!, DateTimeFormatter.ISO_LOCAL_DATE)
-                            } catch (_: Exception) {
-                                null
-                            }
+                            val releaseDate = parsePartialDate(year)
 
                             val originalId = pluginStorages.firstNotNullOfOrNull { it.tracksPath }?.let { _ ->
                                 pluginStorages.find { storage ->
@@ -388,11 +382,7 @@ abstract class BaseIndexer(
         val bitRate = header.bitRateAsNumber
         val bpm = tag.getFirst(FieldKey.BPM).toDoubleOrNull()
 
-        val releaseDate = try {
-            LocalDate.parse(year, DateTimeFormatter.ISO_LOCAL_DATE)
-        } catch (_: Exception) {
-            null
-        }
+        val releaseDate = parsePartialDate(year)
 
         val isExplicit =
             audioFile.file.nameWithoutExtension.endsWith("(Explicit)") || isExplicitByEmoji || audioFile.isExplicit

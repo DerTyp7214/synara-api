@@ -288,4 +288,43 @@ class TidalIndexerTest {
             assertEquals(LocalDate.of(2026, 9, 16), album.releaseDate)
             assertEquals("0602547933522", album.barcode)
         }
+
+    private fun releaseDateOf(albumId: String, dateTag: String): LocalDate? = runBlocking {
+        val file = tempDir.resolve("$albumId.flac")
+        Files.createFile(file)
+
+        val tag = mockk<Tag>(relaxed = true)
+        val audio = mockk<AudioFile>(relaxed = true)
+        every { audio.tag } returns tag
+        every { AudioFileIO.read(file.toFile()) } returns audio
+        every { tag.getFirst(any<FieldKey>()) } answers {
+            when (it.invocation.args[0] as FieldKey) {
+                FieldKey.ALBUM -> "Test Album $albumId"
+                FieldKey.YEAR -> dateTag
+                else -> ""
+            }
+        }
+        every { tag.getFirst("URL") } returns "https://tidal.com/album/$albumId/track/1"
+        every { tag.getAll(FieldKey.ALBUM_ARTIST) } returns listOf("Artist")
+        coEvery {
+            context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.tidal, listOf(albumId))
+        } returns listOf(
+            IMetadataService.Album(
+                id = albumId,
+                title = "Test Album $albumId",
+                trackCount = 13,
+                releaseDate = LocalDate.of(2026, 9, 16)
+            )
+        )
+
+        indexer.groupByAlbum(listOf(file)).second.keys.single().releaseDate
+    }
+
+    @Test
+    fun `groupByAlbum takes full, year-month and year-only date tags before the provider date`() {
+        assertEquals(LocalDate.of(2016, 5, 20), releaseDateOf("4720", "2016-05-20"))
+        assertEquals(LocalDate.of(2016, 5, 1), releaseDateOf("4721", "2016-05"))
+        assertEquals(LocalDate.of(2016, 1, 1), releaseDateOf("4722", "2016"))
+        assertEquals(LocalDate.of(2026, 9, 16), releaseDateOf("4723", "soon"))
+    }
 }

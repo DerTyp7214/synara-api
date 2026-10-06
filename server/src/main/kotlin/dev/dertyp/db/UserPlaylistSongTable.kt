@@ -13,4 +13,8 @@ object UserPlaylistSongTable : Table("userPlaylistSong") {
     val id = javaUUID("id").clientDefault { UUID.randomUUID() }
 
     override val primaryKey = PrimaryKey(playlistId, songId, addedAt, id)
+
+    init {
+        index(false, songId)
+    }
 }

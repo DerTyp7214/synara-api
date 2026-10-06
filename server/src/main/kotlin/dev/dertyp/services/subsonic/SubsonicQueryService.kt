@@ -1,5 +1,6 @@
 package dev.dertyp.services.subsonic
 
+import dev.dertyp.data.EntityType
 import dev.dertyp.db.AlbumArtistTable
 import dev.dertyp.db.AlbumGenreTable
 import dev.dertyp.db.AlbumTable
@@ -13,7 +14,10 @@ import dev.dertyp.db.SongTable
 import dev.dertyp.db.UserAlbumTable
 import dev.dertyp.db.UserPlaylistTable
 import dev.dertyp.core.db.dbQuery
+import dev.dertyp.services.EntityChangeRecorder
 import dev.dertyp.services.Service
+import dev.dertyp.services.entityStates
+import dev.dertyp.services.recordChanges
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.Query
 import org.jetbrains.exposed.v1.jdbc.andWhere
@@ -22,6 +26,7 @@ import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.upsert
+import org.koin.core.component.inject
 import java.time.Instant
 import java.util.UUID
 
@@ -42,6 +47,8 @@ enum class AlbumListType(val key: String) {
 }
 
 class SubsonicQueryService : Service() {
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+
     suspend fun albumIds(
         type: AlbumListType,
         size: Int,
@@ -195,12 +202,19 @@ class SubsonicQueryService : Service() {
 
     suspend fun setAlbumStar(userId: UUID, albumId: UUID, starred: Boolean) {
         dbQuery {
+            val wasStarred = UserAlbumTable
+                .select(UserAlbumTable.isFavourite)
+                .where { UserAlbumTable.userId eq userId }
+                .andWhere { UserAlbumTable.albumId eq albumId }
+                .singleOrNull()
+                ?.get(UserAlbumTable.isFavourite) ?: false
             UserAlbumTable.upsert(UserAlbumTable.userId, UserAlbumTable.albumId) {
                 it[UserAlbumTable.userId] = userId
                 it[UserAlbumTable.albumId] = albumId
                 it[UserAlbumTable.isFavourite] = starred
                 it[UserAlbumTable.updatedAt] = Instant.now().toEpochMilli()
             }
+            if (wasStarred != starred) entityChangeRecorder.likesChanged(userId, EntityType.ALBUM, listOf(albumId))
         }
     }
 
@@ -212,6 +226,11 @@ class SubsonicQueryService : Service() {
 
     suspend fun setArtistStar(userId: UUID, artistId: UUID, starred: Boolean) {
         dbQuery {
+            val wasStarred = !FollowedArtistTable
+                .select(FollowedArtistTable.artistId)
+                .where { FollowedArtistTable.userId eq userId }
+                .andWhere { FollowedArtistTable.artistId eq artistId }
+                .empty()
             if (starred) {
                 FollowedArtistTable.upsert(FollowedArtistTable.userId, FollowedArtistTable.artistId) {
                     it[FollowedArtistTable.userId] = userId
@@ -222,6 +241,7 @@ class SubsonicQueryService : Service() {
                     (FollowedArtistTable.userId eq userId) and (FollowedArtistTable.artistId eq artistId)
                 }
             }
+            if (wasStarred != starred) entityChangeRecorder.likesChanged(userId, EntityType.ARTIST, listOf(artistId))
         }
     }
 
@@ -240,10 +260,13 @@ class SubsonicQueryService : Service() {
 
     suspend fun updatePlaylistMeta(id: UUID, name: String?, comment: String?): Boolean = dbQuery {
         if (name == null && comment == null) return@dbQuery true
-        UserPlaylistTable.update({ UserPlaylistTable.id eq id }) {
+        val before = entityStates(EntityType.USER_PLAYLIST, listOf(id))
+        val updated = UserPlaylistTable.update({ UserPlaylistTable.id eq id }) {
             if (name != null) it[UserPlaylistTable.name] = name
             if (comment != null) it[UserPlaylistTable.description] = comment
         } > 0
+        entityChangeRecorder.recordChanges(before)
+        updated
     }
 
     suspend fun songCount(): Long = dbQuery {

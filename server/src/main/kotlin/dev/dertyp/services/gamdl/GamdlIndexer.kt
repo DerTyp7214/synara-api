@@ -5,7 +5,6 @@ import dev.dertyp.core.sha256
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.InsertableSong
-import dev.dertyp.core.date.getDateFromISO
 import dev.dertyp.plugins.*
 import dev.dertyp.services.import.ImportBackend
 import dev.dertyp.services.import.Gamdl
@@ -107,7 +106,7 @@ class GamdlIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
                 val artists = audioFile.getAlbumArtists(delimiter).ifEmpty { audioFile.getArtists(delimiter) }.sorted()
                 val songCount = audioFile.songCount ?: 0
                 val year = audioFile.year
-                val releaseDate = getDateFromISO(year) ?: mbTrack?.albumId?.let { resolvedMbAlbums[it]?.releaseDate }
+                val releaseDate = parsePartialDate(year) ?: mbTrack?.albumId?.let { resolvedMbAlbums[it]?.releaseDate }
 
                 val rawBarcode = audioFile.barcode
                 val barcode = if (rawBarcode?.uppercase() == "BARCODE") null else rawBarcode

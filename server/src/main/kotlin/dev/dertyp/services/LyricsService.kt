@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
+import dev.dertyp.data.EntityType
 import dev.dertyp.db.SyncedLyricsTable
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.serializers.AppCbor
@@ -33,6 +34,7 @@ import kotlin.time.Duration.Companion.seconds
 class LyricsService : ILyricsService, Service() {
     private val config by inject<ServerConfig>()
     private val songService by inject<SongService>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
     private val lyricsSyncWorker by inject<LyricsSyncWorker>()
 
 
@@ -117,6 +119,7 @@ class LyricsService : ILyricsService, Service() {
                 it[SyncedLyricsTable.rawLyrics] = rawLyrics
                 it[SyncedLyricsTable.provider] = "whisperx_v1"
             }
+            entityChangeRecorder.updated(EntityType.SONG, listOf(songId))
         }
 
         return syncedLyrics

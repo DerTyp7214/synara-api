@@ -54,6 +54,11 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [CoverTargetType](#devdertypdatacovertargettype)
 - [CustomMetadata](#devdertypdatacustommetadata)
 - [Discoveries](#devdertypdatadiscoveries)
+- [EntityChange](#devdertypdataentitychange)
+- [EntityChangeAspect](#devdertypdataentitychangeaspect)
+- [EntityChangeKind](#devdertypdataentitychangekind)
+- [EntityChangeWindow](#devdertypdataentitychangewindow)
+- [EntityType](#devdertypdataentitytype)
 - [EpisodePlaybackReport](#devdertypdataepisodeplaybackreport)
 - [FavSync](#devdertypdatafavsync)
 - [Genre](#devdertypdatagenre)
@@ -847,6 +852,59 @@ Songs and artists listened to for the first time within the range.
 | :--- | :--- | :--- |
 | `songs` | `List`<[TopSongEntry](#devdertypdatatopsongentry)> | Songs first listened to within the range, ranked by the requested top order. |
 | `artists` | `List`<[TopArtistEntry](#devdertypdatatopartistentry)> | Artists first listened to within the range, ranked by the requested top order. |
+
+### EntityChange <a name="devdertypdataentitychange"></a>
+A recorded change of one part of one entity. An entry carries no data, it says that this part of this entity changed and has to be read again. Only the latest change per entity and part is kept, so several changes of the same part arrive as one entry. A deleted entity appears as a single entry with the aspect DATA and the kind DELETED.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `entityType` | [EntityType](#devdertypdataentitytype) | The kind of entity that changed. Types a client does not know are decoded as UNKNOWN. |
+| `entityId` | `PlatformUUID` | The unique identifier of the entity that changed. |
+| `aspect` | [EntityChangeAspect](#devdertypdataentitychangeaspect) | The part of the entity that changed. Parts a client does not know are decoded as UNKNOWN. |
+| `kind` | [EntityChangeKind](#devdertypdataentitychangekind) | What happened to that part. Kinds a client does not know are decoded as UNKNOWN. |
+| `changedAt` | `Long` | When the change was recorded (epoch milliseconds). |
+
+### EntityChangeAspect <a name="devdertypdataentitychangeaspect"></a>
+The part of an entity that changed. Parts change independently, so a like says nothing about the entity's own fields.
+
+| Value | Description |
+| :--- | :--- |
+| `UNKNOWN` | A part this client does not know yet. Clients ignore it. |
+| `DATA` | The entity's own fields a client can read, such as names, tags, credits, cover, lyrics, numbers and links. |
+| `MEMBERS` | What the entity contains, such as the songs of an album or playlist, the items of a collection, or the albums and songs of an artist. |
+| `LIKE` | The like state of the calling user, meaning the like level of a song, the star of an album or following an artist. It belongs to one user. |
+| `TIMECODES` | The timecode tags of the calling user on a song. It belongs to one user. |
+
+### EntityChangeKind <a name="devdertypdataentitychangekind"></a>
+What happened to the part of an entity a recorded change is about.
+
+| Value | Description |
+| :--- | :--- |
+| `UNKNOWN` | A kind this client does not know yet. Clients treat it as a reason to read the entity again. |
+| `CREATED` | The entity was created. An entry keeps CREATED when the entity is updated afterwards and only its time moves, so a client that already has the entity can receive CREATED again and reads the entity again. |
+| `UPDATED` | The part of the entity was updated. |
+| `DELETED` | The entity was deleted. |
+
+### EntityChangeWindow <a name="devdertypdataentitychangewindow"></a>
+The time frame a client needs around a pull of recorded changes. It tells which time to ask from next and how far back the recorded changes reach.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `serverTime` | `Long` | The time the client passes as since on its next pull (epoch milliseconds). It lies slightly in the past, so a change written while the client was pulling is not missed. Entries can therefore repeat between two pulls. |
+| `availableSince` | `Long` | The earliest time from which the recorded changes are complete (epoch milliseconds). A client whose since lies before it reads everything again instead of pulling. |
+
+### EntityType <a name="devdertypdataentitytype"></a>
+The kind of library entity a recorded change is about.
+
+| Value | Description |
+| :--- | :--- |
+| `UNKNOWN` | An entity type this client does not know yet. Clients ignore it. |
+| `SONG` | A song. |
+| `ALBUM` | An album. |
+| `ARTIST` | An artist. |
+| `USER_PLAYLIST` | A playlist a user owns. |
+| `PLAYLIST` | A global playlist, mirrored or imported from a platform. |
+| `COLLECTION` | A collection. |
 
 ### EpisodePlaybackReport <a name="devdertypdataepisodeplaybackreport"></a>
 What a client reports about the episode it is playing so the server can keep the listening position of the user up to date.

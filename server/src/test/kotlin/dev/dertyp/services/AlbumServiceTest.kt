@@ -9,6 +9,7 @@ import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.testing.entityChangeTables
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -48,6 +49,7 @@ class AlbumServiceTest : KoinTest {
     fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { musicBrainzService }
                 single { MusicBrainzCacheService() }
                 single { storageService }
@@ -65,6 +67,7 @@ class AlbumServiceTest : KoinTest {
         database = TestDatabase.connect(dialect, "album_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 UserTable,
                 AlbumVersionGroupTable,
                 AlbumTable,
@@ -2583,4 +2586,343 @@ class AlbumServiceTest : KoinTest {
         assertTrue(spied.deleteAlbums(listOf(withSong)))
         coVerify(timeout = 5000, exactly = 5) { spied.rebuildVersionGroups() }
     }
+    private fun storedReleaseDate(album: UUID): Pair<String?, Boolean> = transaction(database) {
+        AlbumTable.selectAll().where { AlbumTable.id eq album }.single().let {
+            it[AlbumTable.releaseDate] to it[AlbumTable.releaseDateEstimated]
+        }
+    }
+
+    private fun albumCount(): Long = transaction(database) { AlbumTable.selectAll().count() }
+
+    private fun cachedRelease(dateText: String?): UUID {
+        val release = UUID.randomUUID()
+        transaction(database) {
+            MBReleaseTable.insert {
+                it[id] = release
+                it[title] = "Release"
+                it[date] = dateText
+            }
+        }
+        coEvery { musicBrainzService.fetchReleaseById(release, any()) } returns MusicBrainzRelease(
+            id = release,
+            title = "Release",
+            date = dateText
+        )
+        return release
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a new album keeps the date it comes with before the MusicBrainz release and the songs`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val incoming = InsertableAlbum(
+                "Tagged",
+                listOf("Artist"),
+                releaseDate = LocalDate.of(2010, 3, 4),
+                songCount = 2,
+                musicBrainzId = cachedRelease("2016-05-20")
+            )
+
+            val album = service.getOrBulkCreate(listOf(incoming), mapOf(incoming to LocalDate.of(2019, 9, 9))).values.single()
+
+            assertEquals("2010-03-04" to false, storedReleaseDate(album))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a new album without a date takes the MusicBrainz release date before the songs`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val yearMonth = InsertableAlbum("Month", listOf("Artist"), songCount = 2, musicBrainzId = cachedRelease("2016-05"))
+            val yearOnly = InsertableAlbum("Year", listOf("Artist"), songCount = 2, musicBrainzId = cachedRelease("2014"))
+            val undatedRelease = InsertableAlbum("Open", listOf("Artist"), songCount = 2, musicBrainzId = cachedRelease(null))
+
+            val ids = service.getOrBulkCreate(
+                listOf(yearMonth, yearOnly, undatedRelease),
+                listOf(yearMonth, yearOnly, undatedRelease).associateWith { LocalDate.of(2019, 9, 9) }
+            )
+
+            assertEquals("2016-05-01" to false, storedReleaseDate(ids.getValue(yearMonth)))
+            assertEquals("2014-01-01" to false, storedReleaseDate(ids.getValue(yearOnly)))
+            assertEquals("2019-09-09" to false, storedReleaseDate(ids.getValue(undatedRelease)))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a new album without any source gets the day it was added and is marked as estimated`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val incoming = InsertableAlbum("Undated", listOf("Artist"), songCount = 2)
+
+            val before = LocalDate.now()
+            val album = service.getOrBulkCreate(listOf(incoming)).values.single()
+            val after = LocalDate.now()
+
+            val (date, estimated) = storedReleaseDate(album)
+            assertTrue(date in setOf(before.toString(), after.toString()))
+            assertTrue(estimated)
+            assertEquals(date, service.byId(album)?.releaseDate?.toString())
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `indexing an album without a date again returns the same album and inserts nothing`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val incoming = InsertableAlbum("Undated", listOf("Artist"), songCount = 2)
+
+            val first = service.getOrBulkCreateWithResult(listOf(incoming))
+            val second = service.getOrBulkCreateWithResult(listOf(incoming))
+            val third = service.getOrBulkCreateWithResult(listOf(incoming.copy()))
+
+            assertEquals(setOf(incoming), first.newlyCreated)
+            assertEquals(emptySet<InsertableAlbum>(), second.newlyCreated)
+            assertEquals(emptySet<InsertableAlbum>(), third.newlyCreated)
+            assertEquals(first.albumToIds.getValue(incoming), second.albumToIds.getValue(incoming))
+            assertEquals(first.albumToIds.getValue(incoming), third.albumToIds.getValue(incoming))
+            assertEquals(1L, albumCount())
+            assertTrue(storedReleaseDate(first.albumToIds.getValue(incoming)).second)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `albums with the same name and no date but different artists stay separate`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val one = InsertableAlbum("Greatest Hits", listOf("First Artist"), songCount = 2)
+            val other = InsertableAlbum("Greatest Hits", listOf("Second Artist"), songCount = 2)
+
+            val first = service.getOrBulkCreate(listOf(one, other))
+            val second = service.getOrBulkCreate(listOf(other, one))
+
+            assertEquals(2, first.values.toSet().size)
+            assertEquals(first, second)
+            assertEquals(2L, albumCount())
+            assertEquals(listOf("First Artist"), service.byId(first.getValue(one))?.artists?.map { it.name })
+            assertEquals(listOf("Second Artist"), service.byId(first.getValue(other))?.artists?.map { it.name })
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an album without a date matches the stored album whatever its date is`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val dated = InsertableAlbum("Record", listOf("Artist"), releaseDate = LocalDate.of(2010, 3, 4), songCount = 2)
+        val album = service.getOrBulkCreate(listOf(dated)).values.single()
+
+        val undated = dated.copy(releaseDate = null)
+        val matched = service.getOrBulkCreateWithResult(listOf(undated), mapOf(undated to LocalDate.of(2019, 9, 9)))
+        val otherCount = service.getOrBulkCreate(listOf(undated.copy(songCount = 3))).values.single()
+
+        assertEquals(album, matched.albumToIds.getValue(undated))
+        assertEquals(emptySet<InsertableAlbum>(), matched.newlyCreated)
+        assertEquals("2010-03-04" to false, storedReleaseDate(album))
+        assertNotEquals(album, otherCount)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a later import with a real date replaces an estimated date and keeps the album`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val undated = InsertableAlbum("Record", listOf("Artist"), songCount = 2)
+            val album = service.getOrBulkCreate(listOf(undated)).values.single()
+            assertTrue(storedReleaseDate(album).second)
+
+            val dated = undated.copy(releaseDate = LocalDate.of(2010, 3, 4))
+            val result = service.getOrBulkCreateWithResult(listOf(dated, undated))
+
+            assertEquals(album, result.albumToIds.getValue(dated))
+            assertEquals(album, result.albumToIds.getValue(undated))
+            assertEquals(emptySet<InsertableAlbum>(), result.newlyCreated)
+            assertEquals("2010-03-04" to false, storedReleaseDate(album))
+            assertEquals(1L, albumCount())
+
+            assertEquals(album, service.getOrBulkCreate(listOf(dated)).getValue(dated))
+            assertEquals(album, service.getOrBulkCreate(listOf(undated)).getValue(undated))
+            assertEquals("2010-03-04" to false, storedReleaseDate(album))
+            assertEquals(1L, albumCount())
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an album found by its provider id gets the incoming date only while its own is estimated`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val undated = InsertableAlbum("Record", listOf("Artist"), songCount = 2, originalId = "tidal:901")
+            val album = service.getOrBulkCreate(listOf(undated)).values.single()
+            assertTrue(storedReleaseDate(album).second)
+
+            val fromProvider = undated.copy(releaseDate = LocalDate.of(2012, 6, 7))
+            assertEquals(album, service.getOrBulkCreate(listOf(fromProvider)).values.single())
+            assertEquals("2012-06-07" to false, storedReleaseDate(album))
+
+            val changed = undated.copy(releaseDate = LocalDate.of(2020, 1, 1))
+            assertEquals(album, service.getOrBulkCreate(listOf(changed)).values.single())
+            assertEquals("2012-06-07" to false, storedReleaseDate(album))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `linking a MusicBrainz release replaces an estimated date and never a real one`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val undated = InsertableAlbum("Undated", listOf("Artist"), songCount = 2)
+            val dated = InsertableAlbum("Dated", listOf("Artist"), releaseDate = LocalDate.of(2010, 3, 4), songCount = 2)
+            val ids = service.getOrBulkCreate(listOf(undated, dated))
+
+            service.setMusicBrainzId(ids.getValue(undated), cachedRelease("2016"), triggerMerge = false)
+            service.setMusicBrainzId(ids.getValue(dated), cachedRelease("2017-08-09"), triggerMerge = false)
+
+            assertEquals("2016-01-01" to false, storedReleaseDate(ids.getValue(undated)))
+            assertEquals("2010-03-04" to false, storedReleaseDate(ids.getValue(dated)))
+
+            service.setMusicBrainzId(ids.getValue(undated), cachedRelease("2001-01-01"), triggerMerge = false)
+            assertEquals("2016-01-01" to false, storedReleaseDate(ids.getValue(undated)))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `syncing with a MusicBrainz release replaces an estimated date`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val undated = InsertableAlbum("Undated", listOf("Artist"), songCount = 2)
+        val album = service.getOrBulkCreate(listOf(undated)).values.single()
+
+        service.syncAlbumSongsWithMusicBrainz(album, cachedRelease("2016-05"))
+
+        assertEquals("2016-05-01" to false, storedReleaseDate(album))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `the earliest song date replaces an estimated date and never a real one`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val undated = InsertableAlbum("Undated", listOf("Artist"), songCount = 2)
+        val dated = InsertableAlbum("Dated", listOf("Artist"), releaseDate = LocalDate.of(2010, 3, 4), songCount = 2)
+        val songless = InsertableAlbum("Songless", listOf("Artist"), songCount = 2)
+        val ids = service.getOrBulkCreate(listOf(undated, dated, songless))
+
+        transaction(database) {
+            for (album in listOf(undated, dated)) {
+                for ((index, songDate) in listOf("2018-03-02", "2017", null, "soon").withIndex()) {
+                    SongTable.insert {
+                        it[title] = "Song $index"
+                        it[albumId] = ids.getValue(album)
+                        it[filePath] = "/music/${album.name}-$index.flac"
+                        it[SongTable.releaseDate] = songDate
+                    }
+                }
+            }
+            service.fillUnknownReleaseDatesFromSongsTx(ids.values)
+        }
+
+        assertEquals("2017-01-01" to false, storedReleaseDate(ids.getValue(undated)))
+        assertEquals("2010-03-04" to false, storedReleaseDate(ids.getValue(dated)))
+        assertTrue(storedReleaseDate(ids.getValue(songless)).second)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `upsertAlbum gives a new album a date and keeps the stored one when none comes in`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val template = Album(
+                id = UUID.randomUUID(),
+                name = "Mirrored",
+                artists = emptyList(),
+                songCount = 2,
+                releaseDate = null,
+                totalDuration = 0
+            )
+
+            service.upsertAlbum(template)
+            val (estimatedDate, estimated) = storedReleaseDate(template.id)
+            assertNotNull(estimatedDate)
+            assertTrue(estimated)
+
+            service.upsertAlbum(template.copy(name = "Renamed", releaseDate = LocalDate.parse(estimatedDate)))
+            assertEquals(estimatedDate to true, storedReleaseDate(template.id))
+
+            service.upsertAlbum(template.copy(releaseDate = LocalDate.of(2010, 3, 4)))
+            assertEquals("2010-03-04" to false, storedReleaseDate(template.id))
+
+            service.upsertAlbum(template)
+            assertEquals("2010-03-04" to false, storedReleaseDate(template.id))
+
+            val linked = template.copy(id = UUID.randomUUID(), name = "Linked", musicBrainzId = cachedRelease("2016-05"))
+            service.upsertAlbum(linked)
+            assertEquals("2016-05-01" to false, storedReleaseDate(linked.id))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an edition with an estimated date does not become the main edition because of that date`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val (group, real, estimated) = transaction(database) {
+                val group = AlbumVersionGroupTable.insertAndGetId { }
+                val artist = ArtistTable.insertAndGetId { it[name] = "Artist" }
+                val ids = listOf("2020-05-05" to false, "2001-01-01" to true).map { (dateText, isEstimated) ->
+                    val album = AlbumTable.insertAndGetId {
+                        it[name] = "Record"
+                        it[songCount] = 2
+                        it[releaseDate] = dateText
+                        it[releaseDateEstimated] = isEstimated
+                        it[versionGroupId] = group
+                    }
+                    AlbumArtistTable.insert {
+                        it[albumId] = album
+                        it[artistId] = artist
+                    }
+                    album.value
+                }
+                Triple(group.value, ids[0], ids[1])
+            }
+
+            assertEquals(listOf(real, estimated), service.byVersionGroup(group, explicit = true).map { it.id })
+            assertEquals(listOf(real), service.versions(estimated).map { it.id })
+            assertEquals(emptyList<UUID>(), service.versions(real).filter { it.id == real }.map { it.id })
+
+            transaction(database) {
+                AlbumTable.update({ AlbumTable.id eq estimated }) { it[releaseDateEstimated] = false }
+            }
+            assertEquals(listOf(estimated, real), service.byVersionGroup(group, explicit = true).map { it.id })
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an artist's newest albums are ordered by known dates and estimated ones come last`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val (artist, albums) = transaction(database) {
+                val artist = ArtistTable.insertAndGetId { it[name] = "Artist" }
+                val albums = listOf(
+                    Triple("Old", "2001-01-01", false),
+                    Triple("Estimated", "2026-01-01", true),
+                    Triple("New", "2020-05-05", false)
+                ).associate { (albumName, dateText, isEstimated) ->
+                    val group = AlbumVersionGroupTable.insertAndGetId { }
+                    val album = AlbumTable.insertAndGetId {
+                        it[name] = albumName
+                        it[songCount] = 2
+                        it[releaseDate] = dateText
+                        it[releaseDateEstimated] = isEstimated
+                        it[versionGroupId] = group
+                    }
+                    AlbumArtistTable.insert {
+                        it[albumId] = album
+                        it[artistId] = artist
+                    }
+                    albumName to album.value
+                }
+                artist.value to albums
+            }
+            val expected = listOf("New", "Old", "Estimated").map { albums.getValue(it) }
+
+            assertEquals(expected, service.byArtist(0, 10, artist, singles = false).data.map { it.id })
+            assertEquals(
+                expected,
+                service.byArtistGrouped(0, 10, artist, singles = false, explicit = true).data.map { it.id }
+            )
+        }
 }

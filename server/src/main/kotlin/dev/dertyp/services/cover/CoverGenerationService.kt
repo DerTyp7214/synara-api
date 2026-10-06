@@ -7,12 +7,14 @@ import dev.dertyp.data.CoverInfo
 import dev.dertyp.data.CoverStyle
 import dev.dertyp.data.CoverTarget
 import dev.dertyp.data.CoverTargetType
+import dev.dertyp.data.EntityType
 import dev.dertyp.data.ImageSource
 import dev.dertyp.db.CollectionTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserPlaylistTable
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.JobStatus
+import dev.dertyp.services.EntityChangeRecorder
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.Service
 import dev.dertyp.services.cover.render.CoverRenderSpec
@@ -41,6 +43,7 @@ class CoverGenerationService(
     private val collector: CoverSourceCollector,
     private val jobService: JobService,
     private val config: CoverConfig,
+    private val entityChangeRecorder: EntityChangeRecorder,
 ) : Service() {
     data class RenderedBytes(val bytes: ByteArray, val style: CoverStyle, val seed: Long)
 
@@ -172,7 +175,7 @@ class CoverGenerationService(
                     it[coverStyle] = params.style
                     it[coverSeed] = params.seed
                 }
-            }
+            }.also { if (it > 0) entityChangeRecorder.updated(entityTypeOf(target), listOf(target.id)) }
         }
         return imageId
     }
@@ -202,7 +205,7 @@ class CoverGenerationService(
                     it[coverStyle] = null
                     it[coverSeed] = null
                 }
-            }
+            }.also { if (it > 0) entityChangeRecorder.updated(entityTypeOf(target), listOf(target.id)) }
         }
         enqueueAuto(target, row.name, row.creator)
         return true
@@ -270,6 +273,11 @@ class CoverGenerationService(
         const val JOB_KIND = "cover"
         private const val TILE_SIZE = 512
         private const val PACK_SALT = 0x5EEDL
+
+        private fun entityTypeOf(target: CoverTarget): EntityType = when (target.type) {
+            CoverTargetType.PLAYLIST -> EntityType.USER_PLAYLIST
+            CoverTargetType.COLLECTION -> EntityType.COLLECTION
+        }
 
         fun originOf(target: CoverTarget): String =
             "${ImageService.GENERATED_ORIGIN_PREFIX}${target.type.name.lowercase()}:${target.id}"

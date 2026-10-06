@@ -9,6 +9,7 @@ import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.testing.entityChangeTables
 import dev.dertyp.testing.relaxedTaskLogService
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
@@ -39,6 +40,7 @@ class ArtistCreditOrderTest : KoinTest {
     private val lowMbId = UUID.randomUUID()
 
     private val allTables = arrayOf(
+        *entityChangeTables,
         ArtistTable, AlbumTable, SongTable, SongVariantTable, SongTitleTagTable, AlbumTitleTagTable, SongArtistTable,
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
@@ -63,6 +65,7 @@ class ArtistCreditOrderTest : KoinTest {
         val logService = relaxedTaskLogService()
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { cachedMusicBrainzService }

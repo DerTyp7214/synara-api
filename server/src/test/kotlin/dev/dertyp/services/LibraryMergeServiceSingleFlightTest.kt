@@ -4,6 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
 import dev.dertyp.plugins.PluginManager
+import dev.dertyp.testing.entityChangeTables
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -42,6 +43,7 @@ class LibraryMergeServiceSingleFlightTest : KoinTest {
 
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { albumService }
                 single { pluginManager }
                 single { LibraryFileDeleter() }
@@ -52,6 +54,7 @@ class LibraryMergeServiceSingleFlightTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_single_flight_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 ArtistTable,
                 AlbumTable,
                 SongTable,

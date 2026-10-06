@@ -28,6 +28,7 @@ class ServerConfig(config: ApplicationConfig) {
     val cover: CoverConfig by lazy { config.toCoverConfig() }
     val metrics: MetricsConfig by lazy { config.toMetricsConfig() }
     val workers: WorkersConfig by lazy { config.toWorkersConfig() }
+    val entityChanges: EntityChangeConfig by lazy { config.toEntityChangeConfig() }
     val proxy: ProxyConfig by lazy { config.toProxyConfig() }
     val credentialServer: CredentialServerConfig by lazy { config.toCredentialServerConfig() }
     val providers: ProvidersConfig = ProvidersConfig(config)
@@ -197,6 +198,12 @@ data class WorkersConfig(val threadMultiplier: Double)
 
 fun ApplicationConfig.toWorkersConfig(): WorkersConfig = WorkersConfig(
     threadMultiplier = propertyOrNull("workers.threadMultiplier")?.getString()?.toDoubleOrNull() ?: 1.0,
+)
+
+data class EntityChangeConfig(val retentionDays: Long = 30)
+
+fun ApplicationConfig.toEntityChangeConfig(): EntityChangeConfig = EntityChangeConfig(
+    retentionDays = propertyOrNull("entityChanges.retentionDays")?.getString()?.toLongOrNull()?.coerceAtLeast(1) ?: 30,
 )
 
 data class ProxyConfig(

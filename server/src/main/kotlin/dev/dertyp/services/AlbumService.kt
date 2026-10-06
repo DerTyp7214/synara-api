@@ -7,6 +7,7 @@ import dev.dertyp.core.db.dbQuery
 import dev.dertyp.data.*
 import dev.dertyp.db.*
 import dev.dertyp.plugins.AlbumLibrary
+import dev.dertyp.plugins.parsePartialDate
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.CachedMusicBrainzService
@@ -95,6 +96,7 @@ class AlbumRpcService(private val user: User, private val albumService: AlbumSer
 }
 
 private const val VERSION_GROUP_UPDATE_CHUNK_SIZE = 1000
+private const val RELEASE_DATE_CHUNK_SIZE = 5000
 
 class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : AlbumLibrary, Service() {
     private val musicBrainzService by inject<MusicBrainzService>()
@@ -105,6 +107,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     private val libraryMergeService by inject<LibraryMergeService>()
     private val linkResolverService by inject<LinkResolverService>()
     private val libraryFileDeleter by inject<LibraryFileDeleter>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
     private val redisSearchService by inject<RedisSearchService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
@@ -117,6 +120,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     private val versionGroupMutex = Mutex()
     private val versionGroupPending = AtomicBoolean(false)
     private val versionGroupKey = Coalesce(AlbumTable.versionGroupId, AlbumTable.id)
+    private val unknownReleaseDate = AlbumTable.releaseDate.isNull() or (AlbumTable.releaseDateEstimated eq true)
+    private val knownReleaseDate = case()
+        .When(AlbumTable.releaseDateEstimated eq false, AlbumTable.releaseDate)
+        .Else(Op.nullOp())
 
     companion object {
         fun mapAlbum(
@@ -293,6 +300,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             } ?: emptyList()
 
             dbQuery {
+                val before = entityStates(EntityType.ALBUM, listOf(id))
+                val artistsBefore = entityStates(EntityType.ARTIST, finalArtists.map { it.artist.id })
                 if (trackCount > 0) {
                     AlbumTable.update({ AlbumTable.id eq id }) { row ->
                         row[songCount] = trackCount
@@ -312,6 +321,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                         this[AlbumArtistTable.joinPhrase] = credit.joinPhrase
                     }
                 }
+                entityChangeRecorder.recordChanges(artistsBefore)
+                entityChangeRecorder.recordChanges(before)
             }
 
             syncSongsWithMusicBrainz(id, mbTracks)
@@ -321,11 +332,13 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             if (genres.isNotEmpty()) {
                 val genreIds = genreService.getOrCreateGenres(genres)
                 dbQuery {
+                    val before = entityStates(EntityType.ALBUM, listOf(id))
                     AlbumGenreTable.deleteWhere { AlbumGenreTable.albumId eq id }
                     AlbumGenreTable.batchInsert(genreIds) { genreId ->
                         this[AlbumGenreTable.albumId] = id
                         this[AlbumGenreTable.genreId] = genreId
                     }
+                    entityChangeRecorder.recordChanges(before)
                 }
             }
         }
@@ -336,11 +349,20 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     suspend fun syncAlbumSongsWithMusicBrainz(albumId: UUID, mbId: UUID) {
         val mbRelease = cachedMusicBrainzService.getRelease(mbId) ?: return
 
+        val mbReleaseDate = parsePartialDate(mbRelease.date)
+        if (mbReleaseDate != null) {
+            dbQuery {
+                fillUnknownReleaseDatesTx(mapOf(albumId to mbReleaseDate))
+            }
+        }
+
         if (mbRelease.barcode != null) {
             dbQuery {
+                val before = entityStates(EntityType.ALBUM, listOf(albumId))
                 AlbumTable.update({ AlbumTable.id eq albumId }) {
                     it[barcode] = mbRelease.barcode?.take(32)
                 }
+                entityChangeRecorder.recordChanges(before)
             }
         }
 
@@ -354,9 +376,11 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
         if (trackCount > 0) {
             dbQuery {
+                val before = entityStates(EntityType.ALBUM, listOf(albumId))
                 AlbumTable.update({ AlbumTable.id eq albumId }) {
                     it[songCount] = trackCount
                 }
+                entityChangeRecorder.recordChanges(before)
             }
         }
 
@@ -397,6 +421,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 val isrc = row[SongTable.isrc]
                 DbSongMatch(songId, smbId, title, fullTitle, duration, isrc)
             }
+        val before = entityStates(EntityType.SONG, dbSongs.map { it.songId })
 
         for ((discNo, trackNo, mbTrack) in mbTracks) {
             val mbRecordingId = mbTrack.recording?.id
@@ -441,6 +466,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 }
             }
         }
+        entityChangeRecorder.recordChanges(before)
     }
 
     suspend fun updateMusicBrainzLastCheck(id: UUID) = dbQuery {
@@ -475,6 +501,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         } else null
 
         dbQuery {
+            val before = entityStates(EntityType.ALBUM, listOf(id))
             AlbumMusicBrainzTable.upsert(AlbumMusicBrainzTable.albumId) {
                 it[albumId] = id
                 it[AlbumMusicBrainzTable.musicBrainzId] = musicBrainzId
@@ -486,6 +513,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     it[barcode] = mbRelease.barcode?.take(32)
                 }
             }
+            entityChangeRecorder.recordChanges(before)
+
+            val mbReleaseDate = parsePartialDate(mbRelease?.date)
+            if (mbReleaseDate != null) fillUnknownReleaseDatesTx(mapOf(id to mbReleaseDate))
         }
 
         if (musicBrainzId != null && triggerMerge) {
@@ -499,6 +530,48 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         }
 
         return byId(id, userId)
+    }
+
+    private fun albumIdsWithUnknownReleaseDate(albumIds: Collection<UUID>): Set<UUID> =
+        albumIds.distinct().chunked(RELEASE_DATE_CHUNK_SIZE).flatMapTo(mutableSetOf()) { chunk ->
+            AlbumTable
+                .select(AlbumTable.id)
+                .where { AlbumTable.id inList chunk }
+                .andWhere { unknownReleaseDate }
+                .map { it[AlbumTable.id].value }
+        }
+
+    fun fillUnknownReleaseDatesTx(releaseDates: Map<UUID, PlatformLocalDate>) {
+        val open = albumIdsWithUnknownReleaseDate(releaseDates.keys)
+        if (open.isEmpty()) return
+
+        val before = entityStates(EntityType.ALBUM, open)
+        for ((date, albumIds) in open.groupBy { releaseDates.getValue(it) }) {
+            albumIds.chunked(RELEASE_DATE_CHUNK_SIZE).forEach { chunk ->
+                AlbumTable.update({ AlbumTable.id inList chunk }) {
+                    it[releaseDate] = getISOFromDate(date)
+                    it[releaseDateEstimated] = false
+                }
+            }
+        }
+        entityChangeRecorder.recordChanges(before)
+    }
+
+    fun fillUnknownReleaseDatesFromSongsTx(albumIds: Collection<UUID>) {
+        val open = albumIdsWithUnknownReleaseDate(albumIds)
+        if (open.isEmpty()) return
+
+        val songDates = open.chunked(RELEASE_DATE_CHUNK_SIZE).flatMap { chunk ->
+            SongTable
+                .select(SongTable.albumId, SongTable.releaseDate)
+                .where { SongTable.albumId inList chunk }
+                .andWhere { SongTable.releaseDate.isNotNull() }
+                .withDistinct()
+                .mapNotNull { row ->
+                    parsePartialDate(row[SongTable.releaseDate])?.let { row[SongTable.albumId].value to it }
+                }
+        }
+        fillUnknownReleaseDatesTx(songDates.groupBy({ it.first }, { it.second }).mapValues { (_, dates) -> dates.min() })
     }
 
     suspend fun byId(id: UUID, userId: UUID? = null): Album? = querySingle(userId = userId) {
@@ -604,18 +677,29 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
         val provider = parser?.name ?: "unknown"
         val externalId = parsed?.first ?: url
+        val type = parsed?.second?.value ?: Type.ALBUM.value
+        val unchanged = AlbumProviderTable
+            .select(AlbumProviderTable.albumId)
+            .where { AlbumProviderTable.albumId eq albumId }
+            .andWhere { AlbumProviderTable.provider eq provider }
+            .andWhere { AlbumProviderTable.externalId eq externalId }
+            .andWhere { AlbumProviderTable.type eq type }
+            .andWhere { AlbumProviderTable.rawUrl eq url }
+            .any()
 
         AlbumProviderTable.upsert(
             AlbumProviderTable.albumId,
             AlbumProviderTable.provider,
-            AlbumProviderTable.externalId
+            AlbumProviderTable.externalId,
+            onUpdateExclude = listOf(AlbumProviderTable.addedAt)
         ) {
             it[AlbumProviderTable.albumId] = albumId
             it[AlbumProviderTable.provider] = provider
             it[AlbumProviderTable.externalId] = externalId
-            it[AlbumProviderTable.type] = parsed?.second?.value ?: Type.ALBUM.value
+            it[AlbumProviderTable.type] = type
             it[AlbumProviderTable.rawUrl] = url
         }
+        if (!unchanged) entityChangeRecorder.updated(EntityType.ALBUM, listOf(albumId))
     }
 
     suspend fun enrichProviders(id: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL) {
@@ -659,6 +743,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         val allUrls = (urls + resolvedLinks).distinct()
 
         dbQuery {
+            val before = entityStates(EntityType.ALBUM, listOf(id))
             allUrls.forEach { url ->
                 val parser = ParserFactory.getParser(url)
                 val parsed = parser?.parse(url)
@@ -668,7 +753,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 AlbumProviderTable.upsert(
                     AlbumProviderTable.albumId,
                     AlbumProviderTable.provider,
-                    AlbumProviderTable.externalId
+                    AlbumProviderTable.externalId,
+                    onUpdateExclude = listOf(AlbumProviderTable.addedAt)
                 ) {
                     it[AlbumProviderTable.albumId] = id
                     it[AlbumProviderTable.provider] = provider
@@ -681,6 +767,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             AlbumTable.update({ AlbumTable.id eq id }) {
                 it[lastProviderEnrichment] = Clock.System.now().toEpochMilliseconds()
             }
+            entityChangeRecorder.recordChanges(before)
         }
     }
 
@@ -895,8 +982,12 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         }
         if (memberIds.size < 2) return emptyList()
 
-        return mainFirst(byIds(memberIds, userId), albumIdsWithExplicitSong(memberIds), explicit = true)
-            .filter { it.id != id }
+        return mainFirst(
+            byIds(memberIds, userId),
+            albumIdsWithExplicitSong(memberIds),
+            dbQuery { albumIdsWithUnknownReleaseDate(memberIds) },
+            explicit = true
+        ).filter { it.id != id }
     }
 
     suspend fun byVersionGroup(versionGroupId: UUID, explicit: Boolean, userId: UUID? = null): List<Album> {
@@ -908,7 +999,12 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         }
         if (memberIds.isEmpty()) return emptyList()
 
-        return mainFirst(byIds(memberIds, userId), albumIdsWithExplicitSong(memberIds), explicit)
+        return mainFirst(
+            byIds(memberIds, userId),
+            albumIdsWithExplicitSong(memberIds),
+            dbQuery { albumIdsWithUnknownReleaseDate(memberIds) },
+            explicit
+        )
     }
 
     suspend fun rebuildVersionGroups(): Int {
@@ -945,6 +1041,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     AlbumTable.titleTags,
                     AlbumTable.cover,
                     AlbumTable.releaseDate,
+                    AlbumTable.releaseDateEstimated,
                     AlbumTable.versionGroupId,
                     MBReleaseTable.releaseGroupId
                 )
@@ -958,18 +1055,27 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                         artistIds = artistIds[albumId].orEmpty().toSet(),
                         coverId = row[AlbumTable.cover]?.value,
                         releaseGroupId = row.getOrNull(MBReleaseTable.releaseGroupId)?.value,
-                        releaseDate = getDateFromISO(row[AlbumTable.releaseDate]),
+                        releaseDate = getDateFromISO(row[AlbumTable.releaseDate])
+                            .takeUnless { row[AlbumTable.releaseDateEstimated] },
                         explicit = false
                     )
                 }
         }
 
         val assignment = AlbumVersionGroups.assign(AlbumVersionGroups.groups(editions), current)
+        val membersBefore = current.entries.groupBy({ it.value }, { it.key })
+        fun editionsOfGroups(groupIds: Collection<UUID?>) =
+            groupIds.filterNotNull().distinct().flatMap { membersBefore[it].orEmpty() }
 
         assignment.created.chunked(VERSION_GROUP_UPDATE_CHUNK_SIZE).forEach { chunk ->
             dbQuery {
                 val groupIds = AlbumVersionGroupTable.batchInsert(chunk) { }.map { it[AlbumVersionGroupTable.id] }
                 chunk.zip(groupIds).forEach { (albumIds, groupId) -> moveToVersionGroup(albumIds, groupId) }
+                val albumIds = chunk.flatten()
+                entityChangeRecorder.updated(
+                    EntityType.ALBUM,
+                    albumIds + editionsOfGroups(albumIds.map { current[it] })
+                )
             }
         }
 
@@ -978,6 +1084,11 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 for ((groupId, albumIds) in chunk) {
                     moveToVersionGroup(albumIds, EntityID(groupId, AlbumVersionGroupTable))
                 }
+                val albumIds = chunk.flatMap { it.value }
+                entityChangeRecorder.updated(
+                    EntityType.ALBUM,
+                    albumIds + editionsOfGroups(chunk.map { it.key } + albumIds.map { current[it] })
+                )
             }
         }
 
@@ -1013,7 +1124,12 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             .mapTo(mutableSetOf()) { it[SongTable.albumId].value }
     }
 
-    private fun mainFirst(albums: List<Album>, explicitAlbumIds: Set<UUID>, explicit: Boolean): List<Album> {
+    private fun mainFirst(
+        albums: List<Album>,
+        explicitAlbumIds: Set<UUID>,
+        unknownDateAlbumIds: Set<UUID>,
+        explicit: Boolean
+    ): List<Album> {
         val albumsById = albums.associateBy { it.id }
         val editions = albums.map { album ->
             AlbumVersionGroups.Edition(
@@ -1023,7 +1139,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 artistIds = album.artists.mapTo(mutableSetOf()) { it.id },
                 coverId = album.coverId,
                 releaseGroupId = null,
-                releaseDate = album.releaseDate,
+                releaseDate = album.releaseDate.takeUnless { album.id in unknownDateAlbumIds },
                 explicit = album.id in explicitAlbumIds
             )
         }
@@ -1039,7 +1155,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         filter: Query.() -> Query
     ): PaginatedResponse<Album> {
         val groupCount = Count(versionGroupKey, distinct = true)
-        val newestReleaseDate = AlbumTable.releaseDate.max()
+        val newestReleaseDate = Max(knownReleaseDate, AlbumTable.releaseDate.columnType)
         val paged = pageSize != Int.MAX_VALUE
 
         val (total, groupMemberIds) = dbQuery {
@@ -1065,9 +1181,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         val memberIds = groupMemberIds.flatten()
         val albumsById = if (memberIds.isEmpty()) emptyMap() else byIds(memberIds, userId).associateBy { it.id }
         val explicitAlbumIds = if (memberIds.isEmpty()) emptySet() else albumIdsWithExplicitSong(memberIds)
+        val unknownDateAlbumIds = dbQuery { albumIdsWithUnknownReleaseDate(memberIds) }
 
         val data = groupMemberIds.mapNotNull { ids ->
-            val ordered = mainFirst(ids.mapNotNull { albumsById[it] }, explicitAlbumIds, explicit)
+            val ordered = mainFirst(ids.mapNotNull { albumsById[it] }, explicitAlbumIds, unknownDateAlbumIds, explicit)
             ordered.firstOrNull()?.copy(versions = ordered.drop(1))
         }
 
@@ -1105,7 +1222,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             if (!singles) where { AlbumTable.songCount greater 1 }
             else where { AlbumTable.songCount eq 1 }
             andWhere { AlbumTable.id inList albumIds }
-            orderBy(AlbumTable.releaseDate, SortOrder.DESC_NULLS_LAST)
+            orderBy(knownReleaseDate, SortOrder.DESC_NULLS_LAST)
         }
 
     suspend fun byArtistGrouped(
@@ -1500,7 +1617,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         return byIds(result.albumToIds.values.toList()).associateBy { it.id }
     }
 
-    suspend fun getOrBulkCreateWithResult(inputAlbums: List<InsertableAlbum>): BulkCreateAlbumResult {
+    suspend fun getOrBulkCreateWithResult(
+        inputAlbums: List<InsertableAlbum>,
+        songReleaseDates: Map<InsertableAlbum, PlatformLocalDate> = emptyMap()
+    ): BulkCreateAlbumResult {
         if (inputAlbums.isEmpty()) return BulkCreateAlbumResult(emptyMap(), emptySet())
 
         val albums = inputAlbums.map { it.withSplitTitleTags() }
@@ -1519,7 +1639,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         val uniqueAlbumMetadata = albumsByIdentity.values.toList()
         val uniqueAlbumNames = uniqueAlbumMetadata.map { it.name }
         val uniqueSongCounts = uniqueAlbumMetadata.map { it.songCount }
-        val uniqueReleaseDates = uniqueAlbumMetadata.map { getISOFromDate(it.releaseDate) }
+        val uniqueReleaseDates = uniqueAlbumMetadata.mapNotNull { getISOFromDate(it.releaseDate) }
+        val anyUndatedInput = uniqueAlbumMetadata.any { it.releaseDate == null }
         val uniqueOriginalIds = uniqueAlbumMetadata.map { it.originalId }
         val uniqueBarcodes = uniqueAlbumMetadata.flatMap { Barcodes.variants(it.barcode) }.distinct()
         val uniqueMbIds = uniqueAlbumMetadata.mapNotNull { it.musicBrainzId }.distinct()
@@ -1546,7 +1667,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
         val potentialAlbumRows = queryAlbums(0, Int.MAX_VALUE) {
             where { AlbumTable.name inList uniqueAlbumNames }
-            andWhere { AlbumTable.releaseDate inList uniqueReleaseDates }
+            if (!anyUndatedInput) andWhere { (AlbumTable.releaseDate inList uniqueReleaseDates) or unknownReleaseDate }
             andWhere { AlbumTable.songCount inList uniqueSongCounts }
             orWhere { AlbumTable.originalId inList uniqueOriginalIds.filterNotNull() }
             orWhere { if (uniqueBarcodes.isNotEmpty()) AlbumTable.barcode inList uniqueBarcodes else Op.FALSE }
@@ -1562,6 +1683,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         }.data
 
         val potentialAlbumIds = potentialAlbumRows.map { it.id }.toSet()
+        val unknownDateAlbumIds = dbQuery { albumIdsWithUnknownReleaseDate(potentialAlbumIds) }
 
         val albumArtistLinks = dbQuery {
             AlbumArtistTable
@@ -1600,6 +1722,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
         val finalMatchMap = mutableMapOf<Any, UUID>()
         val barcodesToFill = mutableMapOf<UUID, String>()
+        val releaseDatesToFill = mutableMapOf<UUID, PlatformLocalDate>()
 
         for (row in potentialAlbumRows) {
             val albumId = row.id
@@ -1647,7 +1770,38 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     if (inputBarcode != null && Barcodes.normalize(row.barcode) == null && Barcodes.normalize(inputBarcode) != null) {
                         barcodesToFill[albumId] = inputBarcode
                     }
+
+                    val inputReleaseDate = inputAlbum.releaseDate
+                    if (inputReleaseDate != null && albumId in unknownDateAlbumIds) {
+                        releaseDatesToFill.putIfAbsent(albumId, inputReleaseDate)
+                    }
                 }
+            }
+        }
+
+        for (row in potentialAlbumRows) {
+            if (row.originalId != null) continue
+            val albumId = row.id
+            val albumArtists = artistsByPotentialAlbumId[albumId] ?: emptySet()
+
+            for (inputAlbum in uniqueAlbumMetadata) {
+                if (inputAlbum.originalId != null) continue
+                val inputReleaseDate = inputAlbum.releaseDate
+                if (inputReleaseDate != null && (albumId !in unknownDateAlbumIds || albumId in releaseDatesToFill)) continue
+                if (inputAlbum.name != row.name || inputAlbum.tags != row.tags || inputAlbum.songCount != row.songCount) continue
+                if (albumArtists != inputAlbum.artists.flatMap { artistIdMap[it] ?: emptyList() }.toSet()) continue
+
+                val key = getIdentityKey(null, inputAlbum.name, inputAlbum.tags, inputAlbum.artists, inputReleaseDate)
+                if (finalMatchMap.containsKey(key)) continue
+
+                finalMatchMap[key] = albumId
+                if (inputReleaseDate != null) releaseDatesToFill[albumId] = inputReleaseDate
+            }
+        }
+
+        if (releaseDatesToFill.isNotEmpty()) {
+            dbQuery {
+                fillUnknownReleaseDatesTx(releaseDatesToFill)
             }
         }
 
@@ -1658,6 +1812,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                         it[barcode] = inputBarcode
                     }
                 }
+                entityChangeRecorder.updated(EntityType.ALBUM, barcodesToFill.keys)
             }
         }
 
@@ -1695,21 +1850,54 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             !finalMatchMap.containsKey(key)
         }
 
+        val songReleaseDatesByIdentity = inputAlbums.zip(albums)
+            .mapNotNull { (inputAlbum, album) ->
+                songReleaseDates[inputAlbum]?.let { songDate ->
+                    getIdentityKey(album.originalId, album.name, album.tags, album.artists, album.releaseDate) to songDate
+                }
+            }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, dates) -> dates.min() }
+
         val newRows = if (newAlbumsToInsert.isNotEmpty()) {
             dbQuery {
+                val cachedReleaseDates = newAlbumsToInsert
+                    .mapNotNull { it.musicBrainzId }
+                    .distinct()
+                    .chunked(RELEASE_DATE_CHUNK_SIZE)
+                    .flatMap { chunk ->
+                        MBReleaseTable
+                            .select(MBReleaseTable.id, MBReleaseTable.date)
+                            .where { MBReleaseTable.id inList chunk }
+                            .mapNotNull { row ->
+                                parsePartialDate(row[MBReleaseTable.date])?.let { row[MBReleaseTable.id].value to it }
+                            }
+                    }
+                    .toMap()
+                val knownReleaseDates = newAlbumsToInsert.map { album ->
+                    album.releaseDate
+                        ?: album.musicBrainzId?.let { cachedReleaseDates[it] }
+                        ?: songReleaseDatesByIdentity[
+                            getIdentityKey(album.originalId, album.name, album.tags, album.artists, album.releaseDate)
+                        ]
+                }
+                val addedOn = PlatformLocalDate.now()
                 val groupIds = AlbumVersionGroupTable
                     .batchInsert(newAlbumsToInsert) { }
                     .map { it[AlbumVersionGroupTable.id] }
-                AlbumTable.batchInsert(newAlbumsToInsert.zip(groupIds)) { (album, groupId) ->
-                    this[AlbumTable.versionGroupId] = groupId
+                AlbumTable.batchInsert(newAlbumsToInsert.indices.toList()) { index ->
+                    val album = newAlbumsToInsert[index]
+                    val knownReleaseDate = knownReleaseDates[index]
+                    this[AlbumTable.versionGroupId] = groupIds[index]
                     this[AlbumTable.name] = album.name
                     this[AlbumTable.titleTags] = encodeTitleTags(album.tags)
-                    this[AlbumTable.releaseDate] = getISOFromDate(album.releaseDate)
+                    this[AlbumTable.releaseDate] = getISOFromDate(knownReleaseDate ?: addedOn)
+                    this[AlbumTable.releaseDateEstimated] = knownReleaseDate == null
                     this[AlbumTable.songCount] = album.songCount
                     this[AlbumTable.cover] = imageMap[album.coverHash]
                     this[AlbumTable.originalId] = album.originalId
                     this[AlbumTable.barcode] = album.barcode
-                }
+                }.also { rows -> entityChangeRecorder.created(EntityType.ALBUM, rows.map { it[AlbumTable.id].value }) }
             }
         } else {
             emptyList()
@@ -1720,26 +1908,15 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 .map { it[AlbumTable.id].value to it.albumTitleTags() }
                 .filter { it.second.isNotEmpty() }
             if (taggedRows.isNotEmpty()) {
-                dbQuery { syncAlbumTitleTags(taggedRows) }
+                dbQuery {
+                    syncAlbumTitleTags(taggedRows)
+                    entityChangeRecorder.updated(EntityType.ALBUM, taggedRows.map { it.first })
+                }
             }
 
-            val mbEntries = newRows.mapNotNull { row ->
-                val albumId = row[AlbumTable.id].value
-                val originalId = row[AlbumTable.originalId]
-                val name = row[AlbumTable.name]
-                val tags = row.albumTitleTags()
-                val releaseDate = row[AlbumTable.releaseDate]
-
-                val matchedAlbum = newAlbumsToInsert.first {
-                    if (it.originalId != null && originalId != null) {
-                        it.originalId == originalId
-                    } else if (it.originalId == null && originalId == null) {
-                        it.name == name && it.tags == tags && getISOFromDate(it.releaseDate) == releaseDate
-                    } else false
-                }
-
-                matchedAlbum.musicBrainzId?.let { mbId ->
-                    albumId to mbId
+            val mbEntries = newAlbumsToInsert.zip(newRows).mapNotNull { (album, row) ->
+                album.musicBrainzId?.let { mbId ->
+                    row[AlbumTable.id].value to mbId
                 }
             }
 
@@ -1777,30 +1954,18 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                         this[AlbumProviderTable.type] = meta.third.second
                         this[AlbumProviderTable.rawUrl] = originalId
                     }
+                    entityChangeRecorder.updated(EntityType.ALBUM, providerEntries.map { it.first.first })
                 }
             }
         }
 
-        val newAlbumIdLookupMap = newRows.associate { row ->
-            val rowOriginalId = row[AlbumTable.originalId]
-            val rowName = row[AlbumTable.name]
-            val rowTags = row.albumTitleTags()
-            val rowReleaseDate = row[AlbumTable.releaseDate]
-
-            val matchedAlbum = newAlbumsToInsert.first {
-                if (it.originalId != null && rowOriginalId != null) {
-                    it.originalId == rowOriginalId
-                } else if (it.originalId == null && rowOriginalId == null) {
-                    it.name == rowName && it.tags == rowTags && getISOFromDate(it.releaseDate) == rowReleaseDate
-                } else false
-            }
-
+        val newAlbumIdLookupMap = newAlbumsToInsert.zip(newRows).associate { (album, row) ->
             getIdentityKey(
-                rowOriginalId,
-                rowName,
-                rowTags,
-                matchedAlbum.artists,
-                matchedAlbum.releaseDate
+                album.originalId,
+                album.name,
+                album.tags,
+                album.artists,
+                album.releaseDate
             ) to row[AlbumTable.id].value
         }
 
@@ -1824,6 +1989,22 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     this[AlbumArtistTable.position] = index
                 }
                 applyCachedAlbumCreditOrder(newAlbumArtistLinks.map { it.first })
+                entityChangeRecorder.updated(
+                    EntityType.ALBUM,
+                    newAlbumArtistLinks.map { it.first },
+                    containersChanged = true
+                )
+            }
+        }
+
+        val matchedSongReleaseDates = finalMatchMap.entries
+            .filter { it.value in unknownDateAlbumIds }
+            .mapNotNull { (key, albumId) -> songReleaseDatesByIdentity[key]?.let { albumId to it } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, dates) -> dates.min() }
+        if (matchedSongReleaseDates.isNotEmpty()) {
+            dbQuery {
+                fillUnknownReleaseDatesTx(matchedSongReleaseDates)
             }
         }
 
@@ -1846,8 +2027,11 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         return BulkCreateAlbumResult(resultMap, newlyCreated)
     }
 
-    suspend fun getOrBulkCreate(albums: List<InsertableAlbum>): Map<InsertableAlbum, UUID> =
-        getOrBulkCreateWithResult(albums).albumToIds
+    suspend fun getOrBulkCreate(
+        albums: List<InsertableAlbum>,
+        songReleaseDates: Map<InsertableAlbum, PlatformLocalDate> = emptyMap()
+    ): Map<InsertableAlbum, UUID> =
+        getOrBulkCreateWithResult(albums, songReleaseDates).albumToIds
 
     suspend fun deleteEmptyAlbums(onProgress: suspend (Double, String) -> Unit = { _, _ -> }): Int {
         val deleted = dbQuery {
@@ -1863,6 +2047,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 .map { it[AlbumTable.id].value }
 
             onProgress(0.0, "Found ${emptyAlbums.size} empty albums")
+
+            entityChangeRecorder.deleting(EntityType.ALBUM, emptyAlbums)
 
             val chunks = emptyAlbums.chunked(5000)
             chunks.forEachIndexed { index, batch ->
@@ -1899,22 +2085,48 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         }
 
         dbQuery {
-            val newGroupId = if (AlbumTable.select(AlbumTable.id).where { AlbumTable.id eq album.id }.empty()) {
-                AlbumVersionGroupTable.insertAndGetId { }
+            val before = entityStates(EntityType.ALBUM, listOf(album.id))
+            val artistsBefore = entityStates(EntityType.ARTIST, album.artists.map { it.id })
+            val stored = AlbumTable
+                .select(AlbumTable.releaseDate, AlbumTable.releaseDateEstimated)
+                .where { AlbumTable.id eq album.id }
+                .singleOrNull()
+            val newGroupId = if (stored == null) AlbumVersionGroupTable.insertAndGetId { } else null
+
+            val incomingReleaseDate = getISOFromDate(album.releaseDate)
+            val storedReleaseDate = stored?.get(AlbumTable.releaseDate)
+            val cachedReleaseDate = if (incomingReleaseDate == null && storedReleaseDate == null) {
+                album.musicBrainzId
+                    ?.let { mbId ->
+                        MBReleaseTable
+                            .select(MBReleaseTable.date)
+                            .where { MBReleaseTable.id eq mbId }
+                            .singleOrNull()
+                            ?.get(MBReleaseTable.date)
+                    }
+                    ?.let { getISOFromDate(parsePartialDate(it)) }
             } else null
+            val knownReleaseDate = incomingReleaseDate ?: storedReleaseDate ?: cachedReleaseDate
+            val releaseDateIsEstimated = when {
+                knownReleaseDate == null -> true
+                stored == null -> false
+                else -> stored[AlbumTable.releaseDateEstimated] && knownReleaseDate == storedReleaseDate
+            }
 
             AlbumTable.upsert(AlbumTable.id) {
                 if (newGroupId != null) it[versionGroupId] = newGroupId
                 it[id] = album.id
                 it[name] = album.name
                 it[titleTags] = encodeTitleTags(album.tags)
-                it[releaseDate] = getISOFromDate(album.releaseDate)
+                it[releaseDate] = knownReleaseDate ?: getISOFromDate(PlatformLocalDate.now())
+                it[releaseDateEstimated] = releaseDateIsEstimated
                 it[songCount] = album.songCount
                 it[cover] = album.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
                 it[originalId] = album.originalId
                 it[barcode] = album.barcode
             }
             syncAlbumTitleTags(album.id, album.tags)
+            if (releaseDateIsEstimated) fillUnknownReleaseDatesFromSongsTx(listOf(album.id))
 
             if (album.originalId != null) {
                 val originalId = album.originalId!!
@@ -1927,7 +2139,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 AlbumProviderTable.upsert(
                     AlbumProviderTable.albumId,
                     AlbumProviderTable.provider,
-                    AlbumProviderTable.externalId
+                    AlbumProviderTable.externalId,
+                    onUpdateExclude = listOf(AlbumProviderTable.addedAt)
                 ) {
                     it[AlbumProviderTable.albumId] = album.id
                     it[AlbumProviderTable.provider] = provider
@@ -1965,6 +2178,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 this[AlbumArtistTable.position] = index
                 this[AlbumArtistTable.joinPhrase] = artist.joinPhrase
             }
+            entityChangeRecorder.recordChanges(artistsBefore)
+            entityChangeRecorder.recordChanges(before)
         }
 
         if (triggerSync && album.musicBrainzId != null && album.musicBrainzId != currentMbId) {

@@ -1,0 +1,289 @@
+# Every write statement on a table whose rows clients read through the entity change API (EntityChangeCoverageTest).
+# file | enclosing function | table | statement | number of such statements in the function | verdict
+# Verdicts: RECORDED (the change reaches EntityChangeRecorder in the same transaction), MIGRATION (a migration that ran
+# before tracking began or that restarts tracking), BOOKKEEPING: <the columns written and why no client reads them>.
+# Entries are sorted.
+server/src/main/kotlin/dev/dertyp/db/AlbumTitleTagTable.kt | syncAlbumTitleTags | AlbumTitleTagTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/db/AlbumTitleTagTable.kt | syncAlbumTitleTags | AlbumTitleTagTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/db/SongTitleTagTable.kt | syncSongTitleTags | SongTitleTagTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/db/SongTitleTagTable.kt | syncSongTitleTags | SongTitleTagTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/migrations/custom/BackfillAlbumTitleTags.kt | migrate | AlbumTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/BackfillSongAudioInfo.kt | migrate | SongTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/BackfillSongAudioInfo.kt | migrate | SongVariantTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/BackfillSongFormat.kt | migrate | SongTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/BackfillSongTitleTags.kt | splitSongTitleTags | SongTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/FetchMissingRecordingIsrcs.kt | migrate | SongTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/FillAlbumBarcodes.kt | writeBarcodes | AlbumTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/FillAlbumReleaseDates.kt | migrate | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/migrations/custom/FillIsrcAndBarcode.kt | migrate | AlbumTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/FillIsrcAndBarcode.kt | migrate | SongTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/FulfillUnknownProviders.kt | processAlbums | AlbumProviderTable | deleteWhere | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/FulfillUnknownProviders.kt | processAlbums | AlbumProviderTable | upsert | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/FulfillUnknownProviders.kt | processSongs | SongProviderTable | deleteWhere | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/FulfillUnknownProviders.kt | processSongs | SongProviderTable | upsert | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/ImportAlbumAnimatedCovers.kt | migrate | AlbumTable | update | 2 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/ImportAlbumAnimatedCovers.kt | migrate | SongTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/NormalizeVariantBitRate.kt | migrate | SongVariantTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/PopulateAlbumProviderTable.kt | migrate | AlbumProviderTable | upsert | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/PopulateCreditedArtistNames.kt | migrate | AlbumArtistTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/PopulateCreditedArtistNames.kt | migrate | SongArtistTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/PopulateSongProviderTable.kt | migrate | SongProviderTable | upsert | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/PrefixLegacyTidalIds.kt | migrate | AlbumTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/ResetAppleArtistLinks.kt | migrate | ArtistProviderTable | deleteWhere | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/UpdateAlbumSongCounts.kt | migrate | AlbumTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | addProviderUrl | AlbumProviderTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | deleteEmptyAlbums | AlbumArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | deleteEmptyAlbums | AlbumTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | enrichProviders | AlbumProviderTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | enrichProviders | AlbumTable | update | 1 | BOOKKEEPING: lastProviderEnrichment only
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | fetchMusicBrainzId | AlbumArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | fetchMusicBrainzId | AlbumArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | fetchMusicBrainzId | AlbumGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | fetchMusicBrainzId | AlbumGenreTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | fetchMusicBrainzId | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | fillUnknownReleaseDatesTx | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | getOrBulkCreateWithResult | AlbumArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | getOrBulkCreateWithResult | AlbumProviderTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | getOrBulkCreateWithResult | AlbumTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | getOrBulkCreateWithResult | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | getOrBulkCreateWithResult | AlbumVersionGroupTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | moveToVersionGroup | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | rebuildVersionGroupsPass | AlbumVersionGroupTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | rebuildVersionGroupsPass | AlbumVersionGroupTable | deleteWhere | 1 | BOOKKEEPING: deletes groups no album points to, no album row changes
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | setMusicBrainzId | AlbumMusicBrainzTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | setMusicBrainzId | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | syncAlbumSongsWithMusicBrainz | AlbumTable | update | 2 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | syncSongsWithMusicBrainz | SongMusicBrainzTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | syncSongsWithMusicBrainz | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | updateMusicBrainzLastCheck | AlbumMusicBrainzTable | upsert | 1 | BOOKKEEPING: AlbumMusicBrainzTable.lastCheck only (insert leaves musicBrainzId null)
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | upsertAlbum | AlbumArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | upsertAlbum | AlbumArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | upsertAlbum | AlbumMusicBrainzTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | upsertAlbum | AlbumProviderTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | upsertAlbum | AlbumTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | upsertAlbum | AlbumVersionGroupTable | insertAndGetId | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AnimatedImageService.kt | createBatch | AnimatedImageTable | batchInsert | 1 | BOOKKEEPING: new animated image rows nothing points to yet
+server/src/main/kotlin/dev/dertyp/services/AnimatedImageService.kt | deleteUnreferencedAnimatedImages | AnimatedImageTable | deleteWhere | 1 | BOOKKEEPING: only animated images no row references
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | addAlias | ArtistAliasTable | insert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | createArtist | ArtistMusicBrainzTable | insert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | createArtist | ArtistTable | insertAndGetId | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | deleteUnreferencedArtists | ArtistAliasTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | deleteUnreferencedArtists | ArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | fetchMusicBrainzId | ArtistGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | fetchMusicBrainzId | ArtistGenreTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | getOrBulkCreateWithResult | ArtistAliasTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | getOrBulkCreateWithResult | ArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | getOrCreateAliasTx | ArtistAliasTable | insertAndGetId | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | AlbumArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | AlbumArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | ArtistAliasTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | ArtistAliasTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | ArtistGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | ArtistGenreTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | ArtistMemberTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | ArtistMemberTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | ArtistMusicBrainzTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | ArtistMusicBrainzTable | insert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | ArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | ArtistTable | insertAndGetId | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | CollectionArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | CollectionArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | FollowedArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | FollowedArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | SongArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | mergeArtists | SongArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | removeAlias | ArtistAliasTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | setArtistImageByUrl | ArtistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | setGroup | ArtistMemberTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | setGroup | ArtistMemberTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | setGroup | ArtistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | setMusicBrainzId | ArtistMusicBrainzTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | setMusicBrainzId | ArtistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | splitArtist | AlbumArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | splitArtist | AlbumArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | splitArtist | ArtistAliasTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | splitArtist | ArtistSplitAliasTable | insertIgnore | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | splitArtist | ArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | splitArtist | SongArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | splitArtist | SongArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | updateMusicBrainzLastCheck | ArtistMusicBrainzTable | upsert | 1 | BOOKKEEPING: ArtistMusicBrainzTable.lastCheck only
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | upsertArtist | ArtistMemberTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | upsertArtist | ArtistMusicBrainzTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | upsertArtist | ArtistTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | upsertArtistAlias | ArtistAliasTable | insert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ArtistService.kt | upsertArtistSplitAlias | ArtistSplitAliasTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AudioAnalysisService.kt | refreshEnvelopes | SongAudioTimelineTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AudioAnalysisService.kt | saveAudioData | SongAudioDataTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AudioAnalysisService.kt | saveCredits | PersonTable | insertIgnore | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AudioAnalysisService.kt | saveTimeline | SongAudioTimelineTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/AudioStartAnalysisService.kt | analyze | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | createCollection | CollectionTable | insertAndGetId | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | delete | CollectionTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | insertItem | CollectionAlbumTable | insertIgnore | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | insertItem | CollectionArtistTable | insertIgnore | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | insertItem | CollectionPlaylistTable | insertIgnore | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | insertItem | CollectionSongTable | insertIgnore | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | removeItem | CollectionAlbumTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | removeItem | CollectionArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | removeItem | CollectionPlaylistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | removeItem | CollectionSongTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | setCollectionImage | CollectionTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/CollectionService.kt | updateCollection | CollectionTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/DatabaseManager.kt | init | UserTable | insertIgnore | 1 | BOOKKEEPING: creates the initial admin account (username, passwordHash, isAdmin), no entity type covers users and playlists and collections expose only the creator id
+server/src/main/kotlin/dev/dertyp/services/GenreService.kt | getOrCreateGenres | GenreTable | batchInsert | 1 | BOOKKEEPING: new genre rows, no entity links
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | analyzeImage | ImageTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | createBatch | ImageTable | batchInsert | 1 | BOOKKEEPING: new image rows nothing points to yet
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | deleteImagesByIds | ImageTable | deleteWhere | 1 | BOOKKEEPING: only called for images no row references, so no cover is set to null
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | markAnalysisAttempt | ImageTable | update | 1 | BOOKKEEPING: lastAnalysisAttempt / analysisUnrecoverable only
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | moveImages | ImageTable | update | 1 | BOOKKEEPING: ImageTable.path only, not exposed
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | ArtistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | CollectionTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | PlaylistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | UserPlaylistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | upsertImage | ImageTable | upsert | 1 | BOOKKEEPING: image row (path, hash, origin), no song, album or artist field changes
+server/src/main/kotlin/dev/dertyp/services/LibraryFileDeleter.kt | deleteSongRows | AlbumTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryFileDeleter.kt | deleteSongRows | SongTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | adoptKnownReleaseDate | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeAlbumReferences | AlbumArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeAlbumReferences | AlbumArtistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeAlbumReferences | AlbumMusicBrainzTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeAlbumReferences | AlbumMusicBrainzTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeAlbumReferences | AlbumProviderTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeAlbumReferences | AlbumProviderTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeAlbumReferences | CollectionAlbumTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeAlbumReferences | CollectionAlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeAlbumReferences | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeDuplicateAlbumsPass | AlbumTable | deleteWhere | 3 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeDuplicateImages | ImageTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSameAlbumSongs | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | CollectionSongTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | CollectionSongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | PlaylistSongTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | PlaylistSongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | SongArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | SongArtistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | SongMusicBrainzTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | SongMusicBrainzTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | SongProviderTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | SongProviderTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | SongVariantTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | SongVariantTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | UserPlaylistSongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | UserSongTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | UserSongTable | update | 2 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | performSongMerge | SongTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | performSongMerge | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumMusicBrainzTable | insert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumTable | insert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumTable | update | 3 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumVersionGroupTable | insertAndGetId | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | SongTable | update | 2 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/LyricsService.kt | transcribeLyrics | SyncedLyricsTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchAlbumGenresWithMbId | AlbumGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchAlbumGenresWithMbId | AlbumGenreTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchAlbumImages | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchAlbumMetadataInternal | AlbumGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchAlbumMetadataInternal | AlbumGenreTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchAlbumMetadataInternal | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchAllArtistImages | ArtistTable | update | 1 | BOOKKEEPING: lastImageCheck only
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchArtistGenresWithMbId | ArtistGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchArtistGenresWithMbId | ArtistGenreTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchArtistImages | ArtistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchArtistMetadataInternal | ArtistGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchArtistMetadataInternal | ArtistGenreTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchArtistMetadataInternal | ArtistTable | update | 2 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchSongGenresWithMbId | SongGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchSongGenresWithMbId | SongGenreTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchSongMetadataInternal | SongGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchSongMetadataInternal | SongGenreTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | refreshArtistMetadata | ArtistGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | refreshArtistMetadata | ArtistGenreTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | refreshArtistMetadata | ArtistTable | update | 2 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | updateLastCheck | ArtistTable | update | 1 | BOOKKEEPING: lastMetadataCheck / lastImageCheck only
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | updateLastMetadataCheckAlbum | AlbumTable | update | 1 | BOOKKEEPING: lastMetadataCheck / lastImageCheck only
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | updateLastMetadataCheckArtist | ArtistTable | update | 1 | BOOKKEEPING: lastMetadataCheck / lastImageCheck only
+server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | updateLastMetadataCheckSong | SongTable | update | 1 | BOOKKEEPING: lastMetadataCheck / lastImageCheck only
+server/src/main/kotlin/dev/dertyp/services/PlaylistService.kt | addToPlaylist | PlaylistSongTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/PlaylistService.kt | createBatch | PlaylistSongTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/PlaylistService.kt | createBatch | PlaylistSongTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/PlaylistService.kt | createBatch | PlaylistTable | batchUpsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/PlaylistService.kt | createBatch | PlaylistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/PlaylistService.kt | delete | PlaylistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/PlaylistService.kt | getOrAddPlaylist | PlaylistTable | insertAndGetId | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/PlaylistService.kt | upsertPlaylist | PlaylistSongTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/PlaylistService.kt | upsertPlaylist | PlaylistSongTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/PlaylistService.kt | upsertPlaylist | PlaylistTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ReleaseService.kt | followArtist | FollowedArtistTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ReleaseService.kt | processArtistsBatch | ArtistMusicBrainzTable | update | 1 | BOOKKEEPING: ArtistMusicBrainzTable.lastReleaseCheck only
+server/src/main/kotlin/dev/dertyp/services/ReleaseService.kt | processArtistsBatch | FollowedArtistTable | update | 1 | BOOKKEEPING: FollowedArtistTable.lastCheck only, no client model exposes it
+server/src/main/kotlin/dev/dertyp/services/ReleaseService.kt | unfollowArtist | FollowedArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/ReleaseService.kt | unfollowArtistByMusicBrainzId | FollowedArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | createBatch | AlbumTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | createBatch | SongArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | createBatch | SongAudioDataTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | createBatch | SongMusicBrainzTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | createBatch | SongTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | createBatch | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | enrichProviders | SongProviderTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | enrichProviders | SongTable | update | 1 | BOOKKEEPING: lastProviderEnrichment only
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | fetchMusicBrainzId | SongArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | fetchMusicBrainzId | SongArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | fetchMusicBrainzId | SongGenreTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | fetchMusicBrainzId | SongGenreTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | insertVariants | SongVariantTable | insertIgnore | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | moveSongs | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | setArtists | SongArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | setArtists | SongArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | setLikeLevelReturning | UserSongTable | insertIgnore | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | setLikeLevelReturning | UserSongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | setLikedReturning | UserSongTable | insertIgnore | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | setLikedReturning | UserSongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | setLyrics | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | setMusicBrainzId | SongMusicBrainzTable | insert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | setMusicBrainzId | SongMusicBrainzTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | setMusicBrainzId | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | updateSong | SongArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | updateSong | SongArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | updateSong | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | upsertSong | SongArtistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | upsertSong | SongArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | upsertSong | SongMusicBrainzTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | upsertSong | SongTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | writeProviderUrl | SongProviderTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/TimecodeTagService.kt | clearTags | TimecodeTagTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/TimecodeTagService.kt | insertTag | TimecodeTagTable | insertAndGetId | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/TimecodeTagService.kt | removeTag | TimecodeTagTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/TimecodeTagService.kt | replaceTags | TimecodeTagTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/TimecodeTagService.kt | writeTag | TimecodeTagTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | addToPlaylist | UserPlaylistSongTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | delete | UserPlaylistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | getOrAddPlaylist | UserPlaylistTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | removeFromPlaylist | UserPlaylistSongTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | setPlaylistImage | UserPlaylistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | upsertUserPlaylistRows | UserPlaylistSongTable | batchInsert | 2 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | upsertUserPlaylistRows | UserPlaylistSongTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | upsertUserPlaylistRows | UserPlaylistTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserService.kt | createUser | UserTable | batchInsert | 1 | BOOKKEEPING: new account (username, passwordHash, isAdmin), no entity type covers users and a new user owns nothing yet
+server/src/main/kotlin/dev/dertyp/services/UserService.kt | setPasswordHash | UserTable | update | 1 | BOOKKEEPING: UserTable.passwordHash only, never exposed
+server/src/main/kotlin/dev/dertyp/services/UserService.kt | updateDisplayName | UserTable | update | 1 | BOOKKEEPING: UserTable.displayName, no entity type covers users and playlists and collections expose only the creator id
+server/src/main/kotlin/dev/dertyp/services/UserService.kt | updateProfileImage | UserTable | update | 1 | BOOKKEEPING: UserTable.profileImage, no entity type covers users and playlists and collections expose only the creator id
+server/src/main/kotlin/dev/dertyp/services/UserService.kt | upsertUser | UserTable | upsert | 1 | BOOKKEEPING: mirrored account (username, displayName, isAdmin, profileImage), no entity type covers users and playlists and collections expose only the creator id
+server/src/main/kotlin/dev/dertyp/services/cover/CoverGenerationService.kt | apply | CollectionTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/cover/CoverGenerationService.kt | apply | UserPlaylistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/cover/CoverGenerationService.kt | reset | CollectionTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/cover/CoverGenerationService.kt | reset | UserPlaylistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/import/TidalBaseImporter.kt | importContent | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/import/TidalBaseImporter.kt | importContent | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/import/TidalBaseImporter.kt | updateAlbumMetadata | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/metadata/AppleMusicArtistResolver.kt | persist | ArtistProviderTable | upsert | 1 | BOOKKEEPING: artist_provider is read only by the resolver, no client model exposes it
+server/src/main/kotlin/dev/dertyp/services/schedule/LrcLibWorker.kt | execute | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/schedule/LrcLibWorker.kt | execute | SongTable | update | 2 | BOOKKEEPING: lastLyricsFetchAttempt only
+server/src/main/kotlin/dev/dertyp/services/schedule/LyricsSyncWorker.kt | execute | SyncedLyricsTable | upsert | 1 | BOOKKEEPING: not_found marker with content null for songs without a synced lyrics row, getSyncedLyrics returns null before and after
+server/src/main/kotlin/dev/dertyp/services/subsonic/SubsonicQueryService.kt | setAlbumStar | UserAlbumTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/subsonic/SubsonicQueryService.kt | setArtistStar | FollowedArtistTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/subsonic/SubsonicQueryService.kt | setArtistStar | FollowedArtistTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/subsonic/SubsonicQueryService.kt | updatePlaylistMeta | UserPlaylistTable | update | 1 | RECORDED

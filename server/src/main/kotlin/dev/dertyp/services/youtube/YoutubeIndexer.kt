@@ -5,7 +5,6 @@ import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.InsertableSong
 import dev.dertyp.data.TitleTag
-import dev.dertyp.core.date.getDateFromISO
 import dev.dertyp.plugins.*
 import dev.dertyp.services.metadata.IMetadataService
 import kotlinx.coroutines.CancellationException
@@ -69,7 +68,7 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
 
                             if (name.isBlank()) return@withPermit
 
-                            val releaseDate = getDateFromISO(year)
+                            val releaseDate = parsePartialDate(year)
 
                             val url = audioFile.tag.getFirst("URL")
                             val youtubeId = try {

@@ -6,6 +6,7 @@ import dev.dertyp.db.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.testing.entityChangeTables
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -34,6 +35,7 @@ class MetadataFetchingServiceTest : KoinTest {
     private val environment = mockk<ApplicationEnvironment>(relaxed = true)
 
     private val allTables = arrayOf(
+        *entityChangeTables,
         ArtistTable, AlbumTable, SongTable, SongVariantTable, SongArtistTable,
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
@@ -55,6 +57,7 @@ class MetadataFetchingServiceTest : KoinTest {
 
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { environment }
                 single { imageService }
                 single { GenreService() }

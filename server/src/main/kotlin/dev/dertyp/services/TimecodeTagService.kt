@@ -24,6 +24,7 @@ import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
+import org.koin.core.component.inject
 import java.time.Instant
 import java.util.UUID
 
@@ -67,6 +68,7 @@ class TimecodeTagService : Service() {
     }
 
     private val locks = KeyedMutex<UUID>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
 
     suspend fun createTag(
         userId: UUID,
@@ -90,6 +92,7 @@ class TimecodeTagService : Service() {
 
                 val now = Instant.now().toEpochMilli()
                 val id = insertTag(userId, songId, type, text, timestampMs, endMs, action, fade, now)
+                entityChangeRecorder.timecodesChanged(userId, listOf(songId))
 
                 TimecodeTag(
                     id = id,
@@ -126,7 +129,7 @@ class TimecodeTagService : Service() {
 
         return dbQuery {
             val stored = TimecodeTagTable
-                .select(TimecodeTagTable.action, TimecodeTagTable.fade)
+                .select(TimecodeTagTable.songId, TimecodeTagTable.action, TimecodeTagTable.fade)
                 .where { TimecodeTagTable.id eq tagId }
                 .andWhere { TimecodeTagTable.userId eq userId }
                 .singleOrNull()
@@ -148,6 +151,7 @@ class TimecodeTagService : Service() {
                 Instant.now().toEpochMilli()
             )
             require(updated == 1) { "Timecode tag $tagId not found" }
+            entityChangeRecorder.timecodesChanged(userId, listOf(stored[TimecodeTagTable.songId].value))
 
             TimecodeTagTable
                 .selectAll()
@@ -157,7 +161,16 @@ class TimecodeTagService : Service() {
         }
     }
 
-    suspend fun deleteTag(userId: UUID, tagId: UUID): Boolean = dbQuery { removeTag(userId, tagId) > 0 }
+    suspend fun deleteTag(userId: UUID, tagId: UUID): Boolean = dbQuery {
+        val tagged = TimecodeTagTable
+            .select(TimecodeTagTable.songId)
+            .where { TimecodeTagTable.id eq tagId }
+            .andWhere { TimecodeTagTable.userId eq userId }
+            .map { it[TimecodeTagTable.songId].value }
+        val removed = removeTag(userId, tagId) > 0
+        if (removed) entityChangeRecorder.timecodesChanged(userId, tagged)
+        removed
+    }
 
     suspend fun replaceTags(userId: UUID, songId: UUID, tags: List<TimecodeTagInput>): List<TimecodeTag> {
         require(tags.size <= MAX_TAGS_PER_SONG) { "A song holds at most $MAX_TAGS_PER_SONG tags" }
@@ -169,7 +182,7 @@ class TimecodeTagService : Service() {
         return locks.withLock(userId) {
             dbQuery {
                 requireSong(songId)
-                clearTags(userId, songId)
+                val cleared = clearTags(userId, songId)
 
                 val now = Instant.now().toEpochMilli()
                 TimecodeTagTable.batchInsert(tags) { tag ->
@@ -184,6 +197,7 @@ class TimecodeTagService : Service() {
                     this[TimecodeTagTable.createdAt] = now
                     this[TimecodeTagTable.updatedAt] = now
                 }
+                if (cleared > 0 || tags.isNotEmpty()) entityChangeRecorder.timecodesChanged(userId, listOf(songId))
 
                 orderedTags(userId, songId)
             }

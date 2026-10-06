@@ -10,6 +10,10 @@ object CollectionSongTable : Table("collectionSong") {
     val addedAt = long("addedAt").clientDefault { Instant.now().toEpochMilli() }
 
     override val primaryKey = PrimaryKey(collectionId, songId)
+
+    init {
+        index(false, songId)
+    }
 }
 
 object CollectionAlbumTable : Table("collectionAlbum") {
@@ -18,6 +22,10 @@ object CollectionAlbumTable : Table("collectionAlbum") {
     val addedAt = long("addedAt").clientDefault { Instant.now().toEpochMilli() }
 
     override val primaryKey = PrimaryKey(collectionId, albumId)
+
+    init {
+        index(false, albumId)
+    }
 }
 
 object CollectionArtistTable : Table("collectionArtist") {
@@ -26,6 +34,10 @@ object CollectionArtistTable : Table("collectionArtist") {
     val addedAt = long("addedAt").clientDefault { Instant.now().toEpochMilli() }
 
     override val primaryKey = PrimaryKey(collectionId, artistId)
+
+    init {
+        index(false, artistId)
+    }
 }
 
 object CollectionPlaylistTable : Table("collectionPlaylist") {
@@ -34,4 +46,8 @@ object CollectionPlaylistTable : Table("collectionPlaylist") {
     val addedAt = long("addedAt").clientDefault { Instant.now().toEpochMilli() }
 
     override val primaryKey = PrimaryKey(collectionId, playlistId)
+
+    init {
+        index(false, playlistId)
+    }
 }

@@ -277,6 +277,10 @@ tasks.register("generateEnvDocs") {
                 "desc" to "Multiplier for background worker threads. Scales the number of parallel tasks relative to CPU cores.",
                 "cat" to "Other"
             ),
+            "ENTITY_CHANGE_RETENTION_DAYS" to mapOf(
+                "desc" to "How long (in days) recorded library changes are kept for clients that ask what changed since their last pull. A client that was away longer reads everything again.",
+                "cat" to "Other"
+            ),
             "METRICS_ENABLED" to mapOf(
                 "desc" to "Whether to collect RPC call usage metrics (invocation counts per call, per user, over time).",
                 "cat" to "Metrics"

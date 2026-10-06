@@ -3,13 +3,19 @@ package dev.dertyp.services
 import com.github.luben.zstd.ZstdOutputStream
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.config.EntityChangeConfig
+import dev.dertyp.data.EntityType
 import dev.dertyp.data.TaskStatus
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ArtistTable
+import dev.dertyp.db.EntityChangeScopeTable
+import dev.dertyp.db.EntityChangeTable
+import dev.dertyp.db.EntityChangeTrackingTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.ScheduledTaskLogTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SyncServiceTable
+import dev.dertyp.db.UserEntityChangeTable
 import dev.dertyp.db.UserTable
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -56,7 +62,7 @@ class DbManagementServiceTest : KoinTest {
         }
 
         database = TestDatabase.connect(dialect, "db_mgmt_test")
-        service = DbManagementService()
+        service = DbManagementService(EntityChangeRecorder())
         val tables = getDiscoveredTables(service).toTypedArray()
 
         transaction(database) {
@@ -394,6 +400,146 @@ class DbManagementServiceTest : KoinTest {
         assertTrue(discoveredTables.any { it.tableName == "song" })
         assertTrue(discoveredTables.any { it.tableName == "mb_artist" })
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a restore discards the recorded changes and restarts the tracking at the restore`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val recorder = EntityChangeRecorder()
+            val userId = UUID.randomUUID()
+            val backedUp = UUID.randomUUID()
+            val later = UUID.randomUUID()
+            transaction(database) {
+                UserTable.insert {
+                    it[id] = userId
+                    it[username] = "testuser"
+                    it[passwordHash] = "hash"
+                }
+                ArtistTable.insert {
+                    it[id] = backedUp
+                    it[name] = "Backed Up"
+                }
+                EntityChangeTrackingTable.insert {
+                    it[id] = ROW_ID
+                    it[startedAt] = 1_000
+                }
+                recorder.created(EntityType.ARTIST, listOf(backedUp))
+                recorder.likesChanged(userId, EntityType.ARTIST, listOf(backedUp))
+            }
+            val exportedData = service.exportData()
+            transaction(database) {
+                ArtistTable.insert {
+                    it[id] = later
+                    it[name] = "Later"
+                }
+                recorder.created(EntityType.ARTIST, listOf(later))
+            }
+            val before = System.currentTimeMillis()
+
+            service.importData(exportedData)
+
+            transaction(database) {
+                assertEquals(listOf(backedUp), ArtistTable.selectAll().map { it[ArtistTable.id].value })
+                assertEquals(0, EntityChangeTable.selectAll().count())
+                assertEquals(0, UserEntityChangeTable.selectAll().count())
+                assertEquals(0, EntityChangeScopeTable.selectAll().count())
+                val started = EntityChangeTrackingTable.selectAll().single()[EntityChangeTrackingTable.startedAt]
+                assertTrue(started >= before)
+            }
+            val window = EntityChangeService(EntityChangeConfig(retentionDays = 30)).getWindow()
+            assertTrue(window.availableSince >= before)
+        }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a restore that fails after it replaced data still restarts the tracking`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val recorder = EntityChangeRecorder()
+            val existing = UUID.randomUUID()
+            val restoredArtist = UUID.randomUUID()
+            transaction(database) {
+                ArtistTable.insert {
+                    it[id] = existing
+                    it[name] = "Existing"
+                }
+                AlbumTable.insert {
+                    it[id] = UUID.randomUUID()
+                    it[name] = "Existing Album"
+                }
+                EntityChangeTrackingTable.insert {
+                    it[id] = ROW_ID
+                    it[startedAt] = 1_000
+                }
+                recorder.created(EntityType.ARTIST, listOf(existing))
+            }
+            val artistRows = listOf(
+                mapOf(
+                    "id" to DbValue.DbUuid(restoredArtist.toString()),
+                    "name" to DbValue.DbString("Restored")
+                )
+            )
+            val brokenAlbumRows = listOf(
+                mapOf(
+                    "id" to DbValue.DbUuid(UUID.randomUUID().toString()),
+                    "name" to DbValue.DbString("Broken"),
+                    "cover" to DbValue.DbUuid(UUID.randomUUID().toString())
+                )
+            )
+            val blob = ByteArrayOutputStream()
+            ZstdOutputStream(blob).use { zstd ->
+                DataOutputStream(zstd).use { dos ->
+                    dos.writeInt(2)
+                    for (table in listOf(TableData("artist", artistRows), TableData("album", brokenAlbumRows))) {
+                        val cborBytes = Cbor.encodeToByteArray(table)
+                        dos.writeUTF(table.tableName)
+                        dos.writeInt(cborBytes.size)
+                        dos.write(cborBytes)
+                    }
+                }
+            }
+            val before = System.currentTimeMillis()
+
+            val failure = runCatching { service.importData(blob.toByteArray()) }.exceptionOrNull()
+
+            assertTrue(failure != null)
+            transaction(database) {
+                assertEquals(0, AlbumTable.selectAll().count())
+                assertEquals(0, EntityChangeTable.selectAll().count())
+                val started = EntityChangeTrackingTable.selectAll().single()[EntityChangeTrackingTable.startedAt]
+                assertTrue(started >= before)
+            }
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an import that fails before it replaced anything keeps the recorded changes`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val recorder = EntityChangeRecorder()
+            val existing = UUID.randomUUID()
+            transaction(database) {
+                ArtistTable.insert {
+                    it[id] = existing
+                    it[name] = "Existing"
+                }
+                EntityChangeTrackingTable.insert {
+                    it[id] = ROW_ID
+                    it[startedAt] = 1_000
+                }
+                recorder.created(EntityType.ARTIST, listOf(existing))
+            }
+
+            val failure = runCatching { service.importData(byteArrayOf(1, 2, 3)) }.exceptionOrNull()
+
+            assertTrue(failure != null)
+            transaction(database) {
+                assertEquals(1, EntityChangeTable.selectAll().count())
+                assertEquals(1_000, EntityChangeTrackingTable.selectAll().single()[EntityChangeTrackingTable.startedAt])
+            }
+        }
 }
 
 private object LegacySyncServiceTable : Table("syncService") {

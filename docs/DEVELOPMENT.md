@@ -81,6 +81,8 @@ If a KSP task reports up-to-date but you know its output should change, touch on
 - Foreign keys are always Exposed `reference()` columns, never a hand-rolled `uuid`/`varchar` id column mirroring another table's id.
 - Schema changes are Flyway migrations (`db/migrations/V1_x__Name.kt`); data backfills and one-off fixes are custom migrations (`migrations/custom/`, `@Migration("3.x")`) — see [ARCHITECTURE.md](ARCHITECTURE.md#migrations).
 - Recurring/periodic work is a `@WorkerTask` worker (`services/schedule/`), never an ad hoc `while`/`delay` loop.
+- Every write to a table behind a tracked entity (songs, albums, artists, playlists, collections and the per-user likes, follows and timecode tags) is recorded through `EntityChangeRecorder` in the same transaction, or classified as bookkeeping in `server/src/test/resources/entity-change/write-sites.txt`. `EntityChangeCoverageTest` enforces this and fails for a write that is neither.
+- A custom migration that changes data clients can read records the changed entities through `EntityChangeRecorder` in the same transaction, like a service does. `restartTracking()` is only for the cases that cannot name what they changed, such as a database restore.
 - REST routes are generated, not hand-written; control them through the `common-rpc` doc annotations, not by editing `routing/rest/`.
 
 ## Dependency updates

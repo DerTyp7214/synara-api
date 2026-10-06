@@ -4,6 +4,7 @@ import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.AudioBand
 import dev.dertyp.data.AudioScale
+import dev.dertyp.data.EntityType
 import dev.dertyp.data.SongAudioBand
 import dev.dertyp.data.SongAudioData
 import dev.dertyp.data.SongAudioTimeline
@@ -47,6 +48,7 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.orWhere
+import org.koin.core.component.inject
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
@@ -59,6 +61,7 @@ import kotlin.time.Duration.Companion.days
 open class AudioAnalysisService : IAudioAnalysisService, Service() {
     private val essentiaExtractor = ExternalTool("essentia_streaming_extractor_music")
     protected open val essentiaExtractorPath: String? get() = essentiaExtractor.path
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
 
     protected open val postProcessors: List<AudioAnalysisPostProcessor> = listOf(
         ValencePostProcessor()
@@ -174,10 +177,11 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
         val envelopes = extractEnvelopes(filePath) ?: return
 
         dbQuery {
-            SongAudioTimelineTable.update({ SongAudioTimelineTable.songId eq songId }) {
+            val refreshed = SongAudioTimelineTable.update({ SongAudioTimelineTable.songId eq songId }) {
                 it.writeEnvelopes(envelopes)
                 it[analyzedAt] = System.currentTimeMillis()
             }
+            if (refreshed > 0) entityChangeRecorder.updated(EntityType.SONG, listOf(songId))
         }
     }
 
@@ -236,6 +240,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
                 it[loudnessRange] = essentia?.lowLevel?.loudnessEbu128?.loudnessRange
                 it[dynamicComplexity] = essentia?.lowLevel?.dynamicComplexity
             }
+            entityChangeRecorder.updated(EntityType.SONG, listOf(songId))
         }
     }
 
@@ -328,6 +333,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
         saveCredits(songId, audioData.composer, SongComposerTable)
         saveCredits(songId, audioData.lyricist, SongLyricistTable)
         saveCredits(songId, audioData.producers, SongProducerTable)
+        entityChangeRecorder.updated(EntityType.SONG, listOf(songId))
     }
 
     private fun saveCredits(songId: PlatformUUID, names: List<String>?, table: Table) {

@@ -11,10 +11,14 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.jaudiotagger.audio.AudioFile
+import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.audio.AudioHeader
+import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.Tag
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -236,5 +240,103 @@ class BaseIndexerTest {
         )
         assertEquals(null, testIndexer.testUpdate(untagged, providerAlbum.copy(barcode = null)).barcode)
         assertEquals(null, testIndexer.testUpdate(untagged, null).barcode)
+    }
+    private fun songReleaseDate(dateTag: String, album: InsertableAlbum): LocalDate? = runBlocking {
+        val audioFile = mockk<AudioFile>(relaxed = true)
+        val tag = mockk<Tag>(relaxed = true)
+        val header = mockk<AudioHeader>(relaxed = true)
+        every { audioFile.tag } returns tag
+        every { audioFile.audioHeader } returns header
+        every { audioFile.file } returns File("test.flac")
+        every { header.preciseTrackLength } returns 180.0
+        every { tag.getFirst(FieldKey.TITLE) } returns "Song Title"
+        every { tag.getFirst(FieldKey.YEAR) } returns dateTag
+
+        val testIndexer = object : BaseIndexer(context) {
+            override val id = "test"
+            override val name = "test"
+            suspend fun testInsertable(af: AudioFile, a: InsertableAlbum) = insertableSongFromFile(af, a)
+        }
+        testIndexer.testInsertable(audioFile, album).releaseDate
+    }
+
+    @Test
+    fun `a song takes full, year-month and year-only date tags and falls back to the album date`() {
+        val undated = InsertableAlbum("Album", listOf("Artist"))
+        val dated = undated.copy(releaseDate = LocalDate.of(2001, 2, 3))
+
+        assertEquals(LocalDate.of(2016, 5, 20), songReleaseDate("2016-05-20", dated))
+        assertEquals(LocalDate.of(2016, 5, 1), songReleaseDate("2016-05", dated))
+        assertEquals(LocalDate.of(2016, 1, 1), songReleaseDate("2016", dated))
+        assertEquals(LocalDate.of(2001, 2, 3), songReleaseDate("soon", dated))
+        assertEquals(LocalDate.of(2001, 2, 3), songReleaseDate("", dated))
+        assertEquals(null, songReleaseDate("soon", undated))
+    }
+
+    private fun albumReleaseDate(dateTag: String): LocalDate? = runBlocking {
+        val tempDir = Files.createTempDirectory("base-indexer-date-test")
+        mockkStatic(AudioFileIO::class)
+        try {
+            val file = Files.createFile(tempDir.resolve("track.flac"))
+            val audioFile = mockk<AudioFile>(relaxed = true)
+            val tag = mockk<Tag>(relaxed = true)
+            every { audioFile.tag } returns tag
+            every { tag.firstArtwork } returns null
+            every { tag.getFirst(any<FieldKey>()) } answers {
+                when (it.invocation.args[0] as FieldKey) {
+                    FieldKey.ALBUM -> "Album"
+                    FieldKey.YEAR -> dateTag
+                    else -> ""
+                }
+            }
+            every { tag.getAll(FieldKey.ALBUM_ARTIST) } returns listOf("Artist")
+            every { AudioFileIO.read(file.toFile()) } returns audioFile
+
+            val testIndexer = object : BaseIndexer(context) {
+                override val id = "test"
+                override val name = "test"
+            }
+            testIndexer.groupByAlbum(listOf(file)).second.keys.single().releaseDate
+        } finally {
+            unmockkStatic(AudioFileIO::class)
+            tempDir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `an album takes full, year-month and year-only date tags`() {
+        assertEquals(LocalDate.of(2016, 5, 20), albumReleaseDate("2016-05-20"))
+        assertEquals(LocalDate.of(2016, 5, 1), albumReleaseDate("2016-05"))
+        assertEquals(LocalDate.of(2016, 1, 1), albumReleaseDate("2016"))
+        assertEquals(null, albumReleaseDate("soon"))
+        assertEquals(null, albumReleaseDate(""))
+    }
+
+    @Test
+    fun `updateAlbumMetadata keeps the date of the file tag and takes the provider date only without one`() {
+        val testIndexer = object : BaseIndexer(context) {
+            override val id = "test"
+            override val name = "test"
+            fun testUpdate(album: InsertableAlbum, metadata: IMetadataService.Album?) =
+                updateAlbumMetadata(album, metadata, emptyList())
+        }
+        val providerAlbum = IMetadataService.Album(
+            id = "test:1",
+            title = "Album",
+            trackCount = 3,
+            releaseDate = LocalDate.of(2020, 6, 5)
+        )
+        val tagged = InsertableAlbum(
+            "Album",
+            listOf("Artist"),
+            releaseDate = LocalDate.of(2016, 1, 1),
+            originalId = "test:1"
+        )
+
+        val keptTagDate = testIndexer.testUpdate(tagged, providerAlbum)
+        assertEquals(LocalDate.of(2016, 1, 1), keptTagDate.releaseDate)
+        assertEquals(3, keptTagDate.songCount)
+        assertEquals(LocalDate.of(2020, 6, 5), testIndexer.testUpdate(tagged.copy(releaseDate = null), providerAlbum).releaseDate)
+        assertEquals(null, testIndexer.testUpdate(tagged.copy(releaseDate = null), null).releaseDate)
     }
 }

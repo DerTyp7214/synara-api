@@ -5,7 +5,6 @@ import dev.dertyp.PlatformUUID
 import dev.dertyp.core.*
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.core.date.getISOFromDate
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.*
 import dev.dertyp.services.*
@@ -118,9 +117,11 @@ abstract class TidalBaseImporter(
     override val metadataType = IMetadataService.MetadataType.tidal
 
     private val songService by inject<SongService>()
+    private val albumService by inject<AlbumService>()
     private val userPlaylistService by inject<UserPlaylistService>()
     private val imageService by inject<ImageService>()
     private val animatedImageService by inject<AnimatedImageService>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
     private val importService by inject<ImportService>()
     private val lrcLibService by inject<ILrcLibService>()
     private val musicBrainzService by inject<IMusicBrainzService>()
@@ -479,6 +480,7 @@ abstract class TidalBaseImporter(
                         .where { SongProviderTable.provider eq providerName }
                         .andWhere { SongProviderTable.externalId inList trackMetadataMap.values.map { it.tidalId } }
                         .associate { it[SongProviderTable.externalId] to it[SongProviderTable.songId].value }
+                    val songsBefore = entityStates(EntityType.SONG, tidalIdToSongId.values)
 
                     trackMetadataMap.values.forEach { meta ->
                         val bytes = animatedDataMap[meta.animatedCoverUrl] ?: return@forEach
@@ -488,6 +490,7 @@ abstract class TidalBaseImporter(
                             it[SongTable.animatedCover] = EntityID(animId, AnimatedImageTable)
                         }
                     }
+                    entityChangeRecorder.recordChanges(songsBefore)
 
                     val animatedByAlbum = trackMetadataMap.values
                         .filter { it.animatedCoverUrl != null && it.tidalAlbumId != null }
@@ -499,6 +502,7 @@ abstract class TidalBaseImporter(
                             .where { AlbumProviderTable.provider eq providerName }
                             .andWhere { AlbumProviderTable.externalId inList animatedByAlbum.keys.toList() }
                             .associate { it[AlbumProviderTable.externalId] to it[AlbumProviderTable.albumId].value }
+                        val albumsBefore = entityStates(EntityType.ALBUM, tidalAlbumIdToAlbumId.values)
 
                         animatedByAlbum.forEach { (tidalAlbumId, tracks) ->
                             val meta = tracks.first()
@@ -509,6 +513,7 @@ abstract class TidalBaseImporter(
                                 it[AlbumTable.animatedCover] = EntityID(animId, AnimatedImageTable)
                             }
                         }
+                        entityChangeRecorder.recordChanges(albumsBefore)
                     }
                 }
             } catch (e: CancellationException) {
@@ -595,10 +600,12 @@ abstract class TidalBaseImporter(
             val tidalAlbum = tidalAlbums.firstOrNull()
             if (tidalAlbum != null) {
                 dbQuery {
+                    val before = entityStates(EntityType.ALBUM, listOf(albumId))
                     AlbumTable.update({ AlbumTable.id eq albumId }) {
                         it[AlbumTable.songCount] = tidalAlbum.trackCount
-                        it[AlbumTable.releaseDate] = getISOFromDate(tidalAlbum.releaseDate)
                     }
+                    entityChangeRecorder.recordChanges(before)
+                    tidalAlbum.releaseDate?.let { albumService.fillUnknownReleaseDatesTx(mapOf(albumId to it)) }
                 }
                 true
             } else false

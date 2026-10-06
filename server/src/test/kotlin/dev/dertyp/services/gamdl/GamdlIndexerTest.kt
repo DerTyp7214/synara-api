@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.LocalDate
 import java.util.UUID
 import kotlin.time.Duration.Companion.minutes
 
@@ -171,5 +172,19 @@ class GamdlIndexerTest {
         coVerify(exactly = 0) {
             context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.appleMusic, any())
         }
+    }
+
+    @Test
+    fun `groupByAlbum takes full, year-month and year-only date tags`() = runBlocking {
+        val dates = listOf("2016-05-20", "2016-05", "2016", "soon").mapIndexed { index, dateTag ->
+            val flac = flacAt("90$index/1.flac")
+            mockAudio(flac, mapOf(FieldKey.ALBUM to "Dated Album $index", FieldKey.YEAR to dateTag))
+            indexer.groupByAlbum(listOf(flac)).second.keys.single().releaseDate
+        }
+
+        assertEquals(
+            listOf(LocalDate.of(2016, 5, 20), LocalDate.of(2016, 5, 1), LocalDate.of(2016, 1, 1), null),
+            dates
+        )
     }
 }

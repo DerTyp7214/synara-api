@@ -8,6 +8,7 @@ import dev.dertyp.db.*
 import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.metadata.*
 import dev.dertyp.testing.FakeCredentialProvider
+import dev.dertyp.testing.entityChangeTables
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -50,6 +51,7 @@ class SongServiceDeletionTest : KoinTest {
     fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { environment }
                 single { musicBrainzService }
                 single { MusicBrainzCacheService() }
@@ -78,6 +80,7 @@ class SongServiceDeletionTest : KoinTest {
         database = TestDatabase.connect(dialect, "song_deletion_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 UserTable,
                 SongTable, SongVariantTable,
                 AlbumTable,

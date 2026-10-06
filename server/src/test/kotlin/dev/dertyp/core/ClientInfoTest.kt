@@ -112,6 +112,13 @@ class ClientInfoTest {
     }
 
     @Test
+    fun `entity changes require api version 10`() {
+        assertFalse(ClientInfo.LEGACY.supports(ClientFeature.ENTITY_CHANGES))
+        assertFalse(ClientInfo(9).supports(ClientFeature.ENTITY_CHANGES))
+        assertTrue(ClientInfo(10).supports(ClientFeature.ENTITY_CHANGES))
+    }
+
+    @Test
     fun `album versions require api version 9`() {
         assertFalse(ClientInfo.LEGACY.supports(ClientFeature.ALBUM_VERSIONS))
         assertFalse(ClientInfo(8).supports(ClientFeature.ALBUM_VERSIONS))

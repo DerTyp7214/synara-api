@@ -109,6 +109,8 @@ credentialServer:
   adminKey: ${CREDENTIAL_SERVER_ADMIN_KEY:}
 workers:
   threadMultiplier: ${WORKER_THREAD_MULTIPLIER:1.0}
+entityChanges:
+  retentionDays: ${ENTITY_CHANGE_RETENTION_DAYS:30}
 metrics:
   enabled: ${METRICS_ENABLED:true}
   flushIntervalSeconds: ${METRICS_FLUSH_INTERVAL_SECONDS:60}

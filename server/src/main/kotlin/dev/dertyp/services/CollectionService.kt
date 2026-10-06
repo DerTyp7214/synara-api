@@ -4,6 +4,7 @@ import dev.dertyp.core.*
 import dev.dertyp.data.CollectionItemType
 import dev.dertyp.data.CollectionSearchResults
 import dev.dertyp.data.CollectionSongMatch
+import dev.dertyp.data.EntityType
 import dev.dertyp.data.ImageSource
 import dev.dertyp.data.MediaCollection
 import dev.dertyp.data.InsertableCollection
@@ -30,6 +31,7 @@ class CollectionService : Service() {
     private val albumService by inject<AlbumService>()
     private val userPlaylistService by inject<UserPlaylistService>()
     private val hooks by inject<HookBus>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
 
     companion object {
         fun mapCollection(resultRow: ResultRow): MediaCollection = MediaCollection(
@@ -76,7 +78,7 @@ class CollectionService : Service() {
                 it[creator] = EntityID(userId, UserTable)
                 it[imageId] = collection.imageId?.let { img -> EntityID(img, ImageTable) }
                 it[imageSource] = collection.imageId?.let { ImageSource.USER }
-            }.value
+            }.value.also { entityChangeRecorder.created(EntityType.COLLECTION, listOf(it)) }
         }
         if (collection.imageId == null) hooks.emit(HookEvent.CollectionChanged(id))
         return id
@@ -97,7 +99,8 @@ class CollectionService : Service() {
                 else -> currentSource ?: ImageSource.USER
             }
             imageCleared = collection.imageId == null && currentImageId != null
-            CollectionTable.update({ CollectionTable.id eq id }) {
+            val before = entityStates(EntityType.COLLECTION, listOf(id))
+            val updated = CollectionTable.update({ CollectionTable.id eq id }) {
                 it[name] = collection.name
                 it[description] = collection.description
                 it[imageId] = collection.imageId
@@ -107,6 +110,8 @@ class CollectionService : Service() {
                     it[coverSeed] = null
                 }
             } == 1
+            entityChangeRecorder.recordChanges(before)
+            updated
         }
         if (updated && imageCleared) hooks.emit(HookEvent.CollectionChanged(id))
         return updated
@@ -114,7 +119,8 @@ class CollectionService : Service() {
 
     suspend fun setCollectionImage(id: UUID, imageId: UUID?): Boolean {
         val updated = dbQuery {
-            CollectionTable.update({ CollectionTable.id eq id }) {
+            val before = entityStates(EntityType.COLLECTION, listOf(id))
+            val updated = CollectionTable.update({ CollectionTable.id eq id }) {
                 it[CollectionTable.imageId] = imageId
                 it[imageSource] = imageId?.let { ImageSource.USER }
                 if (imageId == null) {
@@ -122,6 +128,8 @@ class CollectionService : Service() {
                     it[coverSeed] = null
                 }
             } == 1
+            entityChangeRecorder.recordChanges(before)
+            updated
         }
         if (updated && imageId == null) hooks.emit(HookEvent.CollectionChanged(id))
         return updated
@@ -134,7 +142,7 @@ class CollectionService : Service() {
     }
 
     private suspend fun insertItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean = dbQuery {
-        when (itemType) {
+        val added = when (itemType) {
             CollectionItemType.SONG -> {
                 if (SongTable.select(SongTable.id).where { SongTable.id eq itemId }.empty()) return@dbQuery false
                 CollectionSongTable.insertIgnore { it[collectionId] = id; it[songId] = itemId }.insertedCount > 0
@@ -158,11 +166,13 @@ class CollectionService : Service() {
                 }.insertedCount > 0
             }
         }
+        if (added) entityChangeRecorder.membersChanged(EntityType.COLLECTION, listOf(id))
+        added
     }
 
     suspend fun removeItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean {
         val removed = dbQuery {
-            when (itemType) {
+            val removed = when (itemType) {
                 CollectionItemType.SONG ->
                     CollectionSongTable.deleteWhere { (collectionId eq id) and (songId eq itemId) } > 0
 
@@ -175,12 +185,16 @@ class CollectionService : Service() {
                 CollectionItemType.PLAYLIST ->
                     CollectionPlaylistTable.deleteWhere { (collectionId eq id) and (playlistId eq itemId) } > 0
             }
+            if (removed) entityChangeRecorder.membersChanged(EntityType.COLLECTION, listOf(id))
+            removed
         }
         if (removed) hooks.emit(HookEvent.CollectionChanged(id))
         return removed
     }
 
     suspend fun delete(id: UUID): Boolean = dbQuery {
+        if (CollectionTable.select(CollectionTable.id).where { CollectionTable.id eq id }.empty()) return@dbQuery false
+        entityChangeRecorder.deleting(EntityType.COLLECTION, listOf(id))
         CollectionTable.deleteWhere { CollectionTable.id eq id } == 1
     }
 

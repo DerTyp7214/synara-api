@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.data.EntityType
 import dev.dertyp.db.*
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.statements.StatementInterceptor
@@ -17,6 +18,7 @@ import kotlin.io.path.readSymbolicLink
 
 class LibraryFileDeleter : Service() {
     private val redisSearchService by inject<RedisSearchService>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
 
     data class SongRowDeletion(
         val deletedSongs: Int,
@@ -44,6 +46,8 @@ class LibraryFileDeleter : Service() {
 
         logger.info("Found ${paths.size} files to delete.")
 
+        entityChangeRecorder.deleting(EntityType.SONG, songRows.map { it.first })
+
         val deletedSongs = chunks.sumOf { chunk ->
             SongTable.deleteWhere { SongTable.id inList chunk }
         }
@@ -60,6 +64,8 @@ class LibraryFileDeleter : Service() {
                 )
             }
             .map { it[AlbumTable.id].value }
+
+        entityChangeRecorder.deleting(EntityType.ALBUM, orphanAlbumIds)
 
         orphanAlbumIds.chunked(5000).forEach { chunk ->
             AlbumTable.deleteWhere { AlbumTable.id inList chunk }

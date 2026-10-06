@@ -41,7 +41,7 @@ class TimecodeTagServiceTest : KoinTest {
     private lateinit var service: TimecodeTagService
 
     private fun setup(dialect: DbDialect) {
-        startKoin { modules(module { }) }
+        startKoin { modules(module { single { EntityChangeRecorder() } }) }
 
         database = TestDatabase.connect(dialect, "timecode_tag_test")
         transaction(database) {
@@ -52,6 +52,7 @@ class TimecodeTagServiceTest : KoinTest {
                 ArtistTable,
                 SongTable, SongVariantTable,
                 TimecodeTagTable,
+                *entityChangeTables,
             )
         }
         service = TimecodeTagService()

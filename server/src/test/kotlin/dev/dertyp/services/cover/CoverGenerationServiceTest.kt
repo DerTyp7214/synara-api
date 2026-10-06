@@ -6,12 +6,18 @@ import dev.dertyp.data.CoverGenerationParams
 import dev.dertyp.data.CoverStyle
 import dev.dertyp.data.CoverTarget
 import dev.dertyp.data.CoverTargetType
+import dev.dertyp.data.EntityType
 import dev.dertyp.data.ImageSource
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.services.EntityChangeRecorder
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.StorageService
 import dev.dertyp.services.jobs.JobService
+import dev.dertyp.testing.clearRecordedChanges
+import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.recordedChanges
+import dev.dertyp.testing.updated
 import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
@@ -31,6 +37,7 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -97,6 +104,7 @@ class CoverGenerationServiceTest {
                 RadioChannelTable,
                 PodcastShowTable,
                 PodcastEpisodeTable,
+                *entityChangeTables,
             )
             UserTable.insert {
                 it[id] = userId
@@ -117,7 +125,8 @@ class CoverGenerationServiceTest {
             CoverAssetPackService(config),
             CoverSourceCollector(),
             jobService,
-            config
+            config,
+            EntityChangeRecorder()
         )
     }
 
@@ -349,5 +358,53 @@ class CoverGenerationServiceTest {
         assertNull(service.autoGenerate(target))
         assertEquals(target, CoverGenerationService.parseOrigin(CoverGenerationService.originOf(target)))
         assertNull(CoverGenerationService.parseOrigin("https://example.com/x.jpg"))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `applying and resetting a cover records the playlist or the collection`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val playlistId = playlistWithSongs(listOf(Color.RED, Color.BLUE))
+        val collectionId = UUID.randomUUID()
+        transaction(database) {
+            CollectionTable.insert {
+                it[id] = collectionId
+                it[name] = "Everything"
+                it[creator] = EntityID(userId, UserTable)
+            }
+            CollectionPlaylistTable.insert {
+                it[CollectionPlaylistTable.collectionId] = collectionId
+                it[CollectionPlaylistTable.playlistId] = playlistId
+            }
+        }
+        val playlist = CoverTarget(CoverTargetType.PLAYLIST, playlistId)
+        val collection = CoverTarget(CoverTargetType.COLLECTION, collectionId)
+
+        service.apply(playlist, CoverGenerationParams())
+        assertEquals(setOf(updated(EntityType.USER_PLAYLIST, playlistId)), recordedChanges(database))
+        clearRecordedChanges(database)
+
+        service.apply(collection, CoverGenerationParams())
+        assertEquals(setOf(updated(EntityType.COLLECTION, collectionId)), recordedChanges(database))
+        clearRecordedChanges(database)
+
+        assertFalse(service.reset(playlist))
+        assertFalse(service.reset(collection))
+        assertThrows<IllegalArgumentException> {
+            service.apply(CoverTarget(CoverTargetType.PLAYLIST, UUID.randomUUID()), CoverGenerationParams())
+        }
+        assertEquals(emptySet<Any>(), recordedChanges(database))
+
+        transaction(database) {
+            UserPlaylistTable.update({ UserPlaylistTable.id eq playlistId }) { it[imageSource] = ImageSource.USER }
+            CollectionTable.update({ CollectionTable.id eq collectionId }) { it[imageSource] = ImageSource.USER }
+        }
+
+        assertTrue(service.reset(playlist))
+        assertEquals(setOf(updated(EntityType.USER_PLAYLIST, playlistId)), recordedChanges(database))
+        clearRecordedChanges(database)
+
+        assertTrue(service.reset(collection))
+        assertEquals(setOf(updated(EntityType.COLLECTION, collectionId)), recordedChanges(database))
     }
 }

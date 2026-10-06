@@ -6,6 +6,7 @@ import dev.dertyp.db.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.testing.entityChangeTables
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -39,6 +40,7 @@ class AlbumServiceDeletionTest : KoinTest {
     fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { musicBrainzService }
                 single { MusicBrainzCacheService() }
                 single { storageService }
@@ -56,6 +58,7 @@ class AlbumServiceDeletionTest : KoinTest {
         database = TestDatabase.connect(dialect, "album_deletion_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 UserTable,
                 AlbumTable,
                 AlbumArtistTable,

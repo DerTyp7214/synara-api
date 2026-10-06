@@ -36,6 +36,7 @@ import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.*
+import org.koin.core.component.inject
 import org.jaudiotagger.audio.AudioFileIO
 import redis.clients.jedis.HostAndPort
 import redis.clients.jedis.RedisClusterClient
@@ -151,6 +152,7 @@ class ImageService(
     }
 
     private val ANALYSIS_RETRY_INTERVAL = 7.days.inWholeMilliseconds
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
 
     companion object {
         const val GENERATED_ORIGIN_PREFIX = "generated:"
@@ -470,7 +472,32 @@ class ImageService(
 
         val unlinked = dbQuery {
             var total = 0
+            val uncovered = mutableMapOf<EntityType, MutableSet<UUID>>()
             bogusIds.chunked(10000).forEach { chunk ->
+                uncovered.getOrPut(EntityType.ALBUM) { mutableSetOf() } += AlbumTable
+                    .select(AlbumTable.id)
+                    .where { AlbumTable.cover inList chunk }
+                    .map { it[AlbumTable.id].value }
+                uncovered.getOrPut(EntityType.ARTIST) { mutableSetOf() } += ArtistTable
+                    .select(ArtistTable.id)
+                    .where { ArtistTable.image inList chunk }
+                    .map { it[ArtistTable.id].value }
+                uncovered.getOrPut(EntityType.SONG) { mutableSetOf() } += SongTable
+                    .select(SongTable.id)
+                    .where { SongTable.cover inList chunk }
+                    .map { it[SongTable.id].value }
+                uncovered.getOrPut(EntityType.PLAYLIST) { mutableSetOf() } += PlaylistTable
+                    .select(PlaylistTable.id)
+                    .where { PlaylistTable.imageId inList chunk }
+                    .map { it[PlaylistTable.id].value }
+                uncovered.getOrPut(EntityType.USER_PLAYLIST) { mutableSetOf() } += UserPlaylistTable
+                    .select(UserPlaylistTable.id)
+                    .where { UserPlaylistTable.imageId inList chunk }
+                    .map { it[UserPlaylistTable.id].value }
+                uncovered.getOrPut(EntityType.COLLECTION) { mutableSetOf() } += CollectionTable
+                    .select(CollectionTable.id)
+                    .where { CollectionTable.imageId inList chunk }
+                    .map { it[CollectionTable.id].value }
                 total += RecentReleaseTable.update({ RecentReleaseTable.imageId inList chunk }) {
                     it[imageId] = null
                     it[lastImageFetch] = null
@@ -490,6 +517,7 @@ class ImageService(
                 total += UserPlaylistTable.update({ UserPlaylistTable.imageId inList chunk }) { it[imageId] = null }
                 total += CollectionTable.update({ CollectionTable.imageId inList chunk }) { it[imageId] = null }
             }
+            uncovered.forEach { (type, ids) -> entityChangeRecorder.updated(type, ids) }
             total
         }
 
@@ -627,9 +655,15 @@ class ImageService(
         }
 
         dbQuery {
+            val previousBlurHash = ImageTable
+                .select(ImageTable.blurHash)
+                .where { ImageTable.id eq imageId }
+                .singleOrNull()
+                ?.get(ImageTable.blurHash)
             ImageTable.update({ ImageTable.id eq imageId }) {
                 it[ImageTable.blurHash] = blurHash
             }
+            if (previousBlurHash != blurHash) recordBlurHashChange(imageId)
 
             ImageMetadataTable.upsert(ImageMetadataTable.imageId) {
                 it[ImageMetadataTable.imageId] = imageId
@@ -654,6 +688,54 @@ class ImageService(
                 it[color5] = palette.getOrNull(4)
             }
         }
+    }
+
+    private fun recordBlurHashChange(imageId: UUID) {
+        val animatedIds = AnimatedImageTable
+            .select(AnimatedImageTable.id)
+            .where { AnimatedImageTable.imageId eq imageId }
+            .map { it[AnimatedImageTable.id].value }
+        entityChangeRecorder.updated(
+            EntityType.SONG,
+            SongTable
+                .select(SongTable.id)
+                .where { SongTable.cover eq imageId }
+                .orWhere { SongTable.animatedCover inList animatedIds }
+                .map { it[SongTable.id].value }
+        )
+        entityChangeRecorder.updated(
+            EntityType.ALBUM,
+            AlbumTable
+                .select(AlbumTable.id)
+                .where { AlbumTable.cover eq imageId }
+                .orWhere { AlbumTable.animatedCover inList animatedIds }
+                .map { it[AlbumTable.id].value }
+        )
+        entityChangeRecorder.updated(
+            EntityType.ARTIST,
+            ArtistTable.select(ArtistTable.id).where { ArtistTable.image eq imageId }.map { it[ArtistTable.id].value }
+        )
+        entityChangeRecorder.updated(
+            EntityType.PLAYLIST,
+            PlaylistTable
+                .select(PlaylistTable.id)
+                .where { PlaylistTable.imageId eq imageId }
+                .map { it[PlaylistTable.id].value }
+        )
+        entityChangeRecorder.updated(
+            EntityType.USER_PLAYLIST,
+            UserPlaylistTable
+                .select(UserPlaylistTable.id)
+                .where { UserPlaylistTable.imageId eq imageId }
+                .map { it[UserPlaylistTable.id].value }
+        )
+        entityChangeRecorder.updated(
+            EntityType.COLLECTION,
+            CollectionTable
+                .select(CollectionTable.id)
+                .where { CollectionTable.imageId eq imageId }
+                .map { it[CollectionTable.id].value }
+        )
     }
 
     internal sealed interface OriginKind {

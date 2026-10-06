@@ -9,4 +9,8 @@ object PlaylistSongTable : Table("playlistSong") {
     val position = integer("position")
 
     override val primaryKey = PrimaryKey(playlistId, songId)
+
+    init {
+        index(false, songId)
+    }
 }

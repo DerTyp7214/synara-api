@@ -5,6 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.core.isImage
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
+import dev.dertyp.testing.entityChangeTables
 import dev.dertyp.utils.ColorUtils
 import io.mockk.every
 import io.mockk.justRun
@@ -52,6 +53,7 @@ class ImageServiceTest {
 
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { storageService }
                 single { redisConfig }
             })
@@ -60,6 +62,7 @@ class ImageServiceTest {
         database = TestDatabase.connect(dialect, "image_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 ImageTable,
                 ImageMetadataTable,
                 AlbumTable,

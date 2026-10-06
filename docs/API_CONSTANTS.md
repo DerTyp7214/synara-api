@@ -10,7 +10,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 |---|---|
 | `ApiVersion.HEADER` | `X-Api-Version` |
 | `ApiVersion.LEGACY` | `1` |
-| `ApiVersion.CURRENT` | `9` |
+| `ApiVersion.CURRENT` | `10` |
 
 ## Features
 
@@ -25,6 +25,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 | 8 | `FIELD_RENAMES` | Renamed fields under their new names: `musicBrainzId` on [Album](MODELS.md#devdertypdataalbum), [Artist](MODELS.md#devdertypdataartist) and [ArtistCredit](MODELS.md#devdertypdataartistcredit), `isPlaying` on [PlaybackReport](MODELS.md#devdertypdataplaybackreport), `directMember` on [CollectionSongMatch](MODELS.md#devdertypdatacollectionsongmatch) and [RadioChannelSongMatch](MODELS.md#devdertypdataradiochannelsongmatch), `isShuffled` on [PlaybackState](MODELS.md#devdertypdataplaybackstate), [QueueInfo](MODELS.md#devdertypdataqueueinfo), [QueueMeta](MODELS.md#devdertypdataqueuemeta) and [RemotePlaybackStatus](MODELS.md#devdertypdataremoteplaybackstatus), and `userAdded` on [QueueItem](MODELS.md#devdertypdataqueueitem). The queue entry with full song metadata has the type `WithSong`. | There is no fallback. The old names are no longer served, so clients below this version cannot read or send these fields. | - |
 | 9 | `ALBUM_TITLE_TAGS` | `tags` on [Album](MODELS.md#devdertypdataalbum): edition markers such as *Deluxe Edition*, *10th Anniversary* or *2011 Remaster*, split off the album name into [TitleTag](MODELS.md#devdertypdatatitletag) entries, so `name` is clean. | `name` is put back together into the full original name and `tags` is emptied. | - |
 | 9 | `ALBUM_VERSIONS` | `versions` on [Album](MODELS.md#devdertypdataalbum): the editions of one album (deluxe, anniversary, remastered, explicit or clean) are folded under a single entry in the album lists. | Every edition is its own entry, following the entry it was folded into, and `versions` is empty. | - |
+| 10 | `ENTITY_CHANGES` | The [IEntityChangeService](RPC_SERVICES.md#devdertypservicesientitychangeservice) service, which answers what changed in the library since a time the client names. | There is none, a client reads everything again. | - |
 
 ## UI schema version
 

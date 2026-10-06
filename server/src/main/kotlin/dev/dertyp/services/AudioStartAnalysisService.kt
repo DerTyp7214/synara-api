@@ -1,6 +1,7 @@
 package dev.dertyp.services
 
 import dev.dertyp.PlatformUUID
+import dev.dertyp.data.EntityType
 import dev.dertyp.db.SongTable
 import dev.dertyp.core.db.dbQuery
 import org.bytedeco.ffmpeg.global.avutil
@@ -9,12 +10,15 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.update
+import org.koin.core.component.inject
 import java.io.File
 import java.nio.FloatBuffer
 import kotlin.math.pow
 import kotlin.math.sqrt
 
 class AudioStartAnalysisService : Service() {
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+
     companion object {
         const val AUDIBLE_THRESHOLD_DBFS = -50.0
         const val WINDOW_MS = 10
@@ -45,9 +49,11 @@ class AudioStartAnalysisService : Service() {
         val audioStartMs = detectAudioStart(file)
 
         dbQuery {
+            val before = entityStates(EntityType.SONG, listOf(songId))
             SongTable.update({ SongTable.id eq songId }) {
                 it[SongTable.audioStartMs] = audioStartMs
             }
+            entityChangeRecorder.recordChanges(before)
         }
 
         return audioStartMs

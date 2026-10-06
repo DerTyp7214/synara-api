@@ -1,0 +1,19 @@
+# Writes the scanner cannot attribute to a table: through a variable or raw SQL (EntityChangeCoverageTest).
+# file | enclosing function | receiver | statement | number of such statements in the function | verdict
+# Verdicts: RECORDED: <tables reached and where it is recorded>, MIGRATION (a migration that ran before tracking began
+# or that restarts tracking), BOOKKEEPING: <reason>. Entries are sorted.
+server/src/main/kotlin/dev/dertyp/core/CachedCreditOrder.kt | applyCachedCreditOrder | columns.table | update | 1 | RECORDED: SongArtistTable or AlbumArtistTable positions, recorded by the callers SongService.createBatch and AlbumService.getOrBulkCreateWithResult, the migration caller BackfillArtistCreditOrder is a migration
+server/src/main/kotlin/dev/dertyp/core/db/SqliteForeignKeyCheck.kt | run | raw SQL | exec | 1 | BOOKKEEPING: PRAGMA foreign_key_check, a read
+server/src/main/kotlin/dev/dertyp/migrations/custom/RemoveForeignKeyOrphans.kt | migrate | key.fromTable | deleteWhere | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/migrations/custom/RemoveForeignKeyOrphans.kt | setNull | key.fromTable | update | 1 | MIGRATION
+server/src/main/kotlin/dev/dertyp/services/AudioAnalysisService.kt | saveCredits | table | deleteWhere | 1 | RECORDED: song credit tables (SongComposerTable, SongLyricistTable, SongProducerTable), recorded by updated(SONG) of the caller saveAudioData
+server/src/main/kotlin/dev/dertyp/services/AudioAnalysisService.kt | saveCredits | table | insert | 1 | RECORDED: song credit tables (SongComposerTable, SongLyricistTable, SongProducerTable), recorded by updated(SONG) of the caller saveAudioData
+server/src/main/kotlin/dev/dertyp/services/DbManagementService.kt | clear | table | deleteAll | 1 | RECORDED: database restore over every table, no change rows, importData calls EntityChangeRecorder.restartTracking after a successful import and after one that failed once it had started writing, so every client reloads
+server/src/main/kotlin/dev/dertyp/services/DbManagementService.kt | insertChunk | table | batchInsert | 1 | RECORDED: database restore over every table, no change rows, importData calls EntityChangeRecorder.restartTracking after a successful import and after one that failed once it had started writing, so every client reloads
+server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | repoint | table | update | 1 | RECORDED: every column referencing ImageTable, recorded by updated(SONG, ALBUM, ARTIST, PLAYLIST, USER_PLAYLIST, COLLECTION) of the caller mergeDuplicateImages, user profile and release images are not tracked
+server/src/main/kotlin/dev/dertyp/services/SearchIndexWorker.kt | fetchAlbumData | raw SQL | exec | 1 | BOOKKEEPING: raw SELECT, a read
+server/src/main/kotlin/dev/dertyp/services/SearchIndexWorker.kt | fetchArtistData | raw SQL | exec | 1 | BOOKKEEPING: raw SELECT, a read
+server/src/main/kotlin/dev/dertyp/services/SearchIndexWorker.kt | fetchSongData | raw SQL | exec | 1 | BOOKKEEPING: raw SELECT, a read
+server/src/main/kotlin/dev/dertyp/services/SearchIndexWorker.kt | rebuildAlbumSearchVector | raw SQL | exec | 1 | BOOKKEEPING: search_vector only (raw UPDATE), no client model exposes it
+server/src/main/kotlin/dev/dertyp/services/SearchIndexWorker.kt | rebuildArtistSearchVector | raw SQL | exec | 1 | BOOKKEEPING: search_vector only (raw UPDATE), no client model exposes it
+server/src/main/kotlin/dev/dertyp/services/SearchIndexWorker.kt | rebuildSongSearchVector | raw SQL | exec | 1 | BOOKKEEPING: search_vector only (raw UPDATE), no client model exposes it

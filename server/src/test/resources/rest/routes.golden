@@ -105,6 +105,12 @@ GET /discovery/songsBySameLyricists IDiscoveryService.getSongsBySameLyricists [q
 GET /discovery/songsBySameProducers IDiscoveryService.getSongsBySameProducers [q:seedSongIds q:limit?] JSON
 POST /discovery/albumMosaic IDiscoveryService.createAlbumMosaic [b:image q:width q:height q:page? q:pageSize? q:range?] JSON
 POST /discovery/songMosaic IDiscoveryService.createSongMosaic [b:image q:width q:height q:page? q:pageSize? q:range?] JSON
+GET /entityChange/allChanges IEntityChangeService.allChanges [q:since] SSE
+GET /entityChange/byAlbum/{albumId} IEntityChangeService.byAlbum [p:albumId q:since] SSE
+GET /entityChange/byArtist/{artistId} IEntityChangeService.byArtist [p:artistId q:since] SSE
+GET /entityChange/byCollection/{collectionId} IEntityChangeService.byCollection [p:collectionId q:since] SSE
+GET /entityChange/byPlaylist/{playlistId} IEntityChangeService.byPlaylist [p:playlistId q:since] SSE
+GET /entityChange/window IEntityChangeService.getWindow [] JSON
 GET /favSync/latestFavSync IFavSyncService.getLatestFavSync [q:service] JSON
 POST /favSync/insertFavSync IFavSyncService.insertFavSync [q:service b:syncedAt] JSON
 GET /handshake/handshake IHandshakeService.handshake [] JSON PUBLIC

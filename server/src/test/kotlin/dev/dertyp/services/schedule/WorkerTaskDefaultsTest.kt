@@ -129,6 +129,12 @@ class WorkerTaskDefaultsTest {
         ),
         TaskConfiguration(TaskKeys.LOG_CLEANUP_WORKER, "Log Cleanup Worker", true, TriggerDefinition.Cron("0 0 * * *")),
         TaskConfiguration(
+            TaskKeys.ENTITY_CHANGE_CLEANUP_WORKER,
+            "Entity Change Cleanup Worker",
+            true,
+            TriggerDefinition.Cron("15 0 * * *")
+        ),
+        TaskConfiguration(
             TaskKeys.SEARCH_INDEX_REBUILD_WORKER,
             "Search Index Rebuild Worker",
             true,

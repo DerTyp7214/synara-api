@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.paging
 import dev.dertyp.core.rankedSearchQuery
+import dev.dertyp.data.EntityType
 import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.Playlist
@@ -28,6 +29,7 @@ import java.util.UUID
 class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
     private val imageService by inject<ImageService>()
     private val redisSearchService by inject<RedisSearchService>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
 
     companion object {
         fun mapPlaylist(resultRow: ResultRow): Playlist {
@@ -115,6 +117,8 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
     }.flowOn(Dispatchers.IO)
 
     override suspend fun delete(id: UUID): Boolean = dbQuery {
+        if (PlaylistTable.select(PlaylistTable.id).where { PlaylistTable.id eq id }.empty()) return@dbQuery false
+        entityChangeRecorder.deleting(EntityType.PLAYLIST, listOf(id))
         PlaylistTable.deleteWhere { PlaylistTable.id eq id } == 1
     }
 
@@ -245,71 +249,53 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
             val allUniqueImageHashes = playlists.mapNotNull { it.imageHash }.distinct()
             val allUniqueSongPaths = playlists.flatMap { it.songPaths }.distinct()
 
-            val existingRows = dbQuery {
-                PlaylistTable
-                    .select(PlaylistTable.id, PlaylistTable.name)
-                    .where { PlaylistTable.name inList playlists.map { it.name } }
-                    .toList()
-            }
-
-            val existingNames = existingRows.map { it[PlaylistTable.name] }.toSet()
-            val existingMap = existingRows.associate { it[PlaylistTable.name] to it[PlaylistTable.id].value }
-
-            val existingPlaylists = playlists.filter { it.name in existingNames }.mapNotNull { existingMap[it.name] }
-
-            dbQuery {
-                PlaylistTable.deleteWhere {
-                    PlaylistTable.id inList existingPlaylists
-                }
-                PlaylistSongTable.deleteWhere {
-                    PlaylistSongTable.playlistId inList existingPlaylists
-                }
-            }
+            val idsByName = PlaylistTable
+                .select(PlaylistTable.id, PlaylistTable.name)
+                .where { PlaylistTable.name inList playlists.map { it.name } }
+                .groupBy({ it[PlaylistTable.name] }, { it[PlaylistTable.id].value })
+            val idByName = idsByName.mapValuesTo(mutableMapOf()) { (_, ids) -> ids.minBy(UUID::toString) }
+            val duplicates = idsByName.flatMap { (name, ids) -> ids - idByName.getValue(name) }
+            val playlistIds = playlists.map { idByName.getOrPut(it.name) { UUID.randomUUID() } }
+            val incoming = playlists.associateBy { idByName.getValue(it.name) }
 
             val imageIdMap: Map<String, UUID> = imageService.getCoverHashes(allUniqueImageHashes)
 
-            val songIdByPath: Map<String, UUID> = dbQuery {
-                SongTable
-                    .select(SongTable.id, SongTable.filePath)
-                    .where { SongTable.filePath inList allUniqueSongPaths }
-                    .associate { it[SongTable.filePath] to it[SongTable.id].value }
-            }
+            val songIdByPath: Map<String, UUID> = SongTable
+                .select(SongTable.id, SongTable.filePath)
+                .where { SongTable.filePath inList allUniqueSongPaths }
+                .associate { it[SongTable.filePath] to it[SongTable.id].value }
 
-            val playlistInsertResults: List<ResultRow> = dbQuery {
-                PlaylistTable.batchInsert(playlists) { playlist ->
-                    val imageId = playlist.imageHash?.let { imageIdMap[it] }
-
-                    this[PlaylistTable.name] = playlist.name
-                    this[PlaylistTable.imageId] = imageId
-                }
-            }
-
-            val insertedPlaylistsWithData = playlistInsertResults
-                .map { it[PlaylistTable.id].value to playlists[playlistInsertResults.indexOf(it)] }
-
-            val insertedPlaylistIds = insertedPlaylistsWithData.map { it.first }
-
-            val playlistSongLinks = insertedPlaylistsWithData.flatMap { (playlistId, playlistData) ->
+            val playlistSongLinks = incoming.flatMap { (playlistId, playlistData) ->
                 var position = 1
                 playlistData.songPaths.mapNotNull { songPath ->
-                    val songId = songIdByPath[songPath]
-
-                    songId?.let {
-                        val link = Triple(playlistId, it, position++)
-                        link
-                    }
+                    songIdByPath[songPath]?.let { Triple(playlistId, it, position++) }
                 }
             }.distinctBy { listOf(it.first, it.second) }
 
-            dbQuery {
-                PlaylistSongTable.batchInsert(playlistSongLinks) { (playlistId, songId, position) ->
-                    this[PlaylistSongTable.playlistId] = playlistId
-                    this[PlaylistSongTable.songId] = songId
-                    this[PlaylistSongTable.position] = position
-                }
+            if (duplicates.isNotEmpty()) {
+                entityChangeRecorder.deleting(EntityType.PLAYLIST, duplicates)
+                PlaylistTable.deleteWhere { PlaylistTable.id inList duplicates }
             }
 
-            insertedPlaylistIds
+            val before = entityStates(EntityType.PLAYLIST, incoming.keys)
+            PlaylistTable.batchUpsert(
+                incoming.entries,
+                PlaylistTable.id,
+                shouldReturnGeneratedValues = false
+            ) { (playlistId, playlist) ->
+                this[PlaylistTable.id] = playlistId
+                this[PlaylistTable.name] = playlist.name
+                this[PlaylistTable.imageId] = playlist.imageHash?.let { imageIdMap[it] }
+            }
+            PlaylistSongTable.deleteWhere { PlaylistSongTable.playlistId inList incoming.keys }
+            PlaylistSongTable.batchInsert(playlistSongLinks) { (playlistId, songId, position) ->
+                this[PlaylistSongTable.playlistId] = playlistId
+                this[PlaylistSongTable.songId] = songId
+                this[PlaylistSongTable.position] = position
+            }
+            entityChangeRecorder.recordChanges(before)
+
+            playlistIds
         }
 
     override suspend fun getOrAddPlaylist(
@@ -329,7 +315,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
             PlaylistTable.insertAndGetId {
                 it[name] = playlist.name
                 it[imageId] = image
-            }.value
+            }.value.also { entityChangeRecorder.created(EntityType.PLAYLIST, listOf(it)) }
         }
     }
 
@@ -345,9 +331,11 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
             this[PlaylistSongTable.songId] = songId
             this[PlaylistSongTable.position] = currentPosition++
         }
+        if (songIds.isNotEmpty()) entityChangeRecorder.membersChanged(EntityType.PLAYLIST, listOf(id))
     }
 
     suspend fun upsertPlaylist(playlist: Playlist) = dbQuery {
+        val before = entityStates(EntityType.PLAYLIST, listOf(playlist.id))
         PlaylistTable.upsert(PlaylistTable.id) {
             it[id] = playlist.id
             it[name] = playlist.name
@@ -361,5 +349,6 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
             this[PlaylistSongTable.songId] = songId
             this[PlaylistSongTable.position] = position++
         }
+        entityChangeRecorder.recordChanges(before)
     }
 }

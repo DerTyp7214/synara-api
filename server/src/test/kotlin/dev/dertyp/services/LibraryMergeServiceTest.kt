@@ -8,6 +8,7 @@ import dev.dertyp.db.*
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.TidalService
+import dev.dertyp.testing.entityChangeTables
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
@@ -47,6 +48,7 @@ class LibraryMergeServiceTest : KoinTest {
 
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { environment }
                 single { songService }
                 single { albumService }
@@ -60,6 +62,7 @@ class LibraryMergeServiceTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 ArtistTable,
                 AlbumVersionGroupTable,
                 AlbumTable,
@@ -101,6 +104,7 @@ class LibraryMergeServiceTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        unmockkObject(MetadataService.Companion)
         stopKoin()
         TestDatabase.cleanUp()
     }

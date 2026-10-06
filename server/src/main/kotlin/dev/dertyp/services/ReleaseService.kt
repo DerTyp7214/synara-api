@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.ApiClient
 import dev.dertyp.core.*
 import dev.dertyp.data.ArtistType
+import dev.dertyp.data.EntityType
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.MusicBrainzRelease
 import dev.dertyp.data.MusicBrainzReleaseGroup
@@ -45,6 +46,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val appleMusicReleaseService by inject<AppleMusicReleaseService>()
     private val providerLinkService by inject<ProviderLinkService>()
     private val releaseArtistService by inject<ReleaseArtistService>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
 
     private val RELEASE_REFRESH_WINDOW = 14.days
     private val REFRESH_COOLDOWN = 20.hours
@@ -64,10 +66,17 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     ): Boolean {
         val artistId = getOrCreateArtistByMbId(musicBrainzId, priority) ?: return false
         val followed = dbQuery {
-            FollowedArtistTable.upsert(FollowedArtistTable.userId, FollowedArtistTable.artistId) {
+            val alreadyFollowed = !FollowedArtistTable
+                .select(FollowedArtistTable.artistId)
+                .where { FollowedArtistTable.userId eq userId }
+                .andWhere { FollowedArtistTable.artistId eq artistId }
+                .empty()
+            val followed = FollowedArtistTable.upsert(FollowedArtistTable.userId, FollowedArtistTable.artistId) {
                 it[FollowedArtistTable.userId] = userId
                 it[FollowedArtistTable.artistId] = artistId
             }.insertedCount > 0
+            if (!alreadyFollowed) entityChangeRecorder.likesChanged(userId, EntityType.ARTIST, listOf(artistId))
+            followed
         }
         scope.launch {
             runCatchingCancellable { backfillMissingRecentReleaseImages(artistId) }
@@ -100,17 +109,30 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     }
 
     suspend fun unfollowArtist(userId: UUID, artistId: UUID): Boolean = dbQuery {
-        FollowedArtistTable.deleteWhere {
+        val unfollowed = FollowedArtistTable.deleteWhere {
             (FollowedArtistTable.userId eq userId) and (FollowedArtistTable.artistId eq artistId)
         } > 0
+        if (unfollowed) entityChangeRecorder.likesChanged(userId, EntityType.ARTIST, listOf(artistId))
+        unfollowed
     }
 
     suspend fun unfollowArtistByMusicBrainzId(userId: UUID, musicBrainzId: UUID): Boolean = dbQuery {
-        FollowedArtistTable.deleteWhere {
+        val unfollowedArtists = FollowedArtistTable
+            .select(FollowedArtistTable.artistId)
+            .where { FollowedArtistTable.userId eq userId }
+            .andWhere {
+                FollowedArtistTable.artistId inSubQuery ArtistMusicBrainzTable
+                    .select(ArtistMusicBrainzTable.artistId)
+                    .where { ArtistMusicBrainzTable.musicBrainzId eq musicBrainzId }
+            }
+            .map { it[FollowedArtistTable.artistId].value }
+        val unfollowed = FollowedArtistTable.deleteWhere {
             (FollowedArtistTable.userId eq userId) and (FollowedArtistTable.artistId inSubQuery ArtistMusicBrainzTable
                 .select(ArtistMusicBrainzTable.artistId)
                 .where { ArtistMusicBrainzTable.musicBrainzId eq musicBrainzId })
         } > 0
+        if (unfollowed) entityChangeRecorder.likesChanged(userId, EntityType.ARTIST, unfollowedArtists)
+        unfollowed
     }
 
     suspend fun getFollowedArtists(userId: UUID): List<FollowedArtist> = dbQuery {

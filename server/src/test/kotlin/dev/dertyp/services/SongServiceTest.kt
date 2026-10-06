@@ -19,6 +19,7 @@ import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.import.Type
 import dev.dertyp.testing.FakeCredentialProvider
 import dev.dertyp.services.metadata.*
+import dev.dertyp.testing.entityChangeTables
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -58,6 +59,7 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
 import org.koin.test.get
+import java.time.LocalDate
 import java.util.UUID
 
 class SongServiceTest : KoinTest {
@@ -82,6 +84,7 @@ class SongServiceTest : KoinTest {
     fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { environment }
                 single { transcoder }
                 single { musicBrainzService }
@@ -111,6 +114,7 @@ class SongServiceTest : KoinTest {
         database = TestDatabase.connect(dialect, "song_rpc_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 UserTable,
                 SongTable, SongVariantTable,
                 AlbumTable,
@@ -3254,5 +3258,67 @@ class SongServiceTest : KoinTest {
             transaction(database) {
                 assertEquals(0, AlbumTable.selectAll().where { AlbumTable.id eq emptyAlbum }.count())
             }
+        }
+
+    private fun undatedSongs(album: InsertableAlbum, songDates: List<LocalDate?>): List<InsertableSong> =
+        songDates.mapIndexed { index, songDate ->
+            InsertableSong(
+                title = "Track ${index + 1}",
+                artists = album.artists,
+                album = album,
+                duration = 100L * (index + 1),
+                explicit = false,
+                releaseDate = songDate,
+                path = "/path/${album.name}-${index + 1}.flac",
+                trackNumber = index + 1
+            )
+        }
+
+    private fun storedAlbums(): List<Triple<UUID, String?, Boolean>> = transaction(database) {
+        AlbumTable.selectAll().map {
+            Triple(it[AlbumTable.id].value, it[AlbumTable.releaseDate], it[AlbumTable.releaseDateEstimated])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `indexing the same files without date tags twice creates no second album and no duplicate songs`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val songs = undatedSongs(InsertableAlbum("Undated Album", listOf("Undated Artist"), songCount = 2), listOf(null, null))
+
+        val created = songService.createBatch(songs)
+        val albumsAfterFirst = storedAlbums()
+        val again = songService.createBatch(songs)
+
+        assertEquals(2, created.size)
+        assertTrue(again.isEmpty())
+        assertEquals(1, albumsAfterFirst.size)
+        assertTrue(albumsAfterFirst.single().third)
+        assertEquals(albumsAfterFirst, storedAlbums())
+        assertEquals(setOf(albumsAfterFirst.single().first), created.values.mapNotNull { it.album?.id }.toSet())
+        assertEquals(2L, transaction(database) { SongTable.selectAll().count() })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an album without a date takes the earliest date of its songs and is found again`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val songs = undatedSongs(
+                InsertableAlbum("Song Dated Album", listOf("Undated Artist"), songCount = 3),
+                listOf(LocalDate.of(2018, 3, 2), LocalDate.of(2017, 6, 5), null)
+            )
+
+            val created = songService.createBatch(songs)
+            val albumsAfterFirst = storedAlbums()
+            val again = songService.createBatch(songs)
+
+            assertEquals(3, created.size)
+            assertTrue(again.isEmpty())
+            assertEquals(listOf("2017-06-05" to false), albumsAfterFirst.map { it.second to it.third })
+            assertEquals(albumsAfterFirst, storedAlbums())
+            assertEquals(3L, transaction(database) { SongTable.selectAll().count() })
         }
 }

@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.ApiClient
 import dev.dertyp.core.*
+import dev.dertyp.data.EntityType
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.db.*
 import dev.dertyp.core.db.dbQuery
@@ -31,6 +32,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     private val imageService by inject<ImageService>()
     private val genreService by inject<GenreService>()
     private val musicBrainzService by inject<MusicBrainzService>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
 
     private val artistImageProviders = listOf(
         IMetadataService.MetadataType.theAudioDB,
@@ -130,11 +132,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         if (genres.isNotEmpty()) {
                             val genreIds = genreService.getOrCreateGenres(genres.toList())
                             dbQuery {
+                                val before = entityStates(EntityType.ARTIST, listOf(id))
                                 ArtistGenreTable.deleteWhere { ArtistGenreTable.artistId eq id }
                                 ArtistGenreTable.batchInsert(genreIds) { genreId ->
                                     this[ArtistGenreTable.artistId] = id
                                     this[ArtistGenreTable.genreId] = genreId
                                 }
+                                entityChangeRecorder.recordChanges(before)
                             }
                             foundCount++
                         }
@@ -209,11 +213,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         if (genres.isNotEmpty()) {
                             val genreIds = genreService.getOrCreateGenres(genres.toList())
                             dbQuery {
+                                val before = entityStates(EntityType.ALBUM, listOf(id))
                                 AlbumGenreTable.deleteWhere { AlbumGenreTable.albumId eq id }
                                 AlbumGenreTable.batchInsert(genreIds) { genreId ->
                                     this[AlbumGenreTable.albumId] = id
                                     this[AlbumGenreTable.genreId] = genreId
                                 }
+                                entityChangeRecorder.recordChanges(before)
                             }
                             foundCount++
                         }
@@ -287,11 +293,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         if (genres.isNotEmpty()) {
                             val genreIds = genreService.getOrCreateGenres(genres.toList())
                             dbQuery {
+                                val before = entityStates(EntityType.SONG, listOf(id))
                                 SongGenreTable.deleteWhere { SongGenreTable.songId eq id }
                                 SongGenreTable.batchInsert(genreIds) { genreId ->
                                     this[SongGenreTable.songId] = id
                                     this[SongGenreTable.genreId] = genreId
                                 }
+                                entityChangeRecorder.recordChanges(before)
                             }
                             foundCount++
                         }
@@ -505,10 +513,11 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             }
 
                             val updates = dbQuery {
+                                val before = entityStates(EntityType.ARTIST, listOf(id))
                                 ArtistTable.update({ ArtistTable.id eq id }) {
                                     it[ArtistTable.image] = EntityID(imageId, ImageTable)
                                     it[ArtistTable.lastImageCheck] = System.currentTimeMillis()
-                                }
+                                }.also { entityChangeRecorder.recordChanges(before) }
                             }
 
                             if (updates == 1) {
@@ -610,19 +619,23 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         if (genresToStore.isNotEmpty()) {
                             val genreIds = genreService.getOrCreateGenres(genresToStore)
                             dbQuery {
+                                val before = entityStates(EntityType.ARTIST, listOf(id))
                                 ArtistGenreTable.deleteWhere { ArtistGenreTable.artistId eq id }
                                 ArtistGenreTable.batchInsert(genreIds) { genreId ->
                                     this[ArtistGenreTable.artistId] = id
                                     this[ArtistGenreTable.genreId] = genreId
                                 }
+                                entityChangeRecorder.recordChanges(before)
                             }
                         }
 
                         if (!artist.biography.isNullOrBlank()) {
                             dbQuery {
+                                val before = entityStates(EntityType.ARTIST, listOf(id))
                                 ArtistTable.update({ ArtistTable.id eq id }) {
                                     it[ArtistTable.about] = artist.biography!!
                                 }
+                                entityChangeRecorder.recordChanges(before)
                             }
                         }
 
@@ -643,9 +656,11 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                                 if (imageId != null) {
                                     dbQuery {
+                                        val before = entityStates(EntityType.ARTIST, listOf(id))
                                         ArtistTable.update({ ArtistTable.id eq id }) {
                                             it[ArtistTable.image] = EntityID(imageId, ImageTable)
                                         }
+                                        entityChangeRecorder.recordChanges(before)
                                     }
                                 }
                             }
@@ -774,9 +789,10 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             }
 
                             val updates = dbQuery {
+                                val before = entityStates(EntityType.ALBUM, listOf(id))
                                 AlbumTable.update({ AlbumTable.id eq id }) {
                                     it[AlbumTable.cover] = EntityID(imageId, ImageTable)
-                                }
+                                }.also { entityChangeRecorder.recordChanges(before) }
                             }
 
                             if (updates == 1) {
@@ -875,11 +891,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         if (albumMetadata.genres.isNotEmpty()) {
                             val genreIds = genreService.getOrCreateGenres(albumMetadata.genres)
                             dbQuery {
+                                val before = entityStates(EntityType.ALBUM, listOf(id))
                                 AlbumGenreTable.deleteWhere { AlbumGenreTable.albumId eq id }
                                 AlbumGenreTable.batchInsert(genreIds) { genreId ->
                                     this[AlbumGenreTable.albumId] = id
                                     this[AlbumGenreTable.genreId] = genreId
                                 }
+                                entityChangeRecorder.recordChanges(before)
                             }
                         }
 
@@ -901,9 +919,11 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                                 if (imageId != null) {
                                     dbQuery {
+                                        val before = entityStates(EntityType.ALBUM, listOf(id))
                                         AlbumTable.update({ AlbumTable.id eq id }) {
                                             it[AlbumTable.cover] = EntityID(imageId, ImageTable)
                                         }
+                                        entityChangeRecorder.recordChanges(before)
                                     }
                                 }
                             }
@@ -995,11 +1015,13 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                         val genreIds = genreService.getOrCreateGenres(trackMetadata.genres)
                         dbQuery {
+                            val before = entityStates(EntityType.SONG, listOf(id))
                             SongGenreTable.deleteWhere { SongGenreTable.songId eq id }
                             SongGenreTable.batchInsert(genreIds) { genreId ->
                                 this[SongGenreTable.songId] = id
                                 this[SongGenreTable.genreId] = genreId
                             }
+                            entityChangeRecorder.recordChanges(before)
                         }
 
                         updateLastMetadataCheckAlbum(id)
@@ -1083,19 +1105,23 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
         if (genresToStore.isNotEmpty()) {
             val genreIds = genreService.getOrCreateGenres(genresToStore)
             dbQuery {
+                val before = entityStates(EntityType.ARTIST, listOf(id))
                 ArtistGenreTable.deleteWhere { ArtistGenreTable.artistId eq id }
                 ArtistGenreTable.batchInsert(genreIds) { genreId ->
                     this[ArtistGenreTable.artistId] = id
                     this[ArtistGenreTable.genreId] = genreId
                 }
+                entityChangeRecorder.recordChanges(before)
             }
         }
 
         if (!artist.biography.isNullOrBlank()) {
             dbQuery {
+                val before = entityStates(EntityType.ARTIST, listOf(id))
                 ArtistTable.update({ ArtistTable.id eq id }) {
                     it[ArtistTable.about] = artist.biography!!
                 }
+                entityChangeRecorder.recordChanges(before)
             }
         }
 
@@ -1119,9 +1145,11 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
 
                 if (imageId != null) {
                     dbQuery {
+                        val before = entityStates(EntityType.ARTIST, listOf(id))
                         ArtistTable.update({ ArtistTable.id eq id }) {
                             it[ArtistTable.image] = EntityID(imageId, ImageTable)
                         }
+                        entityChangeRecorder.recordChanges(before)
                     }
                 }
             }

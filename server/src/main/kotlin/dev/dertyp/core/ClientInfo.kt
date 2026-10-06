@@ -69,6 +69,12 @@ enum class ClientFeature(val minApiVersion: Int, val maxApiVersion: Int? = null)
         fallback = "Every edition is its own entry, following the entry it was folded into, and `versions` is empty.",
     )
     ALBUM_VERSIONS(9),
+
+    @FeatureDoc(
+        introduces = "The @IEntityChangeService service, which answers what changed in the library since a time the client names.",
+        fallback = "There is none, a client reads everything again.",
+    )
+    ENTITY_CHANGES(10),
 }
 
 data class ClientInfo(

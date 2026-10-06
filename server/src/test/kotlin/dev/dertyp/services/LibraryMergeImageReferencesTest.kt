@@ -7,6 +7,7 @@ import dev.dertyp.data.PodcastSource
 import dev.dertyp.db.*
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.metadata.TidalService
+import dev.dertyp.testing.entityChangeTables
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -32,6 +33,7 @@ class LibraryMergeImageReferencesTest : KoinTest {
     private fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { mockk<ApplicationEnvironment>() }
                 single { mockk<SongService>() }
                 single { mockk<AlbumService>() }
@@ -45,6 +47,7 @@ class LibraryMergeImageReferencesTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_image_refs_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 ArtistTable,
                 AlbumTable,
                 SongTable,

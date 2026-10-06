@@ -6,6 +6,7 @@ import dev.dertyp.data.TitleTag
 import dev.dertyp.data.TitleTagKind
 import dev.dertyp.db.*
 import dev.dertyp.plugins.PluginManager
+import dev.dertyp.testing.entityChangeTables
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -49,6 +50,7 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
 
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { environment }
                 single { songService }
                 single { albumService }
@@ -59,6 +61,7 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_fix_test")
         transaction(database) {
             SchemaUtils.create(
+                *entityChangeTables,
                 ArtistTable, AlbumVersionGroupTable, AlbumTable, AlbumTitleTagTable, SongTable, SongVariantTable, ImageTable, PlaylistTable,
                 UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
                 SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,

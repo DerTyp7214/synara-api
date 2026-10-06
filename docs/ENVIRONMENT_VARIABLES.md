@@ -104,6 +104,7 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 
 | Variable | Description | Required | Default (Standalone) | Default (Docker) |
 |:---|:---|:---:|:---|:---|
+| `ENTITY_CHANGE_RETENTION_DAYS` | How long (in days) recorded library changes are kept for clients that ask what changed since their last pull. A client that was away longer reads everything again. | No | `30` | - |
 | `SERVER_SSL_SUPPORTED` |  | No | `false` | - |
 | `WORKER_THREAD_MULTIPLIER` | Multiplier for background worker threads. Scales the number of parallel tasks relative to CPU cores. | No | `1.0` | - |
 | `YOUTUBE_API_KEY` | Youtube API key for YouTube Data API v3 (Downloader). | No | - | - |

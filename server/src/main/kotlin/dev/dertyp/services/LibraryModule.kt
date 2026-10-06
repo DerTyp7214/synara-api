@@ -20,6 +20,8 @@ val libraryModule = module {
     singleOf(::LibraryFileDeleter)
     singleOf(::CustomAudioService)
     singleOf(::TimecodeTagService)
+    singleOf(::EntityChangeRecorder)
+    singleOf(::EntityChangeService)
     singleOf(::ImageService) { bind<ImageLibrary>() }
     singleOf(::AnimatedImageService)
     singleOf(::LyricsSearch)

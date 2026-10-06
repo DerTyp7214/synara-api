@@ -4,6 +4,8 @@ import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
 import dev.dertyp.core.db.SchemaTables
 import dev.dertyp.core.db.dbQuery
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
@@ -66,7 +68,7 @@ data class TableData(
     val rows: List<Map<String, DbValue>>
 )
 
-class DbManagementService : IDbManagementService {
+class DbManagementService(private val entityChangeRecorder: EntityChangeRecorder) : IDbManagementService {
     private val rowSerializer = MapSerializer(String.serializer(), DbValue.serializer())
 
     private val tables: List<Table> by lazy {
@@ -120,21 +122,33 @@ class DbManagementService : IDbManagementService {
     }
 
     suspend fun importData(input: InputStream) {
-        ZstdInputStream(ShieldedInputStream(input)).use { zstd ->
-            DataInputStream(zstd).use { dis ->
-                val header = dis.readInt()
-                if (header < 0) {
-                    importV2(dis)
-                } else {
-                    importV1(dis, header)
+        val restore = Restore()
+        val failure = runCatching {
+            ZstdInputStream(ShieldedInputStream(input)).use { zstd ->
+                DataInputStream(zstd).use { dis ->
+                    val header = dis.readInt()
+                    if (header < 0) {
+                        importV2(dis, restore)
+                    } else {
+                        importV1(dis, header, restore)
+                    }
                 }
             }
+        }.exceptionOrNull()
+        if (failure == null || restore.started) {
+            val restart = runCatching {
+                withContext(NonCancellable) { dbQuery { entityChangeRecorder.restartTracking() } }
+            }
+            if (failure == null) restart.getOrThrow() else restart.exceptionOrNull()?.let(failure::addSuppressed)
         }
+        if (failure != null) throw failure
     }
 
     private inner class Restore {
         private val cleared = mutableSetOf<Table>()
         private val restored = mutableSetOf<Table>()
+
+        val started get() = cleared.isNotEmpty()
 
         fun isReady(table: Table) = parents.getValue(table).all { it in restored }
 
@@ -192,8 +206,7 @@ class DbManagementService : IDbManagementService {
         return file
     }
 
-    private suspend fun importV2(dis: DataInputStream) {
-        val restore = Restore()
+    private suspend fun importV2(dis: DataInputStream, restore: Restore) {
         val deferred = mutableMapOf<Table, File>()
         try {
             val tableCount = dis.readInt()
@@ -217,8 +230,7 @@ class DbManagementService : IDbManagementService {
     }
 
     @OptIn(ExperimentalSerializationApi::class)
-    private suspend fun importV1(dis: DataInputStream, tableCount: Int) {
-        val restore = Restore()
+    private suspend fun importV1(dis: DataInputStream, tableCount: Int, restore: Restore) {
         val deferred = mutableMapOf<Table, ByteArray>()
         suspend fun restoreTable(table: Table, cborBytes: ByteArray) {
             restore.restore(table, Cbor.decodeFromByteArray<TableData>(cborBytes).rows.asSequence())

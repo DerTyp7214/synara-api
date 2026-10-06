@@ -2,11 +2,15 @@ package dev.dertyp.services.schedule
 
 import dev.dertyp.core.cleanTitle
 import dev.dertyp.core.fullName
+import dev.dertyp.data.EntityType
 import dev.dertyp.data.TaskKeys
 import dev.dertyp.db.SongTable
 import dev.dertyp.core.db.dbQuery
+import dev.dertyp.services.EntityChangeRecorder
 import dev.dertyp.services.LrcLibService
 import dev.dertyp.services.SongService
+import dev.dertyp.services.entityStates
+import dev.dertyp.services.recordChanges
 import kotlinx.coroutines.CancellationException
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
@@ -21,6 +25,7 @@ import kotlin.time.Duration.Companion.days
 class LrcLibWorker : Worker("LrcLibWorker") {
     private val lrcLibService by inject<LrcLibService>()
     private val songService by inject<SongService>()
+    private val entityChangeRecorder by inject<EntityChangeRecorder>()
 
     override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         var synced = 0
@@ -63,10 +68,12 @@ class LrcLibWorker : Worker("LrcLibWorker") {
                     val lyricsContent = result.syncedLyrics ?: result.plainLyrics
                     if (lyricsContent != null) {
                         dbQuery {
+                            val before = entityStates(EntityType.SONG, listOf(songId))
                             SongTable.update({ SongTable.id eq songId }) {
                                 it[SongTable.lyrics] = lyricsContent
                                 it[SongTable.lastLyricsFetchAttempt] = now.toEpochMilliseconds()
                             }
+                            entityChangeRecorder.recordChanges(before)
                         }
                         synced++
                         logger.info("Synced lyrics for song $songId from LrcLib.")

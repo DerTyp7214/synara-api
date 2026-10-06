@@ -12,6 +12,7 @@ import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.testing.entityChangeTables
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -46,6 +47,7 @@ class SongDeduplicationTest : KoinTest {
     private val pluginManager = mockk<PluginManager>(relaxed = true)
 
     private val allTables = arrayOf(
+        *entityChangeTables,
         ArtistTable, AlbumTable, SongTable, SongVariantTable, SongTitleTagTable, AlbumTitleTagTable, SongArtistTable,
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
@@ -69,6 +71,7 @@ class SongDeduplicationTest : KoinTest {
 
         startKoin {
             modules(module {
+                single { EntityChangeRecorder() }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { mockk<CachedMusicBrainzService>(relaxed = true) }
