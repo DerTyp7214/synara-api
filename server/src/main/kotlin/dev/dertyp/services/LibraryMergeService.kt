@@ -1,9 +1,12 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.SplitTitle
+import dev.dertyp.core.splitAlbumTitleTags
 import dev.dertyp.db.*
 import dev.dertyp.core.db.SchemaTables
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.PluginManager
+import dev.dertyp.services.release.AlbumEditions
 import kotlinx.coroutines.sync.Mutex
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
@@ -562,15 +565,21 @@ class LibraryMergeService : Service() {
 
         val firstSong = songs.first()
         val newCover = firstSong[SongTable.cover]?.value
+        val edition = mbRelease
+            ?.let { AlbumEditions.fullName(it[MBReleaseTable.title], it[MBReleaseTable.disambiguation], null) }
+            ?.splitAlbumTitleTags()
+            ?: SplitTitle(originalAlbum[AlbumTable.name], originalAlbum.albumTitleTags())
 
         AlbumTable.insert { album ->
             album[id] = EntityID(newAlbumId, AlbumTable)
-            album[name] = mbRelease?.get(MBReleaseTable.title) ?: originalAlbum[AlbumTable.name]
+            album[name] = edition.title
+            album[titleTags] = encodeTitleTags(edition.tags)
             album[releaseDate] = mbRelease?.get(MBReleaseTable.date) ?: originalAlbum[AlbumTable.releaseDate]
             album[songCount] = mbTrackCount?.takeIf { it > 0 } ?: songs.size
             album[cover] = newCover?.let { id -> EntityID(id, ImageTable) }
             album[originalId] = null
         }
+        syncAlbumTitleTags(newAlbumId, edition.tags)
 
         if (suggestedMbId != null) {
             AlbumMusicBrainzTable.insert {
@@ -628,6 +637,10 @@ class LibraryMergeService : Service() {
         val mbIdA = albumA.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
         val mbIdB = albumB.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
         if (mbIdA != null && mbIdB != null && mbIdA != mbIdB) return 0
+
+        val tagsA = albumA.albumTitleTags().map { it.kind to it.label.lowercase() }.toSet()
+        val tagsB = albumB.albumTitleTags().map { it.kind to it.label.lowercase() }.toSet()
+        if (tagsA != tagsB) return 0
 
         val coverA = albumA.getOrNull(AlbumTable.cover)?.value
         val coverB = albumB.getOrNull(AlbumTable.cover)?.value

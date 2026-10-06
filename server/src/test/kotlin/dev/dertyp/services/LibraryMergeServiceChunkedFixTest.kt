@@ -41,7 +41,7 @@ class LibraryMergeServiceChunkedFixTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_chunked_fix_test")
         transaction(database) {
             SchemaUtils.create(
-                ArtistTable, AlbumTable, SongTable, SongVariantTable, ImageTable, PlaylistTable,
+                ArtistTable, AlbumTable, AlbumTitleTagTable, SongTable, SongVariantTable, ImageTable, PlaylistTable,
                 UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
                 SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
                 TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable,

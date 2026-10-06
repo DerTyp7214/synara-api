@@ -67,6 +67,7 @@ class AlbumServiceTest : KoinTest {
             SchemaUtils.create(
                 UserTable,
                 AlbumTable,
+                AlbumTitleTagTable,
                 AlbumArtistTable,
                 ArtistTable,
                 ArtistMemberTable,
@@ -197,6 +198,40 @@ class AlbumServiceTest : KoinTest {
         val result = service.rankedSearch(0, 10, "Master")
         assertEquals(1, result.data.size)
         assertEquals("Master of Puppets", result.data[0].name)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find albums by title tag label`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val editionId = UUID.randomUUID()
+        val plainId = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = editionId
+                it[name] = "The Divine Feminine"
+                it[titleTags] = """[{"kind":"VERSION","label":"10th Anniversary"}]"""
+                it[songCount] = 10
+            }
+            AlbumTable.insert {
+                it[id] = plainId
+                it[name] = "Swimming"
+                it[songCount] = 13
+            }
+        }
+
+        val byLabel = service.rankedSearch(0, 10, "anniversary")
+        assertEquals(listOf(editionId), byLabel.data.map { it.id })
+        assertEquals("The Divine Feminine", byLabel.data.single().name)
+
+        val byName = service.rankedSearch(0, 10, "Divine")
+        assertEquals(listOf(editionId), byName.data.map { it.id })
+
+        val byNameAndLabel = service.rankedSearch(0, 10, "divine feminine anniversary")
+        assertEquals(listOf(editionId), byNameAndLabel.data.map { it.id })
+
+        val other = service.rankedSearch(0, 10, "Swimming")
+        assertEquals(listOf(plainId), other.data.map { it.id })
     }
 
     @ParameterizedTest
@@ -1665,5 +1700,304 @@ class AlbumServiceTest : KoinTest {
 
         assertEquals(albumIds.toSet(), results.map { it.id }.toSet())
         assertEquals(count, results.size)
+    }
+
+    private fun albumTitleTagKinds(albumId: UUID): Set<TitleTagKind> = transaction(database) {
+        AlbumTitleTagTable.selectAll()
+            .where { AlbumTitleTagTable.albumId eq albumId }
+            .map { it[AlbumTitleTagTable.kind] }
+            .toSet()
+    }
+
+    private fun albumRow(albumId: UUID) = transaction(database) {
+        AlbumTable.selectAll().where { AlbumTable.id eq albumId }.single()
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getOrBulkCreateWithResult keeps an edition apart from the album with the same base name`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val released = LocalDate.of(2016, 9, 16)
+            val original = InsertableAlbum("The Album", listOf("Edition Artist"), releaseDate = released, songCount = 10)
+            val anniversary = InsertableAlbum(
+                "The Album (10th Anniversary)",
+                listOf("Edition Artist"),
+                releaseDate = released,
+                songCount = 10
+            )
+
+            val result = service.getOrBulkCreateWithResult(listOf(original, anniversary))
+
+            val originalId = result.albumToIds[original]!!
+            val anniversaryId = result.albumToIds[anniversary]!!
+            assertNotEquals(originalId, anniversaryId)
+            assertEquals(setOf(original, anniversary), result.newlyCreated)
+            assertEquals(2L, transaction(database) { AlbumTable.selectAll().count() })
+
+            val originalRow = albumRow(originalId)
+            assertEquals("The Album", originalRow[AlbumTable.name])
+            assertEquals(emptyList<TitleTag>(), originalRow.albumTitleTags())
+            assertEquals(emptySet<TitleTagKind>(), albumTitleTagKinds(originalId))
+
+            val anniversaryRow = albumRow(anniversaryId)
+            assertEquals("The Album", anniversaryRow[AlbumTable.name])
+            assertEquals(listOf(TitleTag(TitleTagKind.VERSION, "10th Anniversary")), anniversaryRow.albumTitleTags())
+            assertEquals(setOf(TitleTagKind.VERSION), albumTitleTagKinds(anniversaryId))
+
+            val stored = service.byId(anniversaryId)!!
+            assertEquals("The Album", stored.name)
+            assertEquals(listOf(TitleTag(TitleTagKind.VERSION, "10th Anniversary")), stored.tags)
+
+            val again = service.getOrBulkCreateWithResult(listOf(original, anniversary))
+            assertEquals(result.albumToIds, again.albumToIds)
+            assertEquals(emptySet<InsertableAlbum>(), again.newlyCreated)
+            assertEquals(2L, transaction(database) { AlbumTable.selectAll().count() })
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getOrBulkCreateWithResult splits name and tags on insert and fills the kind table`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val input = InsertableAlbum(
+                "Record (Deluxe Edition) (2011 Remaster)",
+                listOf("Tag Artist"),
+                originalId = "tidal:777"
+            )
+            val untouched = InsertableAlbum("Live at Wembley (Bootleg)", listOf("Tag Artist"), originalId = "tidal:778")
+
+            val ids = service.getOrBulkCreate(listOf(input, untouched))
+
+            val row = albumRow(ids[input]!!)
+            assertEquals("Record", row[AlbumTable.name])
+            assertEquals(
+                listOf(
+                    TitleTag(TitleTagKind.VERSION, "Deluxe Edition"),
+                    TitleTag(TitleTagKind.REMASTER, "2011 Remaster"),
+                ),
+                row.albumTitleTags(),
+            )
+            assertEquals(setOf(TitleTagKind.VERSION, TitleTagKind.REMASTER), albumTitleTagKinds(ids[input]!!))
+
+            val untouchedRow = albumRow(ids[untouched]!!)
+            assertEquals("Live at Wembley (Bootleg)", untouchedRow[AlbumTable.name])
+            assertEquals("[]", untouchedRow[AlbumTable.titleTags])
+            assertEquals(emptySet<TitleTagKind>(), albumTitleTagKinds(ids[untouched]!!))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `updateAlbum splits title tags and keeps the kind table in sync`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val id = UUID.randomUUID()
+        transaction(database) {
+            AlbumTable.insert {
+                it[AlbumTable.id] = id
+                it[name] = "Record"
+                it[songCount] = 10
+            }
+        }
+
+        val tagged = service.updateAlbum(service.byId(id)!!.copy(name = "Record (Deluxe Edition)"))
+
+        assertEquals("Record", tagged?.name)
+        assertEquals(listOf(TitleTag(TitleTagKind.VERSION, "Deluxe Edition")), tagged?.tags)
+        assertEquals("Record", albumRow(id)[AlbumTable.name])
+        assertEquals(setOf(TitleTagKind.VERSION), albumTitleTagKinds(id))
+
+        val retagged = service.updateAlbum(
+            tagged!!.copy(tags = listOf(TitleTag(TitleTagKind.REMASTER, "2011 Remaster")))
+        )
+
+        assertEquals("Record", retagged?.name)
+        assertEquals(listOf(TitleTag(TitleTagKind.REMASTER, "2011 Remaster")), retagged?.tags)
+        assertEquals(setOf(TitleTagKind.REMASTER), albumTitleTagKinds(id))
+
+        val cleared = service.updateAlbum(retagged!!.copy(tags = emptyList()))
+
+        assertEquals("Record", cleared?.name)
+        assertEquals(emptyList<TitleTag>(), cleared?.tags)
+        assertEquals("[]", albumRow(id)[AlbumTable.titleTags])
+        assertEquals(emptySet<TitleTagKind>(), albumTitleTagKinds(id))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getOrBulkCreateWithResult gives a matched album without barcode the incoming one`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val released = LocalDate.of(2020, 1, 1)
+            val (byName, byOriginalId) = transaction(database) {
+                val artist = ArtistTable.insertAndGetId { it[ArtistTable.name] = "Barcode Artist" }.value
+                val first = AlbumTable.insertAndGetId {
+                    it[AlbumTable.name] = "Matched By Name"
+                    it[AlbumTable.releaseDate] = "2020-01-01"
+                    it[AlbumTable.songCount] = 8
+                }.value
+                val second = AlbumTable.insertAndGetId {
+                    it[AlbumTable.name] = "Matched By Id"
+                    it[AlbumTable.originalId] = "tidal:4711"
+                    it[AlbumTable.barcode] = ""
+                }.value
+                for (album in listOf(first, second)) {
+                    AlbumArtistTable.insert {
+                        it[AlbumArtistTable.albumId] = album
+                        it[AlbumArtistTable.artistId] = artist
+                    }
+                }
+                first to second
+            }
+
+            val result = service.getOrBulkCreateWithResult(
+                listOf(
+                    InsertableAlbum(
+                        "Matched By Name",
+                        listOf("Barcode Artist"),
+                        releaseDate = released,
+                        songCount = 8,
+                        barcode = "0602547933515"
+                    ),
+                    InsertableAlbum(
+                        "Matched By Id",
+                        listOf("Barcode Artist"),
+                        originalId = "tidal:4711",
+                        barcode = "0602547933522"
+                    ),
+                )
+            )
+
+            assertEquals(setOf(byName, byOriginalId), result.albumToIds.values.toSet())
+            assertEquals(emptySet<InsertableAlbum>(), result.newlyCreated)
+            assertEquals("0602547933515", albumRow(byName)[AlbumTable.barcode])
+            assertEquals("0602547933522", albumRow(byOriginalId)[AlbumTable.barcode])
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getOrBulkCreateWithResult never overwrites an existing barcode or writes an invalid one`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val (withBarcode, withoutBarcode) = transaction(database) {
+                val artist = ArtistTable.insertAndGetId { it[ArtistTable.name] = "Barcode Artist" }.value
+                val first = AlbumTable.insertAndGetId {
+                    it[AlbumTable.name] = "Has Barcode"
+                    it[AlbumTable.originalId] = "tidal:1001"
+                    it[AlbumTable.barcode] = "0602547933515"
+                }.value
+                val second = AlbumTable.insertAndGetId {
+                    it[AlbumTable.name] = "No Barcode"
+                    it[AlbumTable.originalId] = "tidal:1002"
+                }.value
+                for (album in listOf(first, second)) {
+                    AlbumArtistTable.insert {
+                        it[AlbumArtistTable.albumId] = album
+                        it[AlbumArtistTable.artistId] = artist
+                    }
+                }
+                first to second
+            }
+
+            val result = service.getOrBulkCreateWithResult(
+                listOf(
+                    InsertableAlbum(
+                        "Has Barcode",
+                        listOf("Barcode Artist"),
+                        originalId = "tidal:1001",
+                        barcode = "0602547933522"
+                    ),
+                    InsertableAlbum("No Barcode", listOf("Barcode Artist"), originalId = "tidal:1002", barcode = "BARCODE"),
+                )
+            )
+
+            assertEquals(setOf(withBarcode, withoutBarcode), result.albumToIds.values.toSet())
+            assertEquals("0602547933515", albumRow(withBarcode)[AlbumTable.barcode])
+            assertNull(albumRow(withoutBarcode)[AlbumTable.barcode])
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `setMusicBrainzId updates the barcode when the album is mapped to another release`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val albumId = UUID.randomUUID()
+            val firstRelease = UUID.randomUUID()
+            val secondRelease = UUID.randomUUID()
+            val oversized = "9".repeat(40)
+
+            transaction(database) {
+                AlbumTable.insert {
+                    it[id] = albumId
+                    it[name] = "Album"
+                    it[songCount] = 1
+                }
+            }
+
+            coEvery { musicBrainzService.fetchReleaseById(firstRelease, any()) } returns MusicBrainzRelease(
+                id = firstRelease,
+                title = "Album",
+                barcode = "0602547933515"
+            )
+            coEvery { musicBrainzService.fetchReleaseById(secondRelease, any()) } returns MusicBrainzRelease(
+                id = secondRelease,
+                title = "Album",
+                barcode = oversized
+            )
+
+            service.setMusicBrainzId(albumId, firstRelease)
+            assertEquals("0602547933515", albumRow(albumId)[AlbumTable.barcode])
+
+            val remapped = service.setMusicBrainzId(albumId, secondRelease)
+            assertEquals(secondRelease, remapped?.musicBrainzId)
+            assertEquals(oversized.take(32), albumRow(albumId)[AlbumTable.barcode])
+        }
+
+    private fun insertAlbumWithBarcode(albumName: String, storedBarcode: String): UUID = transaction(database) {
+        val artist = ArtistTable.selectAll().where { ArtistTable.name eq "Barcode Artist" }
+            .firstOrNull()?.get(ArtistTable.id)?.value
+            ?: ArtistTable.insertAndGetId { it[ArtistTable.name] = "Barcode Artist" }.value
+        val album = AlbumTable.insertAndGetId {
+            it[AlbumTable.name] = albumName
+            it[AlbumTable.barcode] = storedBarcode
+        }.value
+        AlbumArtistTable.insert {
+            it[AlbumArtistTable.albumId] = album
+            it[AlbumArtistTable.artistId] = artist
+        }
+        album
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getOrBulkCreateWithResult matches barcodes regardless of zero padding`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val storedPadded = insertAlbumWithBarcode("Stored Padded", "0093624814337")
+        val storedShort = insertAlbumWithBarcode("Stored Short", "602445790000")
+
+        val shortInput = InsertableAlbum("Incoming Short", listOf("Barcode Artist"), barcode = "093624814337")
+        val paddedInput = InsertableAlbum("Incoming Padded", listOf("Barcode Artist"), barcode = "00602445790000")
+
+        val result = service.getOrBulkCreateWithResult(listOf(shortInput, paddedInput))
+
+        assertEquals(storedPadded, result.albumToIds[shortInput])
+        assertEquals(storedShort, result.albumToIds[paddedInput])
+        assertEquals(emptySet<InsertableAlbum>(), result.newlyCreated)
+        assertEquals(2L, transaction(database) { AlbumTable.selectAll().count() })
+        assertEquals("0093624814337", albumRow(storedPadded)[AlbumTable.barcode])
+        assertEquals("602445790000", albumRow(storedShort)[AlbumTable.barcode])
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getOrBulkCreateWithResult does not match different barcodes`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val stored = insertAlbumWithBarcode("Stored", "0093624814337")
+
+        val input = InsertableAlbum("Incoming", listOf("Barcode Artist"), barcode = "093624814338")
+        val result = service.getOrBulkCreateWithResult(listOf(input))
+
+        assertNotEquals(stored, result.albumToIds[input])
+        assertEquals(setOf(input), result.newlyCreated)
+        assertEquals(2L, transaction(database) { AlbumTable.selectAll().count() })
     }
 }

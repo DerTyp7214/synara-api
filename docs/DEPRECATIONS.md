@@ -69,7 +69,7 @@ Legacy flat audio fields:
 
 ### No target version yet
 
-- The remaining compat rules exist only for old clients. `TitleTagsCompat` (version 6) and `ReleaseVersionsCompat` (version 7) go with their `ClientFeature` entries once clients below those versions are unsupported. The same holds for `DOLBY_ATMOS` (3) and `LOSSLESS_WAV_AIFF` (2), which have no `CompatRule` and are gated inline by `ClientInfo.supports`. Removing a feature also means removing its row in [API_CONSTANTS.md](API_CONSTANTS.md) by regeneration.
+- The remaining compat rules exist only for old clients. `TitleTagsCompat` (version 6) and `ReleaseVersionsCompat` (version 7) and `AlbumTitleTagsCompat` (version 9) go with their `ClientFeature` entries once clients below those versions are unsupported. The same holds for `DOLBY_ATMOS` (3) and `LOSSLESS_WAV_AIFF` (2), which have no `CompatRule` and are gated inline by `ClientInfo.supports`. Removing a feature also means removing its row in [API_CONSTANTS.md](API_CONSTANTS.md) by regeneration.
 - Raising `ApiVersion.LEGACY` (currently 1) is what makes a rule dead. Update `ClientInfo.fromHeaders` expectations and the tests when you do.
 
 ## UI schema version

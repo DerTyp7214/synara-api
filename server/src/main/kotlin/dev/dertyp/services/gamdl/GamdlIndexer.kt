@@ -1,5 +1,6 @@
 package dev.dertyp.services.gamdl
 
+import dev.dertyp.utils.Barcodes
 import dev.dertyp.core.sha256
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
@@ -145,7 +146,7 @@ class GamdlIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
 
             val metadataAlbums = if (metadataType != null) {
                 val albumsToUpdate = map.keys.filter {
-                    it.originalId != null && (it.songCount == 0 || it.releaseDate == null)
+                    it.originalId != null && (it.songCount == 0 || it.releaseDate == null || Barcodes.normalize(it.barcode) == null)
                 }.mapNotNull { it.originalId }.distinct()
 
                 if (albumsToUpdate.isNotEmpty()) {

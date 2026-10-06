@@ -1,5 +1,6 @@
 package dev.dertyp.services.gamdl
 
+import io.mockk.coVerify
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.plugins.PluginContext
@@ -131,5 +132,44 @@ class GamdlIndexerTest {
 
         assertEquals(mbId, song.musicBrainzId)
         assertEquals(isrc, song.isrc)
+    }
+
+    private fun completeTags(extra: Map<FieldKey, String> = emptyMap()) = mapOf(
+        FieldKey.ALBUM to "Album",
+        FieldKey.YEAR to "2020-01-01",
+        FieldKey.TRACK_TOTAL to "10"
+    ) + extra
+
+    @Test
+    fun `groupByAlbum takes the provider barcode for a file without a BARCODE tag`() = runBlocking {
+        val flac = flacAt("321/1.flac")
+        mockAudio(flac, completeTags())
+        coEvery {
+            context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.appleMusic, listOf("appleMusic:321"))
+        } returns listOf(
+            IMetadataService.Album(id = "appleMusic:321", title = "Album", trackCount = 10, barcode = "0602547933522")
+        )
+
+        val (_, albums) = indexer.groupByAlbum(listOf(flac))
+
+        assertEquals("0602547933522", albums.keys.single().barcode)
+    }
+
+    @Test
+    fun `groupByAlbum keeps a tagged barcode`() = runBlocking {
+        val flac = flacAt("654/1.flac")
+        mockAudio(flac, completeTags(mapOf(FieldKey.BARCODE to "0093624814337")))
+        coEvery {
+            context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.appleMusic, any())
+        } returns listOf(
+            IMetadataService.Album(id = "appleMusic:654", title = "Album", trackCount = 10, barcode = "0602547933522")
+        )
+
+        val (_, albums) = indexer.groupByAlbum(listOf(flac))
+
+        assertEquals("0093624814337", albums.keys.single().barcode)
+        coVerify(exactly = 0) {
+            context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.appleMusic, any())
+        }
     }
 }

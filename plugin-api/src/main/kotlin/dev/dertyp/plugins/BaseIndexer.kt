@@ -90,6 +90,11 @@ abstract class BaseIndexer(
             )
         }
 
+        val metadataBarcode = metadata?.barcode
+        if (finalAlbum.barcode.isNullOrBlank() && !metadataBarcode.isNullOrBlank()) {
+            finalAlbum = finalAlbum.copy(barcode = metadataBarcode)
+        }
+
         if (finalAlbum.songCount == 0) {
             finalAlbum = finalAlbum.copy(songCount = songs.size)
         }
@@ -172,7 +177,7 @@ abstract class BaseIndexer(
 
             val metadataAlbums = if (metadataType != null) {
                 val albumsToUpdate = map.keys.filter {
-                    it.originalId != null && (it.songCount == 0 || it.releaseDate == null)
+                    it.originalId != null && (it.songCount == 0 || it.releaseDate == null || it.barcode.isNullOrBlank())
                 }.mapNotNull { it.originalId }.distinct()
 
                 if (albumsToUpdate.isNotEmpty()) {

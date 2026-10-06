@@ -4,6 +4,7 @@ import dev.dertyp.core.sha256
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableImage
 import dev.dertyp.data.InsertableSong
+import dev.dertyp.data.TitleTag
 import dev.dertyp.core.date.getDateFromISO
 import dev.dertyp.plugins.*
 import dev.dertyp.services.metadata.IMetadataService
@@ -63,6 +64,8 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
                                     .sorted()
                             val songCount = audioFile.songCount ?: 0
                             val year = audioFile.year
+                            val rawBarcode = audioFile.barcode
+                            val barcode = if (rawBarcode?.uppercase() == "BARCODE") null else rawBarcode
 
                             if (name.isBlank()) return@withPermit
 
@@ -82,6 +85,7 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
                             }
 
                             var finalAlbumName = name
+                            var finalAlbumTags = emptyList<TitleTag>()
                             var finalAlbumArtists = artists
                             var finalAlbumReleaseDate = releaseDate
 
@@ -105,6 +109,7 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
                                 }
                                 if (existingAlbum != null) {
                                     finalAlbumName = existingAlbum.name
+                                    finalAlbumTags = existingAlbum.tags
                                     finalAlbumArtists = existingAlbum.artists.map { it.name }.sorted()
                                     finalAlbumReleaseDate = existingAlbum.releaseDate
                                     finalOriginalId = existingAlbum.originalId ?: finalOriginalId
@@ -118,13 +123,15 @@ class YoutubeIndexer(context: PluginContext) : BaseIndexer(context, IMetadataSer
                                 coverHash = hash,
                                 songCount = songCount,
                                 originalId = finalOriginalId,
+                                barcode = barcode,
                                 musicBrainzId = mbReleaseId?.let {
                                     try {
                                         UUID.fromString(it)
                                     } catch (_: Exception) {
                                         null
                                     }
-                                }
+                                },
+                                tags = finalAlbumTags,
                             )
 
                             val albumList = map.computeIfAbsent(album) { Collections.synchronizedList(mutableListOf()) }

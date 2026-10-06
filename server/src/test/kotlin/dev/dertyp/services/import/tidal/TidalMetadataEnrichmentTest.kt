@@ -427,6 +427,137 @@ class TidalMetadataEnrichmentTest : KoinTest {
         assertTrue(entry.ids.contains("track-1"), "expected the track to be queued, got ${entry.ids}")
     }
 
+    private suspend fun importSingleTrack(
+        tidalAlbumTitle: String,
+        release: MusicBrainzRelease?,
+        tidalBarcode: String? = null
+    ): Tag {
+        val tidalTrack = IMetadataService.Track(
+            id = "777",
+            title = "Stay",
+            artists = listOf("Mac Miller"),
+            duration = 4.minutes,
+            images = listOf(IMetadataService.Image("tidal-url", 500, 500)),
+            albumId = "album-999",
+            albumTitle = tidalAlbumTitle
+        )
+
+        val mockTidalService = mockk<MetadataService>(relaxed = true)
+        every {
+            MetadataService.getMetadataService(
+                IMetadataService.MetadataType.tidal,
+                any()
+            )
+        } returns mockTidalService
+        coEvery { mockTidalService.getTrackById("777", any()) } returns tidalTrack
+        coEvery { mockTidalService.getAlbumsByIds(listOf("album-999"), any<HttpClientPriority>()) } returns listOf(
+            IMetadataService.Album(id = "album-999", title = tidalAlbumTitle, barcode = tidalBarcode)
+        )
+
+        coEvery { musicBrainzService.searchReleaseByBarcode(any(), any()) } returns release
+        coEvery { musicBrainzService.searchRelease(any(), any()) } returns release
+        coEvery { musicBrainzService.searchRecording(any(), any()) } returns null
+        if (release != null) coEvery { musicBrainzService.getRelease(release.id) } returns release
+
+        val mockAudioFile = mockk<AudioFile>(relaxed = true)
+        val mockTag = mockk<Tag>(relaxed = true)
+        every { mockAudioFile.tag } returns mockTag
+        every { mockTag.getFirst(FieldKey.TITLE) } returns "Stay"
+
+        val file = tempDir.resolve("777.flac")
+        Files.createFile(file)
+        every { AudioFileIO.read(file.toFile()) } returns mockAudioFile
+
+        downloader = TestTidalImporter(indexer, storageService, listOf(file))
+        downloader.testDownloadContent(listOf("https://tidal.com/track/777"))
+
+        verify { mockAudioFile.commit() }
+        return mockTag
+    }
+
+    private fun editionRelease(disambiguation: String? = null, barcode: String? = null) = MusicBrainzRelease(
+        id = UUID.randomUUID(),
+        title = "The Album",
+        date = "2026-09-16",
+        barcode = barcode,
+        disambiguation = disambiguation,
+        media = listOf(
+            MusicBrainzMedia(
+                tracks = listOf(
+                    MusicBrainzTrack(
+                        id = UUID.randomUUID(),
+                        title = "Stay",
+                        recording = MusicBrainzRecording(
+                            id = UUID.randomUUID(),
+                            title = "Stay",
+                            artistCredit = listOf(MusicBrainzArtistCredit(name = "Mac Miller"))
+                        )
+                    )
+                )
+            )
+        )
+    )
+
+    @Test
+    fun `album tag carries the edition from the MusicBrainz disambiguation`() = runBlocking {
+        val tag = importSingleTrack("The Album", editionRelease(disambiguation = "10th Anniversary"))
+
+        verify { tag.setField(FieldKey.ALBUM, "The Album (10th Anniversary)") }
+        verify(exactly = 0) { tag.setField(FieldKey.ALBUM, "The Album") }
+    }
+
+    @Test
+    fun `album tag ignores a MusicBrainz disambiguation that is not an edition`() = runBlocking {
+        val tag = importSingleTrack("The Album", editionRelease(disambiguation = "special clear vinyl"))
+
+        verify(exactly = 1) { tag.setField(FieldKey.ALBUM, any<String>()) }
+        verify { tag.setField(FieldKey.ALBUM, "The Album") }
+    }
+
+    @Test
+    fun `album tag keeps the provider edition when the MusicBrainz release carries none`() = runBlocking {
+        val tag = importSingleTrack("The Album (10th Anniversary)", editionRelease())
+
+        verify(exactly = 1) { tag.setField(FieldKey.ALBUM, any<String>()) }
+        verify { tag.setField(FieldKey.ALBUM, "The Album (10th Anniversary)") }
+    }
+
+    @Test
+    fun `album tag keeps the provider suffix without a MusicBrainz match`() = runBlocking {
+        val tag = importSingleTrack("The Album (10th Anniversary)", null)
+
+        verify(exactly = 1) { tag.setField(FieldKey.ALBUM, any<String>()) }
+        verify { tag.setField(FieldKey.ALBUM, "The Album (10th Anniversary)") }
+        verify(exactly = 0) { tag.setField(FieldKey.MUSICBRAINZ_RELEASEID, any<String>()) }
+    }
+
+    @Test
+    fun `album import writes the Tidal album barcode`() = runBlocking {
+        val tag = importSingleTrack(
+            "The Album",
+            editionRelease(barcode = "0093624814337"),
+            tidalBarcode = "0602547933522"
+        )
+
+        verify(exactly = 1) { tag.setField(FieldKey.BARCODE, any<String>()) }
+        verify { tag.setField(FieldKey.BARCODE, "0602547933522") }
+    }
+
+    @Test
+    fun `album import writes the MusicBrainz barcode when Tidal has none`() = runBlocking {
+        val tag = importSingleTrack("The Album", editionRelease(barcode = "0093624814337"))
+
+        verify(exactly = 1) { tag.setField(FieldKey.BARCODE, any<String>()) }
+        verify { tag.setField(FieldKey.BARCODE, "0093624814337") }
+    }
+
+    @Test
+    fun `album import writes no barcode when neither Tidal nor MusicBrainz has a valid one`() = runBlocking {
+        val tag = importSingleTrack("The Album", editionRelease(barcode = "BARCODE"), tidalBarcode = "123")
+
+        verify(exactly = 0) { tag.setField(FieldKey.BARCODE, any<String>()) }
+    }
+
     private fun prepareAlbumImport(libraryBarcode: String?) {
         val isrc = "USQX91300108"
         val mockTidalService = mockk<MetadataService>(relaxed = true)

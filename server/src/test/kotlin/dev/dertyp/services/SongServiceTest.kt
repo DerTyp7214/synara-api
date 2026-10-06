@@ -119,6 +119,7 @@ class SongServiceTest : KoinTest {
                 SongMusicBrainzTable,
                 SongAcoustIdTable,
                 SongTitleTagTable,
+                AlbumTitleTagTable,
                 AlbumMusicBrainzTable,
                 ArtistMusicBrainzTable,
                 UserSongTable,
@@ -645,6 +646,68 @@ class SongServiceTest : KoinTest {
         val albumResult = rpcService.rankedSearch(0, 10, "Legendary", explicit = false, liked = false)
         assertEquals(1, albumResult.data.size)
         assertEquals("Some Track", albumResult.data[0].title)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch should find songs by the edition of their album`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val anniversaryAlbumId = UUID.randomUUID()
+        val plainAlbumId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = anniversaryAlbumId
+                it[name] = "The Divine Feminine"
+                it[titleTags] = encodeTitleTags(listOf(TitleTag(TitleTagKind.VERSION, "10th Anniversary")))
+            }
+            AlbumTable.insert {
+                it[id] = plainAlbumId
+                it[name] = "The Divine Feminine"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Stay"
+                it[SongTable.albumId] = anniversaryAlbumId
+                it[filePath] = "/anniversary/stay.flac"
+            }
+            SongTable.insert {
+                it[id] = UUID.randomUUID()
+                it[title] = "Congratulations"
+                it[SongTable.albumId] = plainAlbumId
+                it[filePath] = "/plain/congratulations.flac"
+            }
+        }
+
+        val result = rpcService.rankedSearch(0, 10, "anniversary", explicit = false, liked = false)
+        assertEquals(listOf("Stay"), result.data.map { it.title })
+        assertEquals(listOf(TitleTag(TitleTagKind.VERSION, "10th Anniversary")), result.data.single().album?.tags)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `exportFavouritesAsCsv writes the full album name`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val editionAlbumId = UUID.randomUUID()
+        val favouriteId = UUID.randomUUID()
+
+        transaction(database) {
+            AlbumTable.insert {
+                it[id] = editionAlbumId
+                it[name] = "The Divine Feminine"
+                it[titleTags] = encodeTitleTags(listOf(TitleTag(TitleTagKind.VERSION, "10th Anniversary")))
+            }
+            SongTable.insert {
+                it[id] = favouriteId
+                it[title] = "Stay"
+                it[SongTable.albumId] = editionAlbumId
+                it[filePath] = "/anniversary/stay.flac"
+            }
+        }
+        rpcService.setLiked(favouriteId, true, null)
+
+        val line = songService.exportFavouritesAsCsv(user.id).lines()[1]
+        assertTrue(line.startsWith("Stay,,The Divine Feminine (10th Anniversary),"), line)
     }
 
     @ParameterizedTest

@@ -72,6 +72,7 @@ object SearchBenchmark {
         SongTable,
         SongVariantTable,
         SongTitleTagTable,
+        AlbumTitleTagTable,
         AlbumTable,
         ArtistTable,
         SongArtistTable,

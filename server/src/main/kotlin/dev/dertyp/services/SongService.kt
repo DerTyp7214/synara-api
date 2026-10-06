@@ -21,6 +21,7 @@ import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.*
+import dev.dertyp.utils.Barcodes
 import dev.dertyp.utils.LogParam
 import dev.dertyp.utils.parsers.ParserFactory
 import io.ktor.http.*
@@ -1427,7 +1428,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             rankedSearchQuery(
                 redisSearchService,
                 query,
-                listOf(20, 10, 5, 5, 5, 5, 3, 3, 3, 3, 5, 5, 3, 5, 5, 3, 8),
+                listOf(20, 10, 5, 5, 5, 5, 3, 3, 3, 3, 5, 5, 3, 5, 5, 3, 8, 5),
                 listOf(
                     SongMusicBrainzTable.musicBrainzId.castTo<String?>(VarCharColumnType(36)),
                     SongTable.title,
@@ -1445,7 +1446,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     mbArtistSearchTable[MBArtistTable.name],
                     mbArtistAliasSearchTable[MBArtistAliasTable.name],
                     mbArtistSearchTable[MBArtistTable.disambiguation],
-                    SongTable.titleTags
+                    SongTable.titleTags,
+                    AlbumTable.titleTags
                 ),
                 SongTable.id,
                 searchVectorColumn = if (searchIndexWorker != null) SongTable.searchVector else null
@@ -1539,7 +1541,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             val entry = songs.getOrPut(songId) {
                 CsvRow(
                     title = row.fullSongTitle(),
-                    albumName = row.getOrNull(AlbumTable.name),
+                    albumName = row.getOrNull(AlbumTable.name)?.withTitleTags(row.albumTitleTags()),
                     isrc = row.getOrNull(SongTable.isrc),
                     mbid = row.getOrNull(SongMusicBrainzTable.musicBrainzId)?.value,
                     favouritedAt = row[UserSongTable.updatedAt]
@@ -2016,6 +2018,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 SongTable.trackNumber,
                 SongTable.discNumber,
                 AlbumTable.name,
+                AlbumTable.titleTags,
             )
             .let { window -> if (explicit) window.orderBy(SongTable.explicit, SortOrder.DESC) else window }
             .orderBy(SongTable.inserted to SortOrder.ASC, SongTable.id to SortOrder.ASC)
@@ -2331,7 +2334,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 it.duration,
                 it.trackNumber,
                 it.discNumber,
-                it.album?.name
+                it.album?.name,
+                it.album?.tags
             )
         }.mapNotNull { (_, candidates) ->
             val songList = candidates.sortedWith(compareBy<T> { insertedBySong[it.id] }.thenBy(uuidOrder) { it.id })
@@ -2346,6 +2350,24 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         val explicit: Boolean,
         val tags: List<TitleTag>
     )
+
+    private fun sameEdition(row: ResultRow, incoming: InsertableAlbum): Boolean {
+        val rowBarcode = row[AlbumTable.barcode]
+        if (Barcodes.normalize(rowBarcode) != null && Barcodes.normalize(incoming.barcode) != null) {
+            return Barcodes.same(rowBarcode, incoming.barcode)
+        }
+
+        val rowReleaseId = row.getOrNull(AlbumMusicBrainzTable.musicBrainzId)?.value
+        if (rowReleaseId != null && incoming.musicBrainzId != null && rowReleaseId != incoming.musicBrainzId) {
+            return false
+        }
+
+        val stored = row[AlbumTable.name].splitAlbumTitleTags()
+        val storedTags = row.albumTitleTags().mergeTitleTags(stored.tags)
+        return stored.title == incoming.name &&
+                storedTags.map { it.kind to it.label.lowercase() }.toSet() ==
+                incoming.tags.map { it.kind to it.label.lowercase() }.toSet()
+    }
 
     private suspend fun bulkFindExistingSongs(songs: List<InsertableSong>): Map<InsertableSong, ExistingSong> =
         songs.chunked(PROVIDER_LOOKUP_CHUNK_SIZE)
@@ -2366,6 +2388,11 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     onColumn = { SongTable.albumId },
                     otherColumn = { AlbumTable.id }
                 )
+                .leftJoin(
+                    AlbumMusicBrainzTable,
+                    onColumn = { AlbumTable.id },
+                    otherColumn = { AlbumMusicBrainzTable.albumId }
+                )
                 .innerJoin(SongArtistTable)
                 .innerJoin(
                     ArtistTable,
@@ -2383,6 +2410,9 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     SongTable.originalUrl,
                     SongTable.isrc,
                     AlbumTable.name,
+                    AlbumTable.titleTags,
+                    AlbumTable.barcode,
+                    AlbumMusicBrainzTable.musicBrainzId,
                     SongProviderTable.rawUrl,
                     SongProviderTable.provider,
                     SongProviderTable.externalId
@@ -2409,8 +2439,9 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             val existingSongMap = mutableMapOf<InsertableSong, ExistingSong>()
 
             for (song in songs) {
+                val incomingAlbum = song.album.withSplitTitleTags()
                 rows.firstOrNull { row ->
-                    val albumName = row[AlbumTable.name]
+                    val sameEdition = sameEdition(row, incomingAlbum)
                     val songId = row[SongTable.id].value
                     val dbFilePath = row[SongTable.filePath]
 
@@ -2430,7 +2461,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     val legacyMatch =
                         song.originalUrl.isNotBlank() && row[SongTable.originalUrl] == song.originalUrl
                     val isrcMatch =
-                        song.isrc?.isNotBlank() == true && song.isrc!!.length >= 10 && song.isrc!!.uppercase() != "ISRC" && row[SongTable.isrc] == song.isrc && albumName == song.album.name
+                        song.isrc?.isNotBlank() == true && song.isrc!!.length >= 10 && song.isrc!!.uppercase() != "ISRC" && row[SongTable.isrc] == song.isrc && sameEdition
 
                     val metadataMatch = legacyMatch || providerMatch || isrcMatch || (
                             song.originalUrl.isBlank() &&
@@ -2439,7 +2470,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                                     row[SongTable.trackNumber] == song.trackNumber &&
                                     row[SongTable.discNumber] == song.discNumber &&
                                     row[SongTable.explicit] == song.explicit &&
-                                    albumName == song.album.name
+                                    sameEdition
                             )
 
                     if (pathMatch || metadataMatch) {
@@ -2570,10 +2601,12 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
 
             val uniqueSongs = newSongs
                 .groupBy { song ->
+                    val album = song.album.withSplitTitleTags()
                     listOf(
                         song.title,
                         song.tags,
-                        song.album.name,
+                        album.name,
+                        album.tags,
                         song.album.originalId,
                         song.trackNumber,
                         song.discNumber,

@@ -50,6 +50,7 @@ class LibraryMergeImageReferencesTest : KoinTest {
                 SongTable,
                 SongVariantTable,
                 SongTitleTagTable,
+                AlbumTitleTagTable,
                 ImageTable,
                 ImageMetadataTable,
                 PlaylistTable,

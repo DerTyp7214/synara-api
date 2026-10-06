@@ -58,6 +58,7 @@ private fun uuid(n: Int): UUID = UUID.fromString("00000000-0000-0000-0000-%012d"
 private val genre = Genre(uuid(1), "Ambient")
 private val audio = AudioInfo("flac", 44100, 16, 900, 1000, 2)
 private val tags = listOf(TitleTag(TitleTagKind.LIVE, "Live"))
+private val albumTags = listOf(TitleTag(TitleTagKind.VERSION, "Deluxe Edition"))
 
 private val member = ArtistCredit(id = uuid(2), name = "Member", isGroup = false, musicBrainzId = uuid(3))
 private val credit = ArtistCredit(
@@ -79,6 +80,7 @@ private val album = Album(
     totalDuration = 1000,
     genres = listOf(genre),
     musicBrainzId = uuid(7),
+    tags = albumTags,
 )
 
 val newSong = UserSong(
@@ -131,6 +133,7 @@ private val oldAlbum = OldAlbum(
     totalDuration = 1000,
     genres = listOf(genre),
     musicbrainzId = uuid(7),
+    tags = albumTags,
 )
 
 val oldSong = OldUserSong(

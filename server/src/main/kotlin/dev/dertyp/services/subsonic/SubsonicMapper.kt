@@ -1,5 +1,6 @@
 package dev.dertyp.services.subsonic
 
+import dev.dertyp.core.fullName
 import dev.dertyp.core.fullTitle
 import dev.dertyp.data.Album
 import dev.dertyp.data.Artist
@@ -28,7 +29,7 @@ fun BaseSong.toChild(): Child {
         id = id.trId(),
         parent = album?.id?.alId(),
         title = fullTitle,
-        album = album?.name,
+        album = album?.fullName,
         artist = artists.joinToString(", ") { it.creditedName ?: it.name }.ifEmpty { null },
         track = trackNumber,
         year = releaseDate?.year,
@@ -54,7 +55,7 @@ fun BaseSong.toChild(): Child {
 
 fun Album.toAlbumID3(starred: String? = null): AlbumID3 = AlbumID3(
     id = id.alId(),
-    name = name,
+    name = fullName,
     artist = artists.joinToString(", ") { it.creditedName ?: it.name }.ifEmpty { null },
     artistId = artists.firstOrNull()?.id?.arId(),
     coverArt = coverId?.imId(),

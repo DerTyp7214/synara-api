@@ -169,10 +169,12 @@ class UpcomingReleaseImportServiceTest {
         barcode: String? = null,
         date: String? = null,
         tracks: List<MusicBrainzTrack> = emptyList(),
-        trackCount: Int? = null
+        trackCount: Int? = null,
+        disambiguation: String? = null
     ) = MusicBrainzRelease(
         id = UUID.randomUUID(),
         title = title,
+        disambiguation = disambiguation,
         status = status,
         barcode = barcode,
         date = date,
@@ -315,6 +317,43 @@ class UpcomingReleaseImportServiceTest {
         assertEquals(listOf("t1", "t2"), tracks.map { it.id })
         assertEquals(listOf("US1111111111", "US2222222222"), tracks.map { it.isrc })
         assertTrue(plan.missing.isEmpty())
+    }
+
+    @Test
+    fun `resolve carries the edition from the musicbrainz disambiguation in the album title`() = runBlocking {
+        val anniversary = mbRelease(
+            title = "MB Album",
+            disambiguation = "10th Anniversary",
+            tracks = listOf(mbTrack(1, "MB One", "US1111111111"))
+        )
+        val vinyl = mbRelease(
+            title = "MB Album",
+            disambiguation = "special clear vinyl",
+            tracks = listOf(mbTrack(1, "MB One", "US1111111111"))
+        )
+        every { appleMock.catalogEnabled } returns false
+        coEvery { musicBrainzService.getRelease(anniversary.id) } returns anniversary
+        coEvery { musicBrainzService.getRelease(vinyl.id) } returns vinyl
+        coEvery { tidalMock.getTrackByIsrc("US1111111111", any<HttpClientPriority>()) } returns tidalTrack("t1")
+
+        fun upcoming(release: MusicBrainzRelease, title: String) = UpcomingReleaseImportService.UpcomingRelease(
+            url = "https://musicbrainz.org/release/${release.id}",
+            source = UpcomingReleaseImportService.Source.MbRelease(release.id),
+            title = title,
+            artists = listOf("MB Artist"),
+            releaseDate = null,
+            trackCount = 1
+        )
+
+        val anniversaryPlan = service.resolve(upcoming(anniversary, "MB Album"))
+        assertEquals("MB Album (10th Anniversary)", anniversaryPlan.album.title)
+        assertEquals(listOf("MB Album (10th Anniversary)"), anniversaryPlan.album.tracks.toList().map { it.albumTitle })
+
+        assertEquals("MB Album", service.resolve(upcoming(vinyl, "MB Album")).album.title)
+        assertEquals(
+            "MB Album (Deluxe Edition)",
+            service.resolve(upcoming(vinyl, "MB Album (Deluxe Edition)")).album.title
+        )
     }
 
     @Test

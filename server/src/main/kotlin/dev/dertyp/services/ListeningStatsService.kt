@@ -520,11 +520,11 @@ class ListeningStatsService : Service() {
         val albumIds = (library.songMeta.values.map { it.albumId } + library.albumIdByReleaseMbid.values).distinct()
         albumIds.chunked(CHUNK_SIZE).forEach { chunk ->
             AlbumTable
-                .select(AlbumTable.id, AlbumTable.name, AlbumTable.cover)
+                .select(AlbumTable.id, AlbumTable.name, AlbumTable.titleTags, AlbumTable.cover)
                 .where { AlbumTable.id inList chunk }
                 .forEach {
                     val id = it[AlbumTable.id].value
-                    library.albumNames[id] = it[AlbumTable.name]
+                    library.albumNames[id] = it.fullAlbumName()
                     library.albumCovers[id] = it[AlbumTable.cover]?.value
                 }
         }

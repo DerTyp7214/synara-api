@@ -10,7 +10,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 |---|---|
 | `ApiVersion.HEADER` | `X-Api-Version` |
 | `ApiVersion.LEGACY` | `1` |
-| `ApiVersion.CURRENT` | `8` |
+| `ApiVersion.CURRENT` | `9` |
 
 ## Features
 
@@ -23,6 +23,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 | 6 | `TITLE_TAGS` | `tags`: version markers such as *Radio Edit*, *feat. Drake* or *Live at Wembley*, split off the title into [TitleTag](MODELS.md#devdertypdatatitletag) entries, so `title` is clean. | `title` is put back together into the full original title and `tags` is emptied. | - |
 | 7 | `RELEASE_VERSIONS` | `versions` on [RecentRelease](MODELS.md#devdertypservicesmodelsrecentrelease): the editions of one release (explicit, deluxe, remastered, or the same release from another catalog) are folded under a single feed entry. | Every edition is its own feed entry, following the entry it was folded into, and `versions` is empty. | - |
 | 8 | `FIELD_RENAMES` | Renamed fields under their new names: `musicBrainzId` on [Album](MODELS.md#devdertypdataalbum), [Artist](MODELS.md#devdertypdataartist) and [ArtistCredit](MODELS.md#devdertypdataartistcredit), `isPlaying` on [PlaybackReport](MODELS.md#devdertypdataplaybackreport), `directMember` on [CollectionSongMatch](MODELS.md#devdertypdatacollectionsongmatch) and [RadioChannelSongMatch](MODELS.md#devdertypdataradiochannelsongmatch), `isShuffled` on [PlaybackState](MODELS.md#devdertypdataplaybackstate), [QueueInfo](MODELS.md#devdertypdataqueueinfo), [QueueMeta](MODELS.md#devdertypdataqueuemeta) and [RemotePlaybackStatus](MODELS.md#devdertypdataremoteplaybackstatus), and `userAdded` on [QueueItem](MODELS.md#devdertypdataqueueitem). The queue entry with full song metadata has the type `WithSong`. | Clients below API version 8 receive and send only the old names: `musicbrainzId`, `playing`, `explicitMember`, `shuffleMode`, `explicit`, and the queue entry type `Explicit`. | - |
+| 9 | `ALBUM_TITLE_TAGS` | `tags` on [Album](MODELS.md#devdertypdataalbum): edition markers such as *Deluxe Edition*, *10th Anniversary* or *2011 Remaster*, split off the album name into [TitleTag](MODELS.md#devdertypdatatitletag) entries, so `name` is clean. | `name` is put back together into the full original name and `tags` is emptied. | - |
 
 ## UI schema version
 

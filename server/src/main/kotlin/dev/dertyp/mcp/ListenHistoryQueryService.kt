@@ -1,5 +1,6 @@
 package dev.dertyp.mcp
 
+import dev.dertyp.core.fullName
 import dev.dertyp.core.fullTitle
 import dev.dertyp.data.UserSong
 import dev.dertyp.db.AlbumMusicBrainzTable
@@ -11,6 +12,7 @@ import dev.dertyp.db.ListenTable
 import dev.dertyp.db.SongArtistTable
 import dev.dertyp.db.SongMusicBrainzTable
 import dev.dertyp.db.SongTable
+import dev.dertyp.db.fullAlbumName
 import dev.dertyp.db.fullSongTitle
 import dev.dertyp.db.listenOwnerPredicate
 import dev.dertyp.core.db.dbQuery
@@ -231,7 +233,7 @@ class ListenHistoryQueryService(
                 }
             } else emptyList(),
             albums = if (includeAlbums) {
-                albumService.rankedSearch(1, capped, query, userId).data.map { McpAlbumRef(it.id.toString(), it.name) }
+                albumService.rankedSearch(1, capped, query, userId).data.map { McpAlbumRef(it.id.toString(), it.fullName) }
             } else emptyList(),
         )
     }
@@ -442,9 +444,9 @@ class ListenHistoryQueryService(
         val albumIds = (library.songAlbums.values + library.albumIdByReleaseMbid.values).distinct()
         albumIds.chunked(CHUNK_SIZE).forEach { chunk ->
             AlbumTable
-                .select(AlbumTable.id, AlbumTable.name)
+                .select(AlbumTable.id, AlbumTable.name, AlbumTable.titleTags)
                 .where { AlbumTable.id inList chunk }
-                .forEach { library.albumNames[it[AlbumTable.id].value] = it[AlbumTable.name] }
+                .forEach { library.albumNames[it[AlbumTable.id].value] = it.fullAlbumName() }
 
             AlbumMusicBrainzTable
                 .select(AlbumMusicBrainzTable.albumId, AlbumMusicBrainzTable.musicBrainzId)
@@ -643,7 +645,7 @@ class ListenHistoryQueryService(
         id = id.toString(),
         title = fullTitle,
         artists = artists.map { McpArtistRef(it.id.toString(), it.creditedName ?: it.name) },
-        album = album?.let { McpAlbumRef(it.id.toString(), it.name) },
+        album = album?.let { McpAlbumRef(it.id.toString(), it.fullName) },
         durationMs = duration,
         releaseDate = releaseDate?.formatISO(),
         genres = genres.map { it.name },

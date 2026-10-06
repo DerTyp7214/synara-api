@@ -1,5 +1,7 @@
 package dev.dertyp.plugins
 
+import java.time.LocalDate
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.PlatformUUID
 import dev.dertyp.data.Album
 import dev.dertyp.data.AudioInfo
@@ -202,5 +204,37 @@ class BaseIndexerTest {
         } finally {
             tempDir.toFile().deleteRecursively()
         }
+    }
+
+    @Test
+    fun `updateAlbumMetadata takes the provider barcode only when the file has none`() {
+        val testIndexer = object : BaseIndexer(context) {
+            override val id = "test"
+            override val name = "test"
+            fun testUpdate(album: InsertableAlbum, metadata: IMetadataService.Album?) =
+                updateAlbumMetadata(album, metadata, emptyList())
+        }
+        val providerAlbum = IMetadataService.Album(
+            id = "test:1",
+            title = "Album",
+            trackCount = 3,
+            barcode = "0602547933522"
+        )
+        val untagged = InsertableAlbum(
+            "Album",
+            listOf("Artist"),
+            releaseDate = LocalDate.of(2020, 1, 1),
+            songCount = 3,
+            originalId = "test:1"
+        )
+
+        assertEquals("0602547933522", testIndexer.testUpdate(untagged, providerAlbum).barcode)
+        assertEquals("0602547933522", testIndexer.testUpdate(untagged.copy(barcode = ""), providerAlbum).barcode)
+        assertEquals(
+            "0093624814337",
+            testIndexer.testUpdate(untagged.copy(barcode = "0093624814337"), providerAlbum).barcode
+        )
+        assertEquals(null, testIndexer.testUpdate(untagged, providerAlbum.copy(barcode = null)).barcode)
+        assertEquals(null, testIndexer.testUpdate(untagged, null).barcode)
     }
 }

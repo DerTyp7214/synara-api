@@ -64,6 +64,7 @@ class LibraryMergeServiceTest : KoinTest {
                 SongTable,
                 SongVariantTable,
                 SongTitleTagTable,
+                AlbumTitleTagTable,
                 ImageTable,
                 PlaylistTable,
                 UserTable,
@@ -337,6 +338,105 @@ class LibraryMergeServiceTest : KoinTest {
             assertEquals(1, AlbumArtistTable.selectAll().count())
         }
     }
+
+    private fun insertSimilarAlbums(firstTags: List<TitleTag>, secondTags: List<TitleTag>): Pair<UUID, UUID> =
+        transaction(database) {
+            val imageId = ImageTable.insert {
+                it[id] = UUID.randomUUID()
+                it[path] = "cover"
+                it[imageHash] = "hash"
+                it[origin] = "origin"
+            }[ImageTable.id]
+
+            val artistId = ArtistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Artist"
+            }[ArtistTable.id]
+
+            val first = AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Album"
+                it[titleTags] = encodeTitleTags(firstTags)
+                it[cover] = imageId
+                it[songCount] = 10
+                it[releaseDate] = "2023-01-01"
+            }[AlbumTable.id]
+
+            val second = AlbumTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Album"
+                it[titleTags] = encodeTitleTags(secondTags)
+                it[cover] = imageId
+                it[songCount] = 5
+                it[releaseDate] = "2023-01-01"
+            }[AlbumTable.id]
+
+            AlbumArtistTable.insert {
+                it[albumId] = first
+                it[this.artistId] = artistId
+            }
+            AlbumArtistTable.insert {
+                it[albumId] = second
+                it[this.artistId] = artistId
+            }
+
+            first.value to second.value
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeDuplicates keeps similar albums with different title tags apart`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        mockkObject(MetadataService.Companion)
+        every { MetadataService.getMetadataService(any(), any()) } returns tidalService
+        coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
+        coEvery { albumService.fetchMusicBrainzId(any()) } returns null
+        every { pluginManager.getAllImporters() } returns emptyList()
+
+        val (original, anniversary) = insertSimilarAlbums(
+            emptyList(),
+            listOf(TitleTag(TitleTagKind.VERSION, "10th Anniversary")),
+        )
+
+        val result = service.mergeDuplicates()
+
+        assertEquals(0, result["albumsMerged"])
+        transaction(database) {
+            assertEquals(
+                setOf(original, anniversary),
+                AlbumTable.selectAll().map { it[AlbumTable.id].value }.toSet(),
+            )
+            assertEquals(2, AlbumArtistTable.selectAll().count())
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `mergeDuplicates merges similar albums with equal title tags and keeps the tags`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+
+            mockkObject(MetadataService.Companion)
+            every { MetadataService.getMetadataService(any(), any()) } returns tidalService
+            coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
+            coEvery { albumService.fetchMusicBrainzId(any()) } returns null
+            every { pluginManager.getAllImporters() } returns emptyList()
+
+            val (kept, _) = insertSimilarAlbums(
+                listOf(TitleTag(TitleTagKind.VERSION, "Deluxe Edition")),
+                listOf(TitleTag(TitleTagKind.VERSION, "deluxe edition")),
+            )
+
+            val result = service.mergeDuplicates()
+
+            assertEquals(1, result["albumsMerged"])
+            transaction(database) {
+                val row = AlbumTable.selectAll().single()
+                assertEquals(kept, row[AlbumTable.id].value)
+                assertEquals(listOf(TitleTag(TitleTagKind.VERSION, "Deluxe Edition")), row.albumTitleTags())
+            }
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

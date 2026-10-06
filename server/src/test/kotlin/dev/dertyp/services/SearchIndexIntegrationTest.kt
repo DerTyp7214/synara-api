@@ -16,6 +16,7 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -217,5 +218,103 @@ class SearchIndexIntegrationTest : KoinTest {
 
         val kindMatch = songService.rankedSearch(0, 10, "kind", true, userId)
         assertTrue(kindMatch.data.isEmpty(), "Tag json keys must not be indexed")
+    }
+
+    @Test
+    fun `album title tag labels are indexed for album and song search`() = runBlocking {
+        if (TestDatabase.postgresContainer == null) {
+            println("Skipping PostgreSQL integration test because Docker is not available.")
+            return@runBlocking
+        }
+
+        setup()
+
+        val userId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val plainAlbumId = UUID.randomUUID()
+        val songId = UUID.randomUUID()
+        val plainSongId = UUID.randomUUID()
+
+        transaction(database) {
+            UserTable.insert {
+                it[id] = userId
+                it[username] = "albumtaguser"
+                it[passwordHash] = ""
+            }
+            AlbumTable.insert {
+                it[id] = albumId
+                it[name] = "The Divine Feminine"
+                it[titleTags] = """[{"kind":"VERSION","label":"10th Anniversary"}]"""
+                it[songCount] = 2
+            }
+            AlbumTable.insert {
+                it[id] = plainAlbumId
+                it[name] = "Swimming"
+                it[songCount] = 2
+            }
+            SongTable.insert {
+                it[id] = songId
+                it[title] = "Dang"
+                it[this.albumId] = albumId
+            }
+            SongTable.insert {
+                it[id] = plainSongId
+                it[title] = "Ladders"
+                it[this.albumId] = plainAlbumId
+            }
+        }
+
+        val worker = SearchIndexWorker()
+        assertTrue(worker.processBatch() > 0, "Worker should have processed the queued album and songs")
+
+        val albumSearch = AlbumService(worker)
+        val songSearch = SongService(worker)
+        try {
+            val albumByLabel = albumSearch.rankedSearch(0, 10, "anniversary")
+            assertEquals(listOf(albumId), albumByLabel.data.map { it.id }, "Album tag labels should be searchable")
+            assertEquals("The Divine Feminine", albumByLabel.data.single().name, "The stored name stays bare")
+
+            val albumByName = albumSearch.rankedSearch(0, 10, "divine")
+            assertEquals(listOf(albumId), albumByName.data.map { it.id })
+
+            val albumByNameAndLabel = albumSearch.rankedSearch(0, 10, "divine feminine anniversary")
+            assertEquals(listOf(albumId), albumByNameAndLabel.data.map { it.id })
+
+            assertTrue(albumSearch.rankedSearch(0, 10, "kind").data.isEmpty(), "Tag json keys must not be indexed")
+
+            val songByAlbumLabel = songSearch.rankedSearch(0, 10, "anniversary", true, userId)
+            assertEquals(listOf(songId), songByAlbumLabel.data.map { it.id }, "Songs are found by their album's tag labels")
+
+            val songByAlbumNameAndLabel = songSearch.rankedSearch(0, 10, "divine anniversary", true, userId)
+            assertEquals(listOf(songId), songByAlbumNameAndLabel.data.map { it.id })
+
+            transaction(database) {
+                assertEquals(0, SearchIndexQueueTable.selectAll().count(), "Queue should be empty after processing")
+                AlbumTable.update({ AlbumTable.id eq plainAlbumId }) {
+                    it[titleTags] = """[{"kind":"VERSION","label":"Deluxe"}]"""
+                }
+            }
+
+            val requeued = transaction(database) {
+                SearchIndexQueueTable.selectAll().map {
+                    it[SearchIndexQueueTable.entityType] to it[SearchIndexQueueTable.entityId]
+                }.toSet()
+            }
+            assertEquals(
+                setOf(SearchIndexEntityType.ALBUM to plainAlbumId, SearchIndexEntityType.SONG to plainSongId),
+                requeued,
+                "A tag change queues the album and its songs"
+            )
+
+            assertTrue(worker.processBatch() > 0, "Worker should have processed the requeued album and song")
+
+            val albumByNewLabel = albumSearch.rankedSearch(0, 10, "deluxe")
+            assertEquals(listOf(plainAlbumId), albumByNewLabel.data.map { it.id })
+
+            val songByNewLabel = songSearch.rankedSearch(0, 10, "deluxe", true, userId)
+            assertEquals(listOf(plainSongId), songByNewLabel.data.map { it.id })
+        } finally {
+            albumSearch.stopService()
+        }
     }
 }

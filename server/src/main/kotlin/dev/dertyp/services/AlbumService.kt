@@ -13,6 +13,7 @@ import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.LinkResolverService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.utils.Barcodes
 import dev.dertyp.utils.LogParam
 import dev.dertyp.utils.parsers.ParserFactory
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -129,6 +130,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 animatedCoverId = resultRow[AlbumTable.animatedCover]?.value,
                 animatedCoverImageId = animatedCoverImageIdColumn?.let { resultRow.getOrNull(it) }?.value,
                 animatedCoverBlurHash = animatedCoverBlurHashColumn?.let { resultRow.getOrNull(it) },
+                tags = resultRow.albumTitleTags(),
             )
         }
 
@@ -147,7 +149,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             }
 
         fun identityKey(album: InsertableAlbum): Any =
-            album.originalId ?: Triple(album.name, album.artists.sorted(), album.releaseDate)
+            album.originalId ?: listOf(album.name, album.tags, album.artists.sorted(), album.releaseDate)
     }
 
     fun map(resultRow: ResultRow): Album = mapAlbum(resultRow)
@@ -322,7 +324,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         if (mbRelease.barcode != null) {
             dbQuery {
                 AlbumTable.update({ AlbumTable.id eq albumId }) {
-                    it[barcode] = mbRelease.barcode
+                    it[barcode] = mbRelease.barcode?.take(32)
                 }
             }
         }
@@ -466,7 +468,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
             if (mbRelease?.barcode != null) {
                 AlbumTable.update({ AlbumTable.id eq id }) {
-                    it[barcode] = mbRelease.barcode
+                    it[barcode] = mbRelease.barcode?.take(32)
                 }
             }
         }
@@ -983,14 +985,14 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             rankedSearchQuery(
                 redisSearchService,
                 query,
-                listOf(10, 5, 5, 3, 3, 5, 3, 5, 5, 3),
+                listOf(10, 5, 5, 3, 3, 5, 3, 5, 5, 3, 8),
                 listOf(
                     AlbumTable.name,
                     ArtistTable.name,
                     ArtistAliasTable.name,
                     artistGroupAlias[ArtistTable.name],
                     artistMemberAlias[ArtistTable.name]
-                ) + mbReleaseSearchColumns + mbArtistSearchColumns,
+                ) + mbReleaseSearchColumns + mbArtistSearchColumns + AlbumTable.titleTags,
                 AlbumTable.id,
                 searchVectorColumn = if (searchIndexWorker != null) AlbumTable.searchVector else null
             ).let { it.copy(query = it.query.scope()) }
@@ -1275,8 +1277,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         return byIds(result.albumToIds.values.toList()).associateBy { it.id }
     }
 
-    suspend fun getOrBulkCreateWithResult(albums: List<InsertableAlbum>): BulkCreateAlbumResult {
-        if (albums.isEmpty()) return BulkCreateAlbumResult(emptyMap(), emptySet())
+    suspend fun getOrBulkCreateWithResult(inputAlbums: List<InsertableAlbum>): BulkCreateAlbumResult {
+        if (inputAlbums.isEmpty()) return BulkCreateAlbumResult(emptyMap(), emptySet())
+
+        val albums = inputAlbums.map { it.withSplitTitleTags() }
 
         val artistService = get<ArtistService>()
         val imageService = get<ImageService>()
@@ -1294,8 +1298,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         val uniqueSongCounts = uniqueAlbumMetadata.map { it.songCount }
         val uniqueReleaseDates = uniqueAlbumMetadata.map { getISOFromDate(it.releaseDate) }
         val uniqueOriginalIds = uniqueAlbumMetadata.map { it.originalId }
-        val uniqueBarcodes = uniqueAlbumMetadata.mapNotNull { it.barcode }
-            .filter { it.isNotBlank() && it.length >= 8 && it.uppercase() != "BARCODE" }
+        val uniqueBarcodes = uniqueAlbumMetadata.flatMap { Barcodes.variants(it.barcode) }.distinct()
         val uniqueMbIds = uniqueAlbumMetadata.mapNotNull { it.musicBrainzId }.distinct()
         val allRequiredArtistNames = albums.flatMap { it.artists }.distinct()
 
@@ -1365,13 +1368,15 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         fun getIdentityKey(
             originalId: String?,
             name: String,
+            tags: List<TitleTag>,
             artists: List<String>,
             releaseDate: PlatformLocalDate?
         ): Any {
-            return originalId ?: Triple(name, artists.sorted(), getISOFromDate(releaseDate))
+            return originalId ?: listOf(name, tags, artists.sorted(), getISOFromDate(releaseDate))
         }
 
         val finalMatchMap = mutableMapOf<Any, UUID>()
+        val barcodesToFill = mutableMapOf<UUID, String>()
 
         for (row in potentialAlbumRows) {
             val albumId = row.id
@@ -1382,8 +1387,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 val inputMbId = it.musicBrainzId
                 if (inputMbId != null && row.musicBrainzId == inputMbId) return@firstOrNull true
 
-                val inputBarcode = it.barcode
-                if (inputBarcode?.isNotBlank() == true && inputBarcode.length >= 8 && inputBarcode.uppercase() != "BARCODE" && row.barcode == inputBarcode) return@firstOrNull true
+                if (Barcodes.same(row.barcode, it.barcode)) return@firstOrNull true
 
                 if (it.originalId != null) {
                     if (row.originalId == it.originalId) return@firstOrNull true
@@ -1395,6 +1399,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     } else albumProviders.any { p -> p[AlbumProviderTable.rawUrl] == it.originalId }
                 } else if (row.originalId == null) {
                     it.name == row.name &&
+                            it.tags == row.tags &&
                             getISOFromDate(it.releaseDate) == getISOFromDate(row.releaseDate) &&
                             it.songCount == row.songCount
                 } else {
@@ -1410,22 +1415,38 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     finalMatchMap[getIdentityKey(
                         inputAlbum.originalId,
                         inputAlbum.name,
+                        inputAlbum.tags,
                         inputAlbum.artists,
                         inputAlbum.releaseDate
                     )] = albumId
+
+                    val inputBarcode = inputAlbum.barcode
+                    if (inputBarcode != null && Barcodes.normalize(row.barcode) == null && Barcodes.normalize(inputBarcode) != null) {
+                        barcodesToFill[albumId] = inputBarcode
+                    }
+                }
+            }
+        }
+
+        if (barcodesToFill.isNotEmpty()) {
+            dbQuery {
+                for ((albumId, inputBarcode) in barcodesToFill) {
+                    AlbumTable.update({ AlbumTable.id eq albumId }) {
+                        it[barcode] = inputBarcode
+                    }
                 }
             }
         }
 
         val existingAlbumsWithMb = uniqueAlbumMetadata.filter { album ->
             if (album.musicBrainzId == null) return@filter false
-            val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
+            val key = getIdentityKey(album.originalId, album.name, album.tags, album.artists, album.releaseDate)
             finalMatchMap.containsKey(key)
         }
 
         if (existingAlbumsWithMb.isNotEmpty()) {
             val existingIds = existingAlbumsWithMb.mapNotNull { album ->
-                val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
+                val key = getIdentityKey(album.originalId, album.name, album.tags, album.artists, album.releaseDate)
                 finalMatchMap[key]
             }
             val alreadyHasMbIds = dbQuery {
@@ -1438,7 +1459,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     .toSet()
             }
             existingAlbumsWithMb.forEach { album ->
-                val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
+                val key = getIdentityKey(album.originalId, album.name, album.tags, album.artists, album.releaseDate)
                 val albumId = finalMatchMap[key] ?: return@forEach
                 if (albumId !in alreadyHasMbIds) {
                     setMusicBrainzId(albumId, album.musicBrainzId, triggerSync = false, triggerMerge = false)
@@ -1447,7 +1468,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         }
 
         val newAlbumsToInsert = uniqueAlbumMetadata.filter { album ->
-            val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
+            val key = getIdentityKey(album.originalId, album.name, album.tags, album.artists, album.releaseDate)
             !finalMatchMap.containsKey(key)
         }
 
@@ -1455,6 +1476,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             dbQuery {
                 AlbumTable.batchInsert(newAlbumsToInsert) { album ->
                     this[AlbumTable.name] = album.name
+                    this[AlbumTable.titleTags] = encodeTitleTags(album.tags)
                     this[AlbumTable.releaseDate] = getISOFromDate(album.releaseDate)
                     this[AlbumTable.songCount] = album.songCount
                     this[AlbumTable.cover] = imageMap[album.coverHash]
@@ -1467,17 +1489,25 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         }
 
         if (newRows.isNotEmpty()) {
+            val taggedRows = newRows
+                .map { it[AlbumTable.id].value to it.albumTitleTags() }
+                .filter { it.second.isNotEmpty() }
+            if (taggedRows.isNotEmpty()) {
+                dbQuery { syncAlbumTitleTags(taggedRows) }
+            }
+
             val mbEntries = newRows.mapNotNull { row ->
                 val albumId = row[AlbumTable.id].value
                 val originalId = row[AlbumTable.originalId]
                 val name = row[AlbumTable.name]
+                val tags = row.albumTitleTags()
                 val releaseDate = row[AlbumTable.releaseDate]
 
                 val matchedAlbum = newAlbumsToInsert.first {
                     if (it.originalId != null && originalId != null) {
                         it.originalId == originalId
                     } else if (it.originalId == null && originalId == null) {
-                        it.name == name && getISOFromDate(it.releaseDate) == releaseDate
+                        it.name == name && it.tags == tags && getISOFromDate(it.releaseDate) == releaseDate
                     } else false
                 }
 
@@ -1527,26 +1557,28 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         val newAlbumIdLookupMap = newRows.associate { row ->
             val rowOriginalId = row[AlbumTable.originalId]
             val rowName = row[AlbumTable.name]
+            val rowTags = row.albumTitleTags()
             val rowReleaseDate = row[AlbumTable.releaseDate]
 
             val matchedAlbum = newAlbumsToInsert.first {
                 if (it.originalId != null && rowOriginalId != null) {
                     it.originalId == rowOriginalId
                 } else if (it.originalId == null && rowOriginalId == null) {
-                    it.name == rowName && getISOFromDate(it.releaseDate) == rowReleaseDate
+                    it.name == rowName && it.tags == rowTags && getISOFromDate(it.releaseDate) == rowReleaseDate
                 } else false
             }
 
             getIdentityKey(
                 rowOriginalId,
                 rowName,
+                rowTags,
                 matchedAlbum.artists,
                 matchedAlbum.releaseDate
             ) to row[AlbumTable.id].value
         }
 
         val newAlbumArtistLinks = newAlbumsToInsert.flatMap { album ->
-            val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
+            val key = getIdentityKey(album.originalId, album.name, album.tags, album.artists, album.releaseDate)
             val albumId = newAlbumIdLookupMap[key]
             if (albumId != null) {
                 album.artists
@@ -1570,12 +1602,15 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
         val finalCombinedIdMap = finalMatchMap + newAlbumIdLookupMap
 
-        val resultMap = albums.associateWith { album ->
-            val key = getIdentityKey(album.originalId, album.name, album.artists, album.releaseDate)
-            finalCombinedIdMap[key]
+        val resultMap = inputAlbums.zip(albums).associate { (inputAlbum, album) ->
+            val key = getIdentityKey(album.originalId, album.name, album.tags, album.artists, album.releaseDate)
+            inputAlbum to finalCombinedIdMap[key]
         }.filterValueNotNull()
 
-        return BulkCreateAlbumResult(resultMap, newAlbumsToInsert.toSet())
+        val insertedAlbums = newAlbumsToInsert.toSet()
+        val newlyCreated = inputAlbums.zip(albums).filter { it.second in insertedAlbums }.map { it.first }.toSet()
+
+        return BulkCreateAlbumResult(resultMap, newlyCreated)
     }
 
     suspend fun getOrBulkCreate(albums: List<InsertableAlbum>): Map<InsertableAlbum, UUID> =
@@ -1615,7 +1650,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             emptyAlbums.size
         }
 
-    suspend fun upsertAlbum(album: Album, triggerSync: Boolean = false, triggerMerge: Boolean = true) {
+    suspend fun upsertAlbum(inputAlbum: Album, triggerSync: Boolean = false, triggerMerge: Boolean = true) {
+        val album = inputAlbum.withSplitTitleTags()
         val currentMbId = dbQuery {
             AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.musicBrainzId)
                 .where { AlbumMusicBrainzTable.albumId eq album.id }
@@ -1626,12 +1662,14 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             AlbumTable.upsert(AlbumTable.id) {
                 it[id] = album.id
                 it[name] = album.name
+                it[titleTags] = encodeTitleTags(album.tags)
                 it[releaseDate] = getISOFromDate(album.releaseDate)
                 it[songCount] = album.songCount
                 it[cover] = album.coverId?.let { coverId -> EntityID(coverId, ImageTable) }
                 it[originalId] = album.originalId
                 it[barcode] = album.barcode
             }
+            syncAlbumTitleTags(album.id, album.tags)
 
             if (album.originalId != null) {
                 val originalId = album.originalId!!

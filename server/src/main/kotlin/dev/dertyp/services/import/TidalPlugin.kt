@@ -1,5 +1,6 @@
 package dev.dertyp.services.import
 
+import dev.dertyp.utils.Barcodes
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.sha256
 import dev.dertyp.data.InsertableAlbum
@@ -173,12 +174,14 @@ class TidalIndexer(context: PluginContext) : BaseIndexer(context, IMetadataServi
 
             val metadataAlbums = if (metadataType != null) {
                 val albumsToUpdate = map.keys.filter {
-                    it.originalId != null && (it.songCount == 0 || it.releaseDate == null)
+                    it.originalId != null && (it.songCount == 0 || it.releaseDate == null || Barcodes.normalize(it.barcode) == null)
                 }.mapNotNull { it.originalId }.distinct()
 
                 if (albumsToUpdate.isNotEmpty()) {
                     try {
-                        context.metadataService.getAlbumsByIds(metadataType!!, albumsToUpdate).associateBy { it.id }
+                        context.metadataService
+                            .getAlbumsByIds(metadataType!!, albumsToUpdate.map { it.removePrefix("$id:") })
+                            .associateBy { "$id:${it.id}" }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {

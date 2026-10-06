@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientFactory
+import dev.dertyp.core.fullName
 import dev.dertyp.core.fullTitle
 import dev.dertyp.core.jsonContent
 import dev.dertyp.core.timeouts
@@ -471,7 +472,9 @@ class RemoteMirrorService : Service() {
                         releaseDate = it.releaseDate,
                         songCount = it.songCount,
                         coverHash = null,
-                        originalId = it.originalId
+                        originalId = it.originalId,
+                        barcode = it.barcode,
+                        tags = it.tags
                     )
                 }
                 val result = albumService.getOrBulkCreateWithResult(insertable)
@@ -482,7 +485,9 @@ class RemoteMirrorService : Service() {
                         releaseDate = album.releaseDate,
                         songCount = album.songCount,
                         coverHash = null,
-                        originalId = album.originalId
+                        originalId = album.originalId,
+                        barcode = album.barcode,
+                        tags = album.tags
                     )
                     session.albumIdMap[album.id] = result.albumToIds[key] ?: randomPlatformUUID()
                     if (key in result.newlyCreated) session.syncedAlbums++ else session.existingAlbums++
@@ -503,11 +508,11 @@ class RemoteMirrorService : Service() {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    session.recordError("Album ${album.name}", e)
+                    session.recordError("Album ${album.fullName}", e)
                 }
                 count++
                 if (count % 100 == 0) logger.info("Mirrored $count/$total albums...")
-                if (count % 10 == 0) session.updateProgress("Mirroring Albums", count, total, album.name)
+                if (count % 10 == 0) session.updateProgress("Mirroring Albums", count, total, album.fullName)
                     .also { yield() }
             }
         }

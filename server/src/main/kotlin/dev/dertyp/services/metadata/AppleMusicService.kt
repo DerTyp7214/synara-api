@@ -568,7 +568,8 @@ class AppleMusicService(
                 artists = attr["artistName"]?.jsonPrimitive?.contentOrNull?.let { listOf(it) } ?: emptyList(),
                 trackCount = attr["trackCount"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
                 releaseDate = parseReleaseDate(attr["releaseDate"]?.jsonPrimitive?.contentOrNull),
-                images = catalogArtwork(attr)?.let { listOf(it) } ?: emptyList()
+                images = catalogArtwork(attr)?.let { listOf(it) } ?: emptyList(),
+                barcode = attr["upc"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
             )
         } else {
             val results = lookup(id, "song", priority)

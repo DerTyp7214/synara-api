@@ -5,6 +5,7 @@ import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 
 object AlbumTable : UUIDTable("album") {
     val name = text("name")
+    val titleTags = text("title_tags").default("[]")
     val releaseDate = varchar("releaseDate", 128).nullable()
     val songCount = integer("songCount").default(0)
     val cover = reference("cover", ImageTable.id, onDelete = ReferenceOption.SET_NULL).nullable()

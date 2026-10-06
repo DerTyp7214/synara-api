@@ -1,5 +1,6 @@
 package dev.dertyp.services.import.tidal
 
+import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.plugins.PluginContext
 import dev.dertyp.services.import.TidalIndexer
 import io.mockk.*
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -190,4 +192,100 @@ class TidalIndexerTest {
 
         assertTrue(maxActiveRequests.get() <= 2, "Max active requests was ${maxActiveRequests.get()}, expected <= 2")
     }
+
+    private fun mockTidalTrack(fileName: String, tidalAlbumId: String, barcodeTag: String): Path {
+        val file = tempDir.resolve(fileName)
+        Files.createFile(file)
+
+        val tag = mockk<Tag>(relaxed = true)
+        val audio = mockk<AudioFile>(relaxed = true)
+        every { audio.tag } returns tag
+        every { AudioFileIO.read(file.toFile()) } returns audio
+        every { tag.getFirst(any<FieldKey>()) } answers {
+            when (it.invocation.args[0] as FieldKey) {
+                FieldKey.ALBUM -> "Test Album"
+                FieldKey.YEAR -> "2020-01-01"
+                FieldKey.TRACK_TOTAL -> "10"
+                FieldKey.BARCODE -> barcodeTag
+                else -> ""
+            }
+        }
+        every { tag.getFirst("URL") } returns "https://tidal.com/album/$tidalAlbumId/track/1"
+        every { tag.getAll(FieldKey.ALBUM_ARTIST) } returns listOf("Artist")
+        return file
+    }
+
+    @Test
+    fun `groupByAlbum takes the provider barcode for a file without a BARCODE tag`() = runBlocking {
+        val file = mockTidalTrack("untagged.flac", "4711", "")
+        coEvery {
+            context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.tidal, listOf("4711"))
+        } returns listOf(
+            IMetadataService.Album(id = "4711", title = "Test Album", trackCount = 10, barcode = "0602547933522")
+        )
+
+        val (_, albums) = indexer.groupByAlbum(listOf(file))
+
+        assertEquals("tidal:4711", albums.keys.single().originalId)
+        assertEquals("0602547933522", albums.keys.single().barcode)
+    }
+
+    @Test
+    fun `groupByAlbum keeps a tagged barcode`() = runBlocking {
+        val file = mockTidalTrack("tagged.flac", "4712", "0093624814337")
+        coEvery {
+            context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.tidal, any())
+        } returns listOf(
+            IMetadataService.Album(id = "tidal:4712", title = "Test Album", trackCount = 10, barcode = "0602547933522")
+        )
+
+        val (_, albums) = indexer.groupByAlbum(listOf(file))
+
+        assertEquals("0093624814337", albums.keys.single().barcode)
+        coVerify(exactly = 0) { context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.tidal, any()) }
+    }
+
+    @Test
+    fun `groupByAlbum asks the provider for the bare album id and takes its song count and release date`() =
+        runBlocking {
+            val file = tempDir.resolve("bare.flac")
+            Files.createFile(file)
+
+            val tag = mockk<Tag>(relaxed = true)
+            val audio = mockk<AudioFile>(relaxed = true)
+            every { audio.tag } returns tag
+            every { AudioFileIO.read(file.toFile()) } returns audio
+            every { tag.getFirst(any<FieldKey>()) } answers {
+                when (it.invocation.args[0] as FieldKey) {
+                    FieldKey.ALBUM -> "Test Album"
+                    else -> ""
+                }
+            }
+            every { tag.getFirst("URL") } returns "https://tidal.com/album/4713/track/1"
+            every { tag.getAll(FieldKey.ALBUM_ARTIST) } returns listOf("Artist")
+
+            val requested = slot<List<String>>()
+            coEvery {
+                context.metadataService.getAlbumsByIds(IMetadataService.MetadataType.tidal, capture(requested))
+            } answers {
+                requested.captured.filter { it == "4713" }.map { albumId ->
+                    IMetadataService.Album(
+                        id = albumId,
+                        title = "Test Album",
+                        trackCount = 13,
+                        releaseDate = LocalDate.of(2026, 9, 16),
+                        barcode = "0602547933522"
+                    )
+                }
+            }
+
+            val (_, albums) = indexer.groupByAlbum(listOf(file))
+
+            val album = albums.keys.single()
+            assertEquals(listOf("4713"), requested.captured)
+            assertEquals("tidal:4713", album.originalId)
+            assertEquals(13, album.songCount)
+            assertEquals(LocalDate.of(2026, 9, 16), album.releaseDate)
+            assertEquals("0602547933522", album.barcode)
+        }
 }

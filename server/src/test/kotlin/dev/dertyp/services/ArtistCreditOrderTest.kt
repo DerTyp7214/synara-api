@@ -39,7 +39,7 @@ class ArtistCreditOrderTest : KoinTest {
     private val lowMbId = UUID.randomUUID()
 
     private val allTables = arrayOf(
-        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongTitleTagTable, SongArtistTable,
+        ArtistTable, AlbumTable, SongTable, SongVariantTable, SongTitleTagTable, AlbumTitleTagTable, SongArtistTable,
         SongMusicBrainzTable, SongAudioDataTable, ImageTable, GenreTable,
         UserTable, AlbumMusicBrainzTable, ArtistMusicBrainzTable,
         ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,

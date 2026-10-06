@@ -9,6 +9,11 @@ object Barcodes {
         return trimmed.takeIf { it.length >= 8 }
     }
 
+    fun same(a: String?, b: String?): Boolean {
+        val normalized = normalize(a) ?: return false
+        return normalized == normalize(b)
+    }
+
     fun variants(raw: String?): List<String> {
         val normalized = normalize(raw) ?: return emptyList()
         return (listOf(normalized) + PADDED_LENGTHS.mapNotNull { length ->

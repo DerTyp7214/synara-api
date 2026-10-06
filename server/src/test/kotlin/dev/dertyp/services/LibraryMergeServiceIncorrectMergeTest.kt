@@ -2,6 +2,8 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.TitleTag
+import dev.dertyp.data.TitleTagKind
 import dev.dertyp.db.*
 import dev.dertyp.plugins.PluginManager
 import io.ktor.server.application.ApplicationEnvironment
@@ -55,7 +57,7 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
         database = TestDatabase.connect(dialect, "merge_fix_test")
         transaction(database) {
             SchemaUtils.create(
-                ArtistTable, AlbumTable, SongTable, SongVariantTable, ImageTable, PlaylistTable,
+                ArtistTable, AlbumTable, AlbumTitleTagTable, SongTable, SongVariantTable, ImageTable, PlaylistTable,
                 UserTable, UserPlaylistTable, UserPlaylistSongTable, PlaylistSongTable,
                 SongArtistTable, AlbumArtistTable, AlbumMusicBrainzTable, SongMusicBrainzTable,
                 TranscodedSongTable, UserSongTable, SongProviderTable, AlbumProviderTable,
@@ -193,6 +195,122 @@ class LibraryMergeServiceIncorrectMergeTest : KoinTest {
             assertNotEquals(null, newAlbum)
         }
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fixIncorrectMerges names the split album after the release and its edition`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+
+            transaction(database) {
+                val rel1 = UUID.randomUUID()
+                val rel2 = UUID.randomUUID()
+                val rec1 = UUID.randomUUID()
+                val rec2 = UUID.randomUUID()
+                val rg = UUID.randomUUID()
+
+                MBReleaseGroupTable.insert { it[id] = EntityID(rg, MBReleaseGroupTable); it[title] = "RG" }
+                MBReleaseTable.insert {
+                    it[id] = EntityID(rel1, MBReleaseTable)
+                    it[title] = "The Album"
+                    it[releaseGroupId] = EntityID(rg, MBReleaseGroupTable)
+                }
+                MBReleaseTable.insert {
+                    it[id] = EntityID(rel2, MBReleaseTable)
+                    it[title] = "The Album"
+                    it[disambiguation] = "10th Anniversary"
+                    it[releaseGroupId] = EntityID(rg, MBReleaseGroupTable)
+                }
+                MBRecordingTable.insert { it[id] = EntityID(rec1, MBRecordingTable); it[title] = "S1" }
+                MBRecordingTable.insert { it[id] = EntityID(rec2, MBRecordingTable); it[title] = "S2" }
+                MBRecordingReleaseTable.insert {
+                    it[recordingId] = EntityID(rec1, MBRecordingTable); it[releaseId] = EntityID(rel1, MBReleaseTable)
+                }
+                MBRecordingReleaseTable.insert {
+                    it[recordingId] = EntityID(rec2, MBRecordingTable); it[releaseId] = EntityID(rel2, MBReleaseTable)
+                }
+
+                val albumId = AlbumTable.insert {
+                    it[name] = "The Album"
+                    it[songCount] = 2
+                }[AlbumTable.id]
+
+                AlbumMusicBrainzTable.insert {
+                    it[this.albumId] = albumId
+                    it[musicBrainzId] = EntityID(rel1, MBReleaseTable)
+                }
+
+                val s1 = SongTable.insert {
+                    it[title] = "Song 1"; it[this.albumId] = albumId; it[filePath] = "p1"; it[trackNumber] = 1
+                }[SongTable.id]
+                val s2 = SongTable.insert {
+                    it[title] = "Song 2"; it[this.albumId] = albumId; it[filePath] = "p2"; it[trackNumber] = 2
+                }[SongTable.id]
+
+                SongMusicBrainzTable.insert { it[songId] = s1; it[musicBrainzId] = EntityID(rec1, MBRecordingTable) }
+                SongMusicBrainzTable.insert { it[songId] = s2; it[musicBrainzId] = EntityID(rec2, MBRecordingTable) }
+            }
+
+            assertEquals(1, service.fixIncorrectMerges())
+
+            transaction(database) {
+                val albums = AlbumTable.selectAll().toList()
+                assertEquals(2, albums.size)
+                assertEquals(listOf("The Album", "The Album"), albums.map { it[AlbumTable.name] })
+
+                val split = albums.single { it.albumTitleTags().isNotEmpty() }
+                assertEquals(listOf(TitleTag(TitleTagKind.VERSION, "10th Anniversary")), split.albumTitleTags())
+                assertEquals("The Album (10th Anniversary)", split.fullAlbumName())
+                assertEquals(
+                    listOf(split[AlbumTable.id] to TitleTagKind.VERSION),
+                    AlbumTitleTagTable.selectAll().map { it[AlbumTitleTagTable.albumId] to it[AlbumTitleTagTable.kind] }
+                )
+            }
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `fixIncorrectMerges keeps the name and edition of the original album without a release`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val anniversary = listOf(TitleTag(TitleTagKind.VERSION, "10th Anniversary"))
+
+            transaction(database) {
+                val cover1 = ImageTable.insert {
+                    it[id] = UUID.randomUUID()
+                    it[path] = "cover1"; it[imageHash] = "hash1"; it[origin] = "o"
+                }[ImageTable.id]
+                val cover2 = ImageTable.insert {
+                    it[id] = UUID.randomUUID()
+                    it[path] = "cover2"; it[imageHash] = "hash2"; it[origin] = "o"
+                }[ImageTable.id]
+
+                val albumId = AlbumTable.insert {
+                    it[name] = "The Album"
+                    it[titleTags] = encodeTitleTags(anniversary)
+                    it[cover] = cover1
+                    it[songCount] = 2
+                }[AlbumTable.id]
+                syncAlbumTitleTags(albumId.value, anniversary)
+
+                SongTable.insert {
+                    it[title] = "Song 1"; it[this.albumId] = albumId; it[cover] = cover1; it[filePath] = "p1"
+                }
+                SongTable.insert {
+                    it[title] = "Song 2"; it[this.albumId] = albumId; it[cover] = cover2; it[filePath] = "p2"
+                }
+            }
+
+            assertEquals(1, service.fixIncorrectMerges())
+
+            transaction(database) {
+                val albums = AlbumTable.selectAll().toList()
+                assertEquals(2, albums.size)
+                assertEquals(listOf("The Album", "The Album"), albums.map { it[AlbumTable.name] })
+                assertEquals(listOf(anniversary, anniversary), albums.map { it.albumTitleTags() })
+                assertEquals(2L, AlbumTitleTagTable.selectAll().count())
+            }
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

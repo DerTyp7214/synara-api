@@ -1,6 +1,7 @@
 package dev.dertyp.services.schedule
 
 import dev.dertyp.core.cleanTitle
+import dev.dertyp.core.fullName
 import dev.dertyp.data.TaskKeys
 import dev.dertyp.db.SongTable
 import dev.dertyp.core.db.dbQuery
@@ -57,7 +58,7 @@ class LrcLibWorker : Worker("LrcLibWorker") {
 
             try {
                 val result =
-                    lrcLibService.getLyrics(artistName, song.title.cleanTitle(), song.album?.name, song.duration)
+                    lrcLibService.getLyrics(artistName, song.title.cleanTitle(), song.album?.fullName, song.duration)
                 if (result != null) {
                     val lyricsContent = result.syncedLyrics ?: result.plainLyrics
                     if (lyricsContent != null) {

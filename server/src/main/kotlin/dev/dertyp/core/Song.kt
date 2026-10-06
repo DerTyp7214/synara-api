@@ -57,5 +57,6 @@ fun InsertableSong.contentEquals(other: InsertableSong): Boolean {
             discNumber == other.discNumber &&
             duration == other.duration &&
             album.name == other.album.name &&
+            album.tags == other.album.tags &&
             releaseDate == other.releaseDate
 }

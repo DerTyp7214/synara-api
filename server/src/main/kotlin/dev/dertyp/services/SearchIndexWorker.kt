@@ -144,6 +144,7 @@ class SearchIndexWorker : KoinComponent {
                         s_inner.title AS song_title,
                         coalesce((SELECT string_agg(t->>'label', ' ') FROM jsonb_array_elements(coalesce(nullif(s_inner.title_tags, ''), '[]')::jsonb) t), '') AS title_tags,
                         coalesce(alb.name, '') AS album_name,
+                        coalesce((SELECT string_agg(t->>'label', ' ') FROM jsonb_array_elements(coalesce(nullif(alb.title_tags, ''), '[]')::jsonb) t), '') AS album_title_tags,
                         coalesce(string_agg(DISTINCT art.name, ' '), '') AS artist_names,
                         coalesce(string_agg(DISTINCT art_alias.name, ' '), '') AS artist_aliases,
                         coalesce(string_agg(DISTINCT mb_rec.title, ' '), '') AS mb_rec_titles,
@@ -170,13 +171,13 @@ class SearchIndexWorker : KoinComponent {
                     LEFT JOIN mb_artist mb_art ON art_mb."musicBrainzId" = mb_art.id
                     LEFT JOIN mb_artist_alias mb_art_alias ON mb_art.id = mb_art_alias."artistId"
                     WHERE s_inner.id = s.id
-                    GROUP BY s_inner.id, s_inner.title, s_inner.title_tags, alb.name
+                    GROUP BY s_inner.id, s_inner.title, s_inner.title_tags, alb.name, alb.title_tags
                 )
                 SELECT
                     setweight(to_tsvector('simple', song_title), 'A') ||
                     setweight(to_tsvector('simple', title_tags), 'B') ||
                     setweight(to_tsvector('simple', artist_names), 'B') ||
-                    setweight(to_tsvector('simple', album_name), 'C') ||
+                    setweight(to_tsvector('simple', album_name || ' ' || album_title_tags), 'C') ||
                     setweight(to_tsvector('simple', 
                         artist_aliases || ' ' || 
                         mb_rec_titles || ' ' || 
@@ -252,6 +253,7 @@ class SearchIndexWorker : KoinComponent {
                     SELECT 
                         alb_inner.id,
                         alb_inner.name AS album_name,
+                        coalesce((SELECT string_agg(t->>'label', ' ') FROM jsonb_array_elements(coalesce(nullif(alb_inner.title_tags, ''), '[]')::jsonb) t), '') AS title_tags,
                         coalesce(string_agg(DISTINCT art.name, ' '), '') AS artist_names,
                         coalesce(string_agg(DISTINCT art_alias.name, ' '), '') AS artist_aliases,
                         coalesce(string_agg(DISTINCT grp.name, ' '), '') AS group_names,
@@ -275,10 +277,11 @@ class SearchIndexWorker : KoinComponent {
                     LEFT JOIN mb_artist mb_art ON art_mb."musicBrainzId" = mb_art.id
                     LEFT JOIN mb_artist_alias mb_art_alias ON mb_art.id = mb_art_alias."artistId"
                     WHERE alb_inner.id = alb.id
-                    GROUP BY alb_inner.id, alb_inner.name
+                    GROUP BY alb_inner.id, alb_inner.name, alb_inner.title_tags
                 )
                 SELECT 
                     setweight(to_tsvector('simple', album_name), 'A') ||
+                    setweight(to_tsvector('simple', title_tags), 'B') ||
                     setweight(to_tsvector('simple', artist_names || ' ' || artist_aliases || ' ' || mb_rel_titles || ' ' || mb_art_names || ' ' || mb_art_aliases), 'B') ||
                     setweight(to_tsvector('simple', group_names || ' ' || member_names || ' ' || mb_rel_disambig || ' ' || mb_art_disambig), 'C')
                 FROM album_data
@@ -297,6 +300,7 @@ class SearchIndexWorker : KoinComponent {
                 s_inner.title AS song_title,
                 coalesce((SELECT string_agg(t->>'label', ' ') FROM jsonb_array_elements(coalesce(nullif(s_inner.title_tags, ''), '[]')::jsonb) t), '') AS title_tags,
                 coalesce(alb.name, '') AS album_name,
+                coalesce((SELECT string_agg(t->>'label', ' ') FROM jsonb_array_elements(coalesce(nullif(alb.title_tags, ''), '[]')::jsonb) t), '') AS album_title_tags,
                 coalesce(string_agg(DISTINCT art.name, ' '), '') AS artist_names,
                 coalesce(string_agg(DISTINCT art_alias.name, ' '), '') AS artist_aliases,
                 coalesce(string_agg(DISTINCT mb_rec.title, ' '), '') AS mb_rec_titles,
@@ -323,7 +327,7 @@ class SearchIndexWorker : KoinComponent {
             LEFT JOIN mb_artist mb_art ON art_mb."musicBrainzId" = mb_art.id
             LEFT JOIN mb_artist_alias mb_art_alias ON mb_art.id = mb_art_alias."artistId"
             WHERE s_inner.id = ?
-            GROUP BY s_inner.id, s_inner.title, s_inner.title_tags, alb.name
+            GROUP BY s_inner.id, s_inner.title, s_inner.title_tags, alb.name, alb.title_tags
         """.trimIndent()
 
         var result: Map<String, String>? = null
@@ -345,10 +349,15 @@ class SearchIndexWorker : KoinComponent {
                     rs.getString("title_tags")
                 ).filter { !it.isNullOrBlank() }
 
+                val albumParts = listOf(
+                    rs.getString("album_name"),
+                    rs.getString("album_title_tags")
+                ).filter { !it.isNullOrBlank() }
+
                 result = mapOf(
                     "title" to titleParts.joinToString(" "),
                     "artist" to (rs.getString("artist_names") ?: ""),
-                    "album" to (rs.getString("album_name") ?: ""),
+                    "album" to albumParts.joinToString(" "),
                     "metadata" to metadataParts.joinToString(" ")
                 )
             }
@@ -406,6 +415,7 @@ class SearchIndexWorker : KoinComponent {
         val query = """
             SELECT 
                 alb_inner.name AS album_name,
+                coalesce((SELECT string_agg(t->>'label', ' ') FROM jsonb_array_elements(coalesce(nullif(alb_inner.title_tags, ''), '[]')::jsonb) t), '') AS title_tags,
                 coalesce(string_agg(DISTINCT art.name, ' '), '') AS artist_names,
                 coalesce(string_agg(DISTINCT art_alias.name, ' '), '') AS artist_aliases,
                 coalesce(string_agg(DISTINCT grp.name, ' '), '') AS group_names,
@@ -429,7 +439,7 @@ class SearchIndexWorker : KoinComponent {
             LEFT JOIN mb_artist mb_art ON art_mb."musicBrainzId" = mb_art.id
             LEFT JOIN mb_artist_alias mb_art_alias ON mb_art.id = mb_art_alias."artistId"
             WHERE alb_inner.id = ?
-            GROUP BY alb_inner.id, alb_inner.name
+            GROUP BY alb_inner.id, alb_inner.name, alb_inner.title_tags
         """.trimIndent()
 
         var result: Map<String, String>? = null
@@ -450,8 +460,13 @@ class SearchIndexWorker : KoinComponent {
                     rs.getString("mb_art_disambig")
                 ).filter { !it.isNullOrBlank() }
 
+                val nameParts = listOf(
+                    rs.getString("album_name"),
+                    rs.getString("title_tags")
+                ).filter { !it.isNullOrBlank() }
+
                 result = mapOf(
-                    "name" to (rs.getString("album_name") ?: ""),
+                    "name" to nameParts.joinToString(" "),
                     "artists" to artistParts.joinToString(" "),
                     "groups" to groupParts.joinToString(" ")
                 )

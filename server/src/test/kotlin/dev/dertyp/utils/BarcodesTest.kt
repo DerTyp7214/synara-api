@@ -53,4 +53,22 @@ class BarcodesTest {
         assertTrue(Barcodes.variants("").isEmpty())
         assertTrue(Barcodes.variants("1234567").isEmpty())
     }
+
+    @Test
+    fun `same compares codes regardless of padding and formatting`() {
+        assertTrue(Barcodes.same("093624814337", "0093624814337"))
+        assertTrue(Barcodes.same("0093624814337", "093624814337"))
+        assertTrue(Barcodes.same("602445790000", " 0-602-445-790-000 "))
+        assertFalse(Barcodes.same("093624814337", "093624814338"))
+    }
+
+    @Test
+    fun `same is false when either side is missing or unusable`() {
+        assertFalse(Barcodes.same(null, null))
+        assertFalse(Barcodes.same("", ""))
+        assertFalse(Barcodes.same("BARCODE", "BARCODE"))
+        assertFalse(Barcodes.same("1234567", "1234567"))
+        assertFalse(Barcodes.same("093624814337", null))
+        assertFalse(Barcodes.same(null, "093624814337"))
+    }
 }

@@ -6,6 +6,7 @@ import dev.dertyp.plugins.IImporter
 import dev.dertyp.services.Service
 import dev.dertyp.services.SongService
 import dev.dertyp.services.metadata.*
+import dev.dertyp.services.release.AlbumEditions
 import dev.dertyp.services.release.AppleMusicReleaseService
 import dev.dertyp.utils.Barcodes
 import dev.dertyp.utils.parsers.ParserFactory
@@ -139,7 +140,7 @@ class UpcomingReleaseImportService(
 
         val album = IMetadataService.Album(
             id = selected?.id?.toString() ?: fallbackAlbumId(source),
-            title = selected?.title?.takeIf { it.isNotBlank() } ?: release.title,
+            title = AlbumEditions.fullName(selected?.title, selected?.disambiguation, release.title) ?: release.title,
             artists = selected?.artistCredit
                 ?.takeIf { it.isNotEmpty() }
                 ?.let { listOf(joinArtistCredit(it)) }

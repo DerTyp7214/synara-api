@@ -39,7 +39,10 @@ class PlaylistServiceTest : KoinTest {
             SchemaUtils.create(
                 PlaylistTable,
                 PlaylistSongTable,
-                SongTable, SongVariantTable, SongTitleTagTable,
+                SongTable,
+                SongVariantTable,
+                SongTitleTagTable,
+                AlbumTitleTagTable,
                 AlbumTable,
                 ArtistTable,
                 SongArtistTable,

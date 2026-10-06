@@ -16,3 +16,7 @@ fun decodeTitleTags(raw: String?): List<TitleTag> = raw
 fun ResultRow.titleTags(): List<TitleTag> = decodeTitleTags(getOrNull(SongTable.titleTags))
 
 fun ResultRow.fullSongTitle(): String = this[SongTable.title].withTitleTags(titleTags())
+
+fun ResultRow.albumTitleTags(): List<TitleTag> = decodeTitleTags(getOrNull(AlbumTable.titleTags))
+
+fun ResultRow.fullAlbumName(): String = this[AlbumTable.name].withTitleTags(albumTitleTags())

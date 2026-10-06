@@ -353,6 +353,7 @@ Contains metadata about a collection of songs released together.
 | `animatedCoverId` | `PlatformUUID`? | The animated cover unique identifier. |
 | `animatedCoverImageId` | `PlatformUUID`? | Identifier of the still Image from the animated cover's first frame. |
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
+| `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Edition markers split off the name, e.g. Deluxe Edition, 10th Anniversary or 2011 Remaster, in order of extraction. The name never contains them. |
 
 ### AlbumExtendedMetadata <a name="devdertypdataalbumextendedmetadata"></a>
 Extended metadata for an album.
@@ -1064,6 +1065,7 @@ Configuration for creating or updating an album record.
 | `originalId` | `String`? | The original ID of the album on external sources. |
 | `barcode` | `String`? | The barcode or UPC of the album. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Release unique identifier. |
+| `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Edition markers. When empty the server splits them off the name. |
 
 ### InsertableAnimatedImage <a name="devdertypdatainsertableanimatedimage"></a>
 Configuration for uploading or storing a new animated image.

@@ -2,7 +2,9 @@ package dev.dertyp.utils
 
 import dev.dertyp.core.ClientFeature
 import dev.dertyp.core.ClientInfo
+import dev.dertyp.core.fullName
 import dev.dertyp.core.fullTitle
+import dev.dertyp.data.Album
 import dev.dertyp.data.Song
 import dev.dertyp.data.UserSong
 import dev.dertyp.services.models.RecentRelease
@@ -11,6 +13,7 @@ import dev.dertyp.ui.UiComponent
 interface CompatRule {
     val feature: ClientFeature
     fun isActive(client: ClientInfo): Boolean = !client.supports(feature)
+    fun shapeAlbum(album: Album): Album = album
     fun shapeSong(song: Song): Song = song
     fun shapeUserSong(song: UserSong): UserSong = song
     fun shapeUiComponent(component: UiComponent, client: ClientInfo): UiComponent = component
@@ -59,6 +62,16 @@ object TitleTagsCompat : CompatRule {
     override fun shapeUserSong(song: UserSong): UserSong = song.copy(title = song.fullTitle, tags = emptyList())
 }
 
+object AlbumTitleTagsCompat : CompatRule {
+    override val feature = ClientFeature.ALBUM_TITLE_TAGS
+
+    override fun shapeAlbum(album: Album): Album = album.copy(name = album.fullName, tags = emptyList())
+
+    override fun shapeSong(song: Song): Song = song.copy(album = song.album?.let(::shapeAlbum))
+
+    override fun shapeUserSong(song: UserSong): UserSong = song.copy(album = song.album?.let(::shapeAlbum))
+}
+
 object ReleaseVersionsCompat : CompatRule {
     override val feature = ClientFeature.RELEASE_VERSIONS
 
@@ -74,5 +87,5 @@ object ReleaseVersionsCompat : CompatRule {
 
 object CompatRules {
     val all: List<CompatRule> =
-        listOf(AudioInfoCompat, DolbyAtmosCompat, TitleTagsCompat, ReleaseVersionsCompat, UiSchemaCompat())
+        listOf(AudioInfoCompat, DolbyAtmosCompat, TitleTagsCompat, ReleaseVersionsCompat, AlbumTitleTagsCompat, UiSchemaCompat())
 }

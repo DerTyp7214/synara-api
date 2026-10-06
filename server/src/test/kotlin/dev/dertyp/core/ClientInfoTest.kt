@@ -112,6 +112,13 @@ class ClientInfoTest {
     }
 
     @Test
+    fun `album title tags require api version 9`() {
+        assertFalse(ClientInfo.LEGACY.supports(ClientFeature.ALBUM_TITLE_TAGS))
+        assertFalse(ClientInfo(8).supports(ClientFeature.ALBUM_TITLE_TAGS))
+        assertTrue(ClientInfo(9).supports(ClientFeature.ALBUM_TITLE_TAGS))
+    }
+
+    @Test
     fun `field renames require api version 8`() {
         assertFalse(ClientInfo.LEGACY.supports(ClientFeature.FIELD_RENAMES))
         assertFalse(ClientInfo(7).supports(ClientFeature.FIELD_RENAMES))

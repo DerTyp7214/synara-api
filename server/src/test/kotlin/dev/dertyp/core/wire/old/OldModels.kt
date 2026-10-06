@@ -70,6 +70,8 @@ data class Album(
     val animatedCoverId: UUID? = null,
     val animatedCoverImageId: UUID? = null,
     val animatedCoverBlurHash: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val tags: List<TitleTag> = emptyList(),
 )
 
 @Serializable

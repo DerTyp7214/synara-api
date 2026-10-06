@@ -12,6 +12,8 @@ import dev.dertyp.services.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataService
+import dev.dertyp.services.release.AlbumEditions
+import dev.dertyp.utils.Barcodes
 import dev.dertyp.utils.parsers.ParserFactory
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -171,6 +173,7 @@ abstract class TidalBaseImporter(
             val albumArtists = firstTrack.artists
 
             var mbRelease: MusicBrainzRelease? = null
+            var providerBarcode = providedAlbum?.barcode
 
             if (providedAlbum != null) {
                 mbRelease = providedRelease
@@ -180,7 +183,8 @@ abstract class TidalBaseImporter(
                 try {
                     val tidalAlbum = metadataService.getAlbumsByIds(listOf(albumId)).firstOrNull()
                     val barcode = tidalAlbum?.barcode
-                    if (barcode != null && barcode.length >= 8 && barcode.uppercase() != "BARCODE") {
+                    providerBarcode = barcode
+                    if (barcode != null && Barcodes.normalize(barcode) != null) {
                         onLiveOutput("Searching MusicBrainz for album by barcode: $barcode")
                         mbRelease = musicBrainzService.searchReleaseByBarcode(barcode, albumArtists)
                         if (mbRelease != null) {
@@ -237,6 +241,7 @@ abstract class TidalBaseImporter(
                 var finalMbReleaseId: String? = null
                 var finalTrackNumber = provided?.trackNumber
                 var finalDiscNumber = provided?.discNumber
+                var releaseBarcode = mbRelease?.barcode
 
                 if (metadata is IMetadataService.Track) {
                     val mbid = try {
@@ -249,7 +254,7 @@ abstract class TidalBaseImporter(
                         finalMbId = metadata.id
                         finalTitle = metadata.title
                         finalArtist = metadata.artists.joinToString(indexer.artistDelimiter)
-                        finalAlbum = metadata.albumTitle
+                        finalAlbum = AlbumEditions.fullName(metadata.albumTitle, null, tidalTrack.albumTitle)
                         finalMbReleaseId = metadata.albumId
                     }
                 }
@@ -270,7 +275,7 @@ abstract class TidalBaseImporter(
                     finalArtist = mbTrack.recording?.artistCredit?.joinToString(indexer.artistDelimiter) {
                         it.name ?: it.artist?.name ?: ""
                     } ?: finalArtist
-                    finalAlbum = mbRelease.title ?: finalAlbum
+                    finalAlbum = AlbumEditions.fullName(mbRelease.title, mbRelease.disambiguation, finalAlbum)
                     finalDate = mbRelease.date ?: finalDate
                     finalMbId = mbTrack.recording?.id?.toString()
                     finalMbReleaseId = mbRelease.id.toString()
@@ -296,8 +301,9 @@ abstract class TidalBaseImporter(
                         }
                             ?: mbRecording.releases?.firstOrNull()
 
-                        finalAlbum = bestRelease?.title ?: finalAlbum
+                        finalAlbum = AlbumEditions.fullName(bestRelease?.title, bestRelease?.disambiguation, finalAlbum)
                         finalDate = bestRelease?.date
+                        releaseBarcode = bestRelease?.barcode
                         finalMbId = mbRecording.id.toString()
                         finalMbReleaseId = bestRelease?.id?.toString()
                     } else {
@@ -369,7 +375,7 @@ abstract class TidalBaseImporter(
                             ?: it.artists
                         names.joinToString(indexer.artistDelimiter).takeIf { joined -> joined.isNotBlank() }
                     },
-                    barcode = providedAlbum?.let { it.barcode ?: mbRelease?.barcode },
+                    barcode = listOf(providerBarcode, releaseBarcode).firstOrNull { Barcodes.normalize(it) != null },
                     replaceCover = providedAlbum != null,
                 )
             }

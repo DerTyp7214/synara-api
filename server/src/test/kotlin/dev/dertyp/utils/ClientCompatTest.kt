@@ -1,6 +1,7 @@
 package dev.dertyp.utils
 
 import dev.dertyp.core.ClientInfo
+import dev.dertyp.data.Album
 import dev.dertyp.data.ApiVersion
 import dev.dertyp.data.AudioInfo
 import dev.dertyp.data.ListenedSong
@@ -244,6 +245,53 @@ class ClientCompatTest {
         assertEquals(tags, current.one()!!.tags)
         assertEquals("Song", current.plain().title)
         assertEquals(tags, current.plain().tags)
+    }
+
+    interface AlbumApi {
+        suspend fun one(): Album?
+        suspend fun list(): List<Album>
+        suspend fun page(): PaginatedResponse<Album>
+        suspend fun song(): UserSong
+        suspend fun plain(): Song
+        fun flow(): Flow<Album>
+    }
+
+    @Test
+    fun `album tags are flattened for clients below api version 9`() = runBlocking {
+        val tags = listOf(TitleTag(TitleTagKind.VERSION, "Deluxe Edition"), TitleTag(TitleTagKind.REMASTER, "2011 Remaster"))
+        val album = Album(
+            id = UUID.randomUUID(),
+            name = "Album",
+            artists = emptyList(),
+            releaseDate = null,
+            totalDuration = 1000,
+            tags = tags,
+        )
+        val api = object : AlbumApi {
+            override suspend fun one() = album
+            override suspend fun list() = listOf(album)
+            override suspend fun page() = PaginatedResponse(listOf(album), total = 1)
+            override suspend fun song() = userSong.copy(album = album)
+            override suspend fun plain() = song.copy(album = album)
+            override fun flow() = flowOf(album)
+        }
+        val full = "Album (Deluxe Edition) (2011 Remaster)"
+
+        val v8 = api.withClientCompat(AlbumApi::class.java, ResponseShaper(ClientInfo(8)))
+        assertEquals(full, v8.one()!!.name)
+        assertEquals(emptyList<TitleTag>(), v8.one()!!.tags)
+        assertEquals(full, v8.list().single().name)
+        assertEquals(full, v8.page().data.single().name)
+        assertEquals(emptyList<TitleTag>(), v8.page().data.single().tags)
+        assertEquals(full, v8.song().album!!.name)
+        assertEquals(emptyList<TitleTag>(), v8.song().album!!.tags)
+        assertEquals(full, v8.plain().album!!.name)
+        assertEquals(full, v8.flow().toList().single().name)
+
+        val current = api.withClientCompat(AlbumApi::class.java, ResponseShaper(ClientInfo(ApiVersion.CURRENT)))
+        assertEquals("Album", current.one()!!.name)
+        assertEquals(tags, current.one()!!.tags)
+        assertEquals(tags, current.song().album!!.tags)
     }
 
     private fun recentRelease(title: String) = RecentRelease(

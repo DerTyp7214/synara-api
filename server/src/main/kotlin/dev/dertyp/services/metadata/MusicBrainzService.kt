@@ -201,7 +201,7 @@ class MusicBrainzService : Service() {
         album: Album,
         priority: HttpClientPriority = HttpClientPriority.NORMAL
     ): MusicBrainzRelease? {
-        if (album.barcode != null && album.barcode!!.length >= 8 && album.barcode!!.uppercase() != "BARCODE") {
+        if (Barcodes.normalize(album.barcode) != null) {
             try {
                 val response = retryableGet<MusicBrainzReleaseSearchResponse>("$mbBaseUrl/release", priority) {
                     parameter("query", "barcode:${album.barcode}")

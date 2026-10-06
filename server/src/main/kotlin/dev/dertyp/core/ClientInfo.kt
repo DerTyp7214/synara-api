@@ -57,6 +57,12 @@ enum class ClientFeature(val minApiVersion: Int, val maxApiVersion: Int? = null)
         fallback = "Clients below API version 8 receive and send only the old names: `musicbrainzId`, `playing`, `explicitMember`, `shuffleMode`, `explicit`, and the queue entry type `Explicit`.",
     )
     FIELD_RENAMES(8),
+
+    @FeatureDoc(
+        introduces = "`tags` on @Album: edition markers such as *Deluxe Edition*, *10th Anniversary* or *2011 Remaster*, split off the album name into @TitleTag entries, so `name` is clean.",
+        fallback = "`name` is put back together into the full original name and `tags` is emptied.",
+    )
+    ALBUM_TITLE_TAGS(9),
 }
 
 data class ClientInfo(

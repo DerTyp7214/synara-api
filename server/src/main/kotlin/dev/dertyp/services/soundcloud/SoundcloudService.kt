@@ -21,6 +21,8 @@ import dev.dertyp.services.UserPlaylistService
 import dev.dertyp.services.import.*
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.release.AlbumEditions
+import dev.dertyp.utils.Barcodes
 import dev.dertyp.utils.parsers.ParserFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -255,6 +257,7 @@ class SoundcloudService(
             var finalDate: String? = null
             var finalMbId: String? = null
             var finalMbReleaseId: String? = null
+            var finalBarcode: String? = null
 
             if (metadata is IMetadataService.Track) {
                 val mbid = try {
@@ -287,8 +290,11 @@ class SoundcloudService(
                     val firstRelease = mbRecording.releases?.firstOrNull {
                         it.title?.cleanTitle()?.equals(album.cleanTitle(), true) == true
                     } ?: mbRecording.releases?.firstOrNull()
-                    finalAlbum = firstRelease?.title
+                    finalAlbum = firstRelease?.let { release ->
+                        AlbumEditions.fullName(release.title, release.disambiguation, album.takeIf { it.isNotBlank() })
+                    }
                     finalDate = firstRelease?.date
+                    finalBarcode = firstRelease?.barcode?.takeIf { Barcodes.normalize(it) != null }
                     finalMbId = mbRecording.id.toString()
                     finalMbReleaseId = firstRelease?.id?.toString()
                 } else {
@@ -365,6 +371,7 @@ class SoundcloudService(
                         finalDate?.let { tag.setField(FieldKey.YEAR, it) }
                         finalMbId?.let { tag.setField(FieldKey.MUSICBRAINZ_TRACK_ID, it) }
                         finalMbReleaseId?.let { tag.setField(FieldKey.MUSICBRAINZ_RELEASEID, it) }
+                        finalBarcode?.let { tag.setField(FieldKey.BARCODE, it) }
                         audioFile.setOriginalUrl(url)
 
                         if (finalArtist != null && finalTitle != null) {

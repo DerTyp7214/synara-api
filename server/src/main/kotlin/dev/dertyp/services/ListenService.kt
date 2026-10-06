@@ -173,9 +173,9 @@ class ListenService : Service() {
             .singleOrNull()?.get(AlbumMusicBrainzTable.musicBrainzId)?.value
 
         val releaseName = AlbumTable
-            .select(AlbumTable.name)
+            .select(AlbumTable.name, AlbumTable.titleTags)
             .where { AlbumTable.id eq albumId }
-            .singleOrNull()?.get(AlbumTable.name)?.ifBlank { null }
+            .singleOrNull()?.fullAlbumName()?.ifBlank { null }
 
         val artistRows = SongArtistTable
             .join(ArtistTable, JoinType.INNER, onColumn = SongArtistTable.artistId, otherColumn = ArtistTable.id)
