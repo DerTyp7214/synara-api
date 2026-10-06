@@ -7,6 +7,7 @@ import dev.dertyp.data.AudioScale
 import dev.dertyp.db.*
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.audio.ValencePostProcessor
+import dev.dertyp.testing.entityChangeTables
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.spyk
@@ -22,6 +23,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import java.io.File
 import java.util.UUID
 import kotlin.test.*
@@ -30,10 +34,15 @@ import kotlin.test.*
 class AudioAnalysisServiceTest {
 
     private fun setup(dialect: DbDialect) = runBlocking {
+        startKoin {
+            modules(module {
+                single { EntityChangeRecorder() }
+            })
+        }
         TestDatabase.connect(dialect, "audio_analysis_test")
         dbQuery {
             SchemaUtils.create(
-                AlbumTable, SongTable, SongVariantTable, SongAudioDataTable, SongAudioTimelineTable,
+                *entityChangeTables, SongAudioDataTable, SongAudioTimelineTable,
                 PersonTable, SongComposerTable, SongLyricistTable, SongProducerTable
             )
         }
@@ -42,6 +51,7 @@ class AudioAnalysisServiceTest {
     @AfterEach
     fun tearDown() {
         TestDatabase.cleanUp()
+        stopKoin()
     }
 
     @Test

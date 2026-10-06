@@ -3,11 +3,8 @@ package dev.dertyp.services
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.AnimatedImageTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.ImageTable
 import dev.dertyp.db.SongTable
-import dev.dertyp.db.SongVariantTable
+import dev.dertyp.testing.entityChangeTables
 import kotlinx.coroutines.runBlocking
 import org.bytedeco.ffmpeg.global.avcodec
 import org.bytedeco.ffmpeg.global.avutil
@@ -23,7 +20,9 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import java.io.File
 import java.nio.ShortBuffer
 import java.nio.file.Path
@@ -79,16 +78,14 @@ class AudioStartAnalysisServiceTest {
 
     @Test
     fun `analyze persists the detected offset and unanalyzed query excludes it`(@TempDir tempDir: Path) = runBlocking {
+        startKoin {
+            modules(module {
+                single { EntityChangeRecorder() }
+            })
+        }
         val db = TestDatabase.connect(DbDialect.SQLITE, "audio_start_test")
         transaction(db) {
-            SchemaUtils.create(
-                ArtistTable,
-                ImageTable,
-                AnimatedImageTable,
-                AlbumTable,
-                SongTable,
-                SongVariantTable
-            )
+            SchemaUtils.create(*entityChangeTables)
         }
 
         val file = tempDir.resolve("song.wav").toFile()
