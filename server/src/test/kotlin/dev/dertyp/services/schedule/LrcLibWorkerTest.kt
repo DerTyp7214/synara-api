@@ -19,7 +19,6 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -37,10 +36,10 @@ import java.util.UUID
 class LrcLibWorkerTest : KoinTest {
 
     private fun setup(dialect: DbDialect) {
-        TestDatabase.connect(dialect, "lrclib_worker_test")
-        transaction {
-            SchemaUtils.create(SongTable, SongVariantTable, AlbumTable, ImageTable, SyncedLyricsTable, *entityChangeTables)
-        }
+        TestDatabase.connect(
+            dialect, "lrclib_worker_test",
+            SongTable, SongVariantTable, AlbumTable, ImageTable, SyncedLyricsTable, *entityChangeTables
+        )
     }
 
     @AfterEach

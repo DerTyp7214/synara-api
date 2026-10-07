@@ -10,10 +10,11 @@ import dev.dertyp.services.HookService
 import dev.dertyp.services.HookSubscriber
 import dev.dertyp.services.Service
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.time.withTimeoutOrNull
@@ -79,7 +80,7 @@ class ScheduleService : IScheduleService, HookSubscriber, Service() {
 
     private val scheduleMutex = Mutex()
 
-    private val queueUpdateNotifier = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val queueVersion = MutableStateFlow(0L)
 
     data class ManagedTask(
         val key: String,
@@ -167,12 +168,14 @@ class ScheduleService : IScheduleService, HookSubscriber, Service() {
 
         coroutineScope {
             launch {
-                while (!stopped.load()) {
+                while (true) {
+                    val seenVersion = queueVersion.value
+                    if (stopped.load()) break
                     val now = Instant.now()
                     val next = schedules.peek()
 
                     if (next == null) {
-                        queueUpdateNotifier.first()
+                        queueVersion.first { it != seenVersion }
                         continue
                     }
 
@@ -180,7 +183,7 @@ class ScheduleService : IScheduleService, HookSubscriber, Service() {
 
                     if (waitTime <= Duration.ZERO) {
                         scheduleMutex.withLock {
-                            val scheduledTask = schedules.poll() ?: return@withLock
+                            val scheduledTask = next.takeIf(schedules::remove) ?: return@withLock
                             val taskName =
                                 if (scheduledTask.name != null) "${scheduledTask.name} (${scheduledTask.id})" else "${scheduledTask.id}"
                             logger.info("Executing task: $taskName")
@@ -213,7 +216,7 @@ class ScheduleService : IScheduleService, HookSubscriber, Service() {
                     } else {
                         logger.info("Next task in $waitTime")
                         withTimeoutOrNull(waitTime) {
-                            queueUpdateNotifier.first()
+                            queueVersion.first { it != seenVersion }
                         }
                     }
                 }
@@ -227,14 +230,14 @@ class ScheduleService : IScheduleService, HookSubscriber, Service() {
     override suspend fun stopService() {
         logger.info("Stopping service requested")
         stopped.store(true)
-        queueUpdateNotifier.tryEmit(Unit)
+        queueVersion.update { it + 1 }
     }
 
     fun schedule(task: ScheduledTask): ScheduledTask {
         val taskName = if (task.name != null) "${task.name} (${task.id})" else "${task.id}"
         logger.info("Scheduling task: $taskName with trigger: ${task.trigger}")
         schedules.add(task)
-        queueUpdateNotifier.tryEmit(Unit)
+        queueVersion.update { it + 1 }
         return task
     }
 
@@ -342,13 +345,13 @@ class ScheduleService : IScheduleService, HookSubscriber, Service() {
         if (task != null) {
             schedules.remove(task)
             eventRegistry.values.forEach { it.remove(task.trigger) }
-            queueUpdateNotifier.tryEmit(Unit)
+            queueVersion.update { it + 1 }
         } else {
             logger.warn("Task with id $id not found for unscheduling")
         }
     }
 
-    fun getScheduledTasks() = schedules.sorted()
+    fun getScheduledTasks() = schedules.toTypedArray().sorted()
     fun getManagedTasks() = managedTasks.toMap()
 
     fun register(key: String, task: Task): ScheduledTask {
@@ -374,7 +377,7 @@ class ScheduleService : IScheduleService, HookSubscriber, Service() {
                 schedule(task)
             }
 
-        queueUpdateNotifier.tryEmit(Unit)
+        queueVersion.update { it + 1 }
     }
 
     private suspend fun notifyTaskCompletion(completedTaskId: UUID, completedTaskKey: String?) =

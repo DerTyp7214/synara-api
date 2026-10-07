@@ -12,7 +12,6 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -30,26 +29,24 @@ class ServerStatsServiceTest {
     private lateinit var musicBrainzCacheService: MusicBrainzCacheService
 
     fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "stats_test")
-        transaction(database) {
-            SchemaUtils.create(
-                ArtistTable,
-                AlbumTable,
-                ImageTable,
-                AnimatedImageTable,
-                SongTable,
-                SongVariantTable,
-                PlaylistTable,
-                UserTable,
-                UserPlaylistTable,
-                TranscodedSongTable,
-                PodcastShowTable,
-                PodcastEpisodeTable,
-                PodcastTranscriptTable,
-                PodcastSubscriptionTable,
-                PodcastEpisodeProgressTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "stats_test",
+            ArtistTable,
+            AlbumTable,
+            ImageTable,
+            AnimatedImageTable,
+            SongTable,
+            SongVariantTable,
+            PlaylistTable,
+            UserTable,
+            UserPlaylistTable,
+            TranscodedSongTable,
+            PodcastShowTable,
+            PodcastEpisodeTable,
+            PodcastTranscriptTable,
+            PodcastSubscriptionTable,
+            PodcastEpisodeProgressTable,
+        )
         storageService = mockk()
         reverseProxyService = mockk()
         musicBrainzCacheService = mockk()

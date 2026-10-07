@@ -4,7 +4,6 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -18,13 +17,11 @@ class ManyToManyIntegrityTest {
     private lateinit var database: Database
 
     fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "many_to_many")
-        transaction(database) {
-            SchemaUtils.create(
-                ArtistTable, SongTable, SongVariantTable, AlbumTable, SongArtistTable,
-                PlaylistTable, PlaylistSongTable, UserTable, ImageTable
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "many_to_many",
+            ArtistTable, SongTable, SongVariantTable, AlbumTable, SongArtistTable,
+            PlaylistTable, PlaylistSongTable, UserTable, ImageTable
+        )
     }
 
     @AfterEach

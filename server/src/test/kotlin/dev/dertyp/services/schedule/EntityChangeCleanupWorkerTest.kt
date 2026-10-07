@@ -16,7 +16,6 @@ import dev.dertyp.services.EntityChangeService
 import dev.dertyp.testing.insertUser
 import io.ktor.server.config.MapApplicationConfig
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -34,10 +33,10 @@ import kotlin.time.Duration.Companion.days
 class EntityChangeCleanupWorkerTest : KoinTest {
 
     private fun setup(dialect: DbDialect, retentionDays: Long) = runBlocking {
-        TestDatabase.connect(dialect, "entity_change_cleanup_worker_test")
-        dbQuery {
-            SchemaUtils.create(UserTable, EntityChangeTable, UserEntityChangeTable, EntityChangeScopeTable)
-        }
+        TestDatabase.connect(
+            dialect, "entity_change_cleanup_worker_test",
+            UserTable, EntityChangeTable, UserEntityChangeTable, EntityChangeScopeTable
+        )
         startKoin {
             modules(module {
                 single { ServerConfig(MapApplicationConfig()) }

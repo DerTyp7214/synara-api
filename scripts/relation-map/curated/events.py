@@ -226,8 +226,8 @@ def build(root):
         },
         {
             "id": "version-group-trigger", "label": "VersionGroupTrigger", "sub": "after commit, debounced", "group": "subscribers",
-            "desc": "Waits for 1 second without a further album event, at most 5 seconds after the first, then rebuilds the album version groups once.",
-            "meta": [["Bound as", "HookSubscriber"]], "src": S + "services/VersionGroupTrigger.kt:12",
+            "desc": "Waits for the quiet period without a further album event, at most the maximum wait after the first, then rebuilds the album version groups once.",
+            "meta": [["Bound as", "HookSubscriber"], ["Quiet period", "versionGroups.rebuildQuietSeconds, VERSION_GROUP_REBUILD_QUIET_SECONDS, default 1"], ["Maximum wait", "versionGroups.rebuildMaxWaitSeconds, VERSION_GROUP_REBUILD_MAX_WAIT_SECONDS, default 5"]], "src": S + "services/VersionGroupTrigger.kt:12",
         },
         {
             "id": "duplicate-album-merge-trigger", "label": "DuplicateAlbumMergeTrigger", "sub": "after commit", "group": "subscribers",
@@ -351,7 +351,7 @@ def build(root):
 
     effects = [
         ("entity-change-recorder", "change-tables", "in-transaction", "upserts", "Change rows", "JDBC upsert in the transaction of the write", "latest change per entity and aspect, per-user rows, scope rows, stamped at commit", "services/EntityChangeRecorder.kt:233"),
-        ("version-group-trigger", "rebuild-version-groups", "after-commit", "calls", "Version group rebuild", "AlbumService.rebuildVersionGroups", "one rebuild 1 second after the last album event, at most 5 seconds after the first", "services/VersionGroupTrigger.kt:61"),
+        ("version-group-trigger", "rebuild-version-groups", "after-commit", "calls", "Version group rebuild", "AlbumService.rebuildVersionGroups", "one rebuild after the quiet period following the last album event, at most the maximum wait after the first", "services/VersionGroupTrigger.kt:61"),
         ("duplicate-album-merge-trigger", "merge-duplicate-albums", "after-commit", "calls", "Duplicate merge", "LibraryMergeService.mergeDuplicateAlbums", "a call without arguments, launched in the scope of the trigger", "services/DuplicateAlbumMergeTrigger.kt:13"),
         ("search-index-remover", "redis-search", "after-commit", "removes", "Search removal", "RedisSearchService.remove", "deletes the search keys of removed entities", "services/SearchIndexRemover.kt:36"),
         ("schedule-service", "post-index-workers", "after-commit", "runs", "Post-index run", "schedulePostIndexWorkers", "schedules the three workers with a trigger of now", "services/schedule/ScheduleService.kt:252"),

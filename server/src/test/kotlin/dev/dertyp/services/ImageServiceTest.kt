@@ -60,33 +60,31 @@ class ImageServiceTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "image_test")
-        transaction(database) {
-            SchemaUtils.create(
-                *entityChangeTables,
-                ImageTable,
-                ImageMetadataTable,
-                AlbumTable,
-                ArtistTable,
-                SongTable,
-                SongVariantTable,
-                PlaylistTable,
-                UserPlaylistTable,
-                UserTable,
-                MBReleaseGroupTable,
-                MBReleaseGroupCoverTable,
-                RecentReleaseTable,
-                ProviderReleaseTable,
-                ProviderLinkTable,
-                RecentReleaseLinkTable,
-                ProviderReleaseLinkTable,
-                AnimatedImageTable,
-                CollectionTable,
-                RadioChannelTable,
-                PodcastShowTable,
-                PodcastEpisodeTable
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "image_test",
+            *entityChangeTables,
+            ImageTable,
+            ImageMetadataTable,
+            AlbumTable,
+            ArtistTable,
+            SongTable,
+            SongVariantTable,
+            PlaylistTable,
+            UserPlaylistTable,
+            UserTable,
+            MBReleaseGroupTable,
+            MBReleaseGroupCoverTable,
+            RecentReleaseTable,
+            ProviderReleaseTable,
+            ProviderLinkTable,
+            RecentReleaseLinkTable,
+            ProviderReleaseLinkTable,
+            AnimatedImageTable,
+            CollectionTable,
+            RadioChannelTable,
+            PodcastShowTable,
+            PodcastEpisodeTable
+        )
 
         service = ImageService(storageService, redisConfig)
     }

@@ -16,7 +16,6 @@ import io.mockk.unmockkAll
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -51,10 +50,7 @@ class MetadataFetchingServiceTest : KoinTest {
     )
 
     fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "metadata_fetch")
-        transaction(database) {
-            SchemaUtils.create(*allTables)
-        }
+        database = TestDatabase.connect(dialect, "metadata_fetch", *allTables)
 
         startKoin {
             modules(module {

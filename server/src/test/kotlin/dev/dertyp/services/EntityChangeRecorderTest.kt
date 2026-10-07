@@ -33,10 +33,14 @@ import dev.dertyp.testing.insertSong
 import dev.dertyp.testing.insertUser
 import dev.dertyp.testing.linkSongArtist
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.Transaction
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.statements.StatementContext
+import org.jetbrains.exposed.v1.core.statements.StatementInterceptor
+import org.jetbrains.exposed.v1.core.targetTables
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.Query
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -70,36 +74,43 @@ class EntityChangeRecorderTest : KoinTest {
         val what: EntityChangeKind
     )
 
+    private class ChangeRowReads : StatementInterceptor {
+        var count = 0
+
+        override fun beforeExecution(transaction: Transaction, context: StatementContext) {
+            val tables = (context.statement as? Query)?.set?.source?.targetTables().orEmpty()
+            if (EntityChangeTable in tables || UserEntityChangeTable in tables) count++
+        }
+    }
+
     private lateinit var database: Database
     private val recorder = EntityChangeRecorder()
 
     private fun setup(dialect: DbDialect) {
         startKoin { modules(module { }) }
-        database = TestDatabase.connect(dialect, "entity_change_recorder_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                AlbumTable,
-                ArtistTable,
-                SongTable, SongVariantTable,
-                SongArtistTable,
-                AlbumArtistTable,
-                PlaylistTable,
-                PlaylistSongTable,
-                UserPlaylistTable,
-                UserPlaylistSongTable,
-                CollectionTable,
-                CollectionSongTable,
-                CollectionAlbumTable,
-                CollectionArtistTable,
-                CollectionPlaylistTable,
-                EntityChangeTable,
-                UserEntityChangeTable,
-                EntityChangeScopeTable,
-                EntityChangeTrackingTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "entity_change_recorder_test",
+            UserTable,
+            ImageTable,
+            AlbumTable,
+            ArtistTable,
+            SongTable, SongVariantTable,
+            SongArtistTable,
+            AlbumArtistTable,
+            PlaylistTable,
+            PlaylistSongTable,
+            UserPlaylistTable,
+            UserPlaylistSongTable,
+            CollectionTable,
+            CollectionSongTable,
+            CollectionAlbumTable,
+            CollectionArtistTable,
+            CollectionPlaylistTable,
+            EntityChangeTable,
+            UserEntityChangeTable,
+            EntityChangeScopeTable,
+            EntityChangeTrackingTable,
+        )
     }
 
     @AfterEach
@@ -1091,6 +1102,53 @@ class EntityChangeRecorderTest : KoinTest {
         assertThrows<IllegalStateException> { recorder.updated(EntityType.ARTIST, listOf(artist)) }
 
         assertEquals(emptySet<Recorded>(), libraryRows())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class, names = ["POSTGRES"])
+    fun `rows written on PostgreSQL are not read back by their key`(dialect: DbDialect) {
+        setup(dialect)
+        val user = db { insertUser() }
+        val album = db { insertAlbum() }
+        val artist = db { insertArtist() }
+        val songs = List(5500) { UUID.randomUUID() }
+        db {
+            SongTable.batchInsert(songs, shouldReturnGeneratedValues = false) { song ->
+                this[SongTable.id] = song
+                this[SongTable.title] = "Song"
+                this[SongTable.albumId] = album
+                this[SongTable.fileSize] = 0
+                this[SongTable.duration] = 0
+            }
+            SongArtistTable.batchInsert(songs, shouldReturnGeneratedValues = false) { song ->
+                this[SongArtistTable.songId] = song
+                this[SongArtistTable.artistId] = artist
+            }
+        }
+        val reads = ChangeRowReads()
+
+        db {
+            TransactionManager.current().registerInterceptor(reads)
+            recorder.created(EntityType.SONG, songs)
+            recorder.updated(EntityType.SONG, songs)
+            recorder.likesChanged(user, EntityType.SONG, songs)
+            recorder.likesChanged(user, EntityType.SONG, songs)
+        }
+
+        assertEquals(0, reads.count)
+        assertEquals(
+            songs.mapTo(mutableSetOf()) { data(EntityType.SONG, it, EntityChangeKind.CREATED) } +
+                    members(EntityType.ALBUM, album) + members(EntityType.ARTIST, artist),
+            libraryRows()
+        )
+        assertEquals(11_000L, db { EntityChangeScopeTable.selectAll().count() })
+        assertEquals(5500, userRows().size)
+        val stamps = db {
+            EntityChangeTable.selectAll().map { it[EntityChangeTable.changedAt] } +
+                    UserEntityChangeTable.selectAll().map { it[UserEntityChangeTable.changedAt] }
+        }
+        assertEquals(11_002, stamps.size)
+        assertEquals(1, stamps.toSet().size)
     }
 
     @ParameterizedTest

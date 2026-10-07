@@ -23,7 +23,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -51,19 +50,17 @@ class ListenBackupServiceTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     private fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "listen_backup_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                AlbumTable,
-                ArtistTable,
-                SongTable, SongVariantTable,
-                ListenBrainzUserTable,
-                ListenTable,
-                ListenBackupConfigTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "listen_backup_test",
+            UserTable,
+            ImageTable,
+            AlbumTable,
+            ArtistTable,
+            SongTable, SongVariantTable,
+            ListenBrainzUserTable,
+            ListenTable,
+            ListenBackupConfigTable,
+        )
         val engine = MockEngine { request ->
             receivedKeys.add(request.headers[ListenBackupProtocol.KEY_HEADER])
             when {

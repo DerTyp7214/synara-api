@@ -80,43 +80,41 @@ class SongServiceDeletionTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "song_deletion_test")
-        transaction(database) {
-            SchemaUtils.create(
-                *entityChangeTables,
-                UserTable,
-                SongTable, SongVariantTable,
-                AlbumTable,
-                ArtistTable,
-                ArtistMemberTable,
-                SongArtistTable,
-                AlbumArtistTable,
-                SongMusicBrainzTable,
-                SongAcoustIdTable,
-                AlbumMusicBrainzTable,
-                ArtistMusicBrainzTable,
-                UserSongTable,
-                UserCapabilityTable,
-                ArtistAliasTable,
-                FollowedArtistTable,
-                PlaylistSongTable,
-                UserPlaylistSongTable,
-                ImageTable,
-                ImageMetadataTable,
-                AnimatedImageTable,
-                ArtistSplitAliasTable,
-                GenreTable,
-                ArtistGenreTable,
-                SongGenreTable,
-                AlbumGenreTable,
-                SongProviderTable,
-                AlbumProviderTable,
-                SongAudioDataTable,
-                TimecodeTagTable,
-                ProviderEnrichmentCheckTable,
-                *allMusicBrainzTables
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "song_deletion_test",
+            *entityChangeTables,
+            UserTable,
+            SongTable, SongVariantTable,
+            AlbumTable,
+            ArtistTable,
+            ArtistMemberTable,
+            SongArtistTable,
+            AlbumArtistTable,
+            SongMusicBrainzTable,
+            SongAcoustIdTable,
+            AlbumMusicBrainzTable,
+            ArtistMusicBrainzTable,
+            UserSongTable,
+            UserCapabilityTable,
+            ArtistAliasTable,
+            FollowedArtistTable,
+            PlaylistSongTable,
+            UserPlaylistSongTable,
+            ImageTable,
+            ImageMetadataTable,
+            AnimatedImageTable,
+            ArtistSplitAliasTable,
+            GenreTable,
+            ArtistGenreTable,
+            SongGenreTable,
+            AlbumGenreTable,
+            SongProviderTable,
+            AlbumProviderTable,
+            SongAudioDataTable,
+            TimecodeTagTable,
+            ProviderEnrichmentCheckTable,
+            *allMusicBrainzTables
+        )
 
         coEvery { fingerprintService.fingerprint(any()) } returns null
         every { storageService.albumsPath } returns null
@@ -128,7 +126,7 @@ class SongServiceDeletionTest : KoinTest {
     @AfterEach
     fun tearDown() {
         runBlocking { events.stop() }
-        runBlocking { songService.stopService() }
+        if (::songService.isInitialized) runBlocking { songService.stopService() }
         stopKoin()
         TestDatabase.cleanUp()
     }

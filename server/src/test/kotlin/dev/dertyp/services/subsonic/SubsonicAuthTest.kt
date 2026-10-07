@@ -16,7 +16,6 @@ import io.ktor.http.*
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.params.ParameterizedTest
@@ -39,9 +38,8 @@ class SubsonicAuthTest : KoinTest {
         MessageDigest.getInstance("MD5").digest(input.toByteArray()).joinToString("") { "%02x".format(it) }
 
     private fun setup(dialect: DbDialect): SubsonicAuthenticator = runBlocking {
-        TestDatabase.connect(dialect, "subsonic_auth_test")
+        TestDatabase.connect(dialect, "subsonic_auth_test", UserTable, ApiKeyTable, SubsonicCredentialTable)
         dbQuery {
-            SchemaUtils.create(UserTable, ApiKeyTable, SubsonicCredentialTable)
             UserTable.insert {
                 it[id] = userId
                 it[username] = "tester"

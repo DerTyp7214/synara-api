@@ -12,25 +12,36 @@ on:
       - server/**
       - proxy/**
       - mock-server/**
+      - plugin-api/**
+      - build-logic/**
       - gradle/**
       - transcriber/**
       - audio-embed/**
       - recsys/**
       - common-rpc
+      - .gitmodules
       - common-proxy/**
       - listen-backup/**
       - common-listen-backup/**
       - credential-server/**
       - common-credentials/**
       - Dockerfile.nobuild
+      - Dockerfile.proxy
+      - Dockerfile.mock
+      - Dockerfile.listen-backup
+      - Dockerfile.credentials
       - data/cover-assets/**
       - build.gradle.kts
       - gradle.properties
       - settings.gradle.kts
+      - gradlew
     branches: [ master, release ]
   workflow_dispatch:
   schedule:
     - cron: '0 0 1 * *'
+
+env:
+  COVERAGE: true
 
 jobs:
   run-tests:
@@ -49,17 +60,24 @@ jobs:
         with:
           java-version: '25'
           distribution: 'temurin'
-          cache: 'gradle'
 
-      - name: Run Tests and Generate Coverage
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+
+      - name: Compile and pull test images
+        run: |
+          docker pull --quiet postgres:15-alpine &
+          docker pull --quiet redis/redis-stack-server:7.4.0-v8 &
+          docker pull --quiet testcontainers/ryuk:0.12.0 &
+          ./gradlew testClasses --no-daemon
+          wait
+
+      - name: Run Tests
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
-        run: ./gradlew test koverXmlReport koverHtmlReport
-
-      - name: Verify generated docs are current
-        run: |
-          ./gradlew generateDocs
-          git diff --exit-code -- docs/RPC_SERVICES.md docs/MODELS.md docs/REST_API.md docs/PERMISSIONS.md docs/API_CONSTANTS.md docs/ENVIRONMENT_VARIABLES.md example.env
+        run: ./gradlew test ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '--rerun' || '' }} -PtestForks=2 ${{ env.COVERAGE == 'true' && 'koverXmlReport koverHtmlReport' || '-PwithoutCoverage=true' }}
 
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v6
@@ -67,11 +85,10 @@ jobs:
         with:
           report_paths: '**/build/test-results/test*/TEST-*.xml'
           detailed_summary: true
-          include_passed: true
 
       - name: Add Coverage to Summary
         uses: madrapps/jacoco-report@v1.8.0
-        if: always() && github.event_name != 'schedule'
+        if: always() && env.COVERAGE == 'true' && github.event_name != 'schedule'
         with:
           paths: |
             ${{ github.workspace }}/**/build/reports/kover/report.xml
@@ -84,6 +101,7 @@ jobs:
 
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v7
+        if: env.COVERAGE == 'true'
         with:
           name: coverage-report
           path: |
@@ -101,27 +119,22 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Cache Gradle dependencies
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/build.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: ${{ runner.os }}-gradle-
-
       - name: Set up JDK 25
         uses: actions/setup-java@v5
         with:
           java-version: '25'
           distribution: 'temurin'
-          cache: 'gradle'
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
 
-      - name: Build Ktor fat JARs
-        run: ./gradlew :server:shadowJar :proxy:shadowJar :mock-server:shadowJar :listen-backup:shadowJar :credential-server:shadowJar
+      - name: Build Ktor fat JARs and generated docs
+        run: ./gradlew :server:shadowJar :proxy:shadowJar :mock-server:shadowJar :listen-backup:shadowJar :credential-server:shadowJar generateDocs
+
+      - name: Verify generated docs are current
+        run: git diff --exit-code -- docs/RPC_SERVICES.md docs/MODELS.md docs/REST_API.md docs/PERMISSIONS.md docs/API_CONSTANTS.md docs/ENVIRONMENT_VARIABLES.md example.env
 
       - name: Extract Application Version
         id: version_info

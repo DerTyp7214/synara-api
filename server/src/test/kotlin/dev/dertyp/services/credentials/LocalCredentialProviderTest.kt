@@ -5,7 +5,6 @@ import com.auth0.jwt.algorithms.Algorithm
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.HttpClientFactory
-import dev.dertyp.core.db.dbQuery
 import dev.dertyp.credentials.CredentialNames
 import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.db.PluginSettingTable
@@ -24,7 +23,6 @@ import io.ktor.server.config.MapApplicationConfig
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -85,8 +83,7 @@ class LocalCredentialProviderTest {
         )
 
     private fun setup(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "local_credential_provider_test")
-        dbQuery { SchemaUtils.create(PluginSettingTable) }
+        TestDatabase.connect(dialect, "local_credential_provider_test", PluginSettingTable)
     }
 
     @AfterEach

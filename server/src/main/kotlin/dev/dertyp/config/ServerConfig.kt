@@ -13,6 +13,8 @@ import io.ktor.util.logging.KtorSimpleLogger
 import java.io.File
 import java.nio.file.Path
 import java.nio.file.Paths
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 class ServerConfig(config: ApplicationConfig) {
     val server: HttpServerConfig by lazy { config.toHttpServerConfig() }
@@ -29,6 +31,7 @@ class ServerConfig(config: ApplicationConfig) {
     val metrics: MetricsConfig by lazy { config.toMetricsConfig() }
     val workers: WorkersConfig by lazy { config.toWorkersConfig() }
     val entityChanges: EntityChangeConfig by lazy { config.toEntityChangeConfig() }
+    val versionGroups: VersionGroupConfig by lazy { config.toVersionGroupConfig() }
     val proxy: ProxyConfig by lazy { config.toProxyConfig() }
     val credentialServer: CredentialServerConfig by lazy { config.toCredentialServerConfig() }
     val providers: ProvidersConfig = ProvidersConfig(config)
@@ -205,6 +208,21 @@ data class EntityChangeConfig(val retentionDays: Long = 30)
 fun ApplicationConfig.toEntityChangeConfig(): EntityChangeConfig = EntityChangeConfig(
     retentionDays = propertyOrNull("entityChanges.retentionDays")?.getString()?.toLongOrNull()?.coerceAtLeast(1) ?: 30,
 )
+
+data class VersionGroupConfig(
+    val rebuildQuietPeriod: Duration = 1.seconds,
+    val rebuildMaxWait: Duration = 5.seconds,
+)
+
+fun ApplicationConfig.toVersionGroupConfig(): VersionGroupConfig {
+    val quietSeconds =
+        propertyOrNull("versionGroups.rebuildQuietSeconds")?.getString()?.toLongOrNull()?.coerceAtLeast(1) ?: 1
+    val maxWaitSeconds = propertyOrNull("versionGroups.rebuildMaxWaitSeconds")?.getString()?.toLongOrNull() ?: 5
+    return VersionGroupConfig(
+        rebuildQuietPeriod = quietSeconds.seconds,
+        rebuildMaxWait = maxWaitSeconds.coerceAtLeast(quietSeconds).seconds,
+    )
+}
 
 data class ProxyConfig(
     val hostname: String?,

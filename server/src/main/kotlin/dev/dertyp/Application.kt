@@ -2,6 +2,7 @@ package dev.dertyp
 
 import dev.dertyp.config.ServerConfig
 import dev.dertyp.config.configModule
+import dev.dertyp.core.BuildInfo
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.HttpClientFactory
 import dev.dertyp.core.HttpClientQueueService
@@ -88,8 +89,8 @@ fun Application.module() {
         -------------------------------------------------------
         Synara API Started
         Version: ${BuildConfig.VERSION}
-        Commit:  ${BuildConfig.GIT_HASH}
-        Build:   ${BuildConfig.BUILD_TIME}
+        Commit:  ${BuildInfo.gitHash}
+        Build:   ${BuildInfo.buildTime}
         Runtime: $osName ($osArch) | Kernel: $osVersion
         -------------------------------------------------------
     """.trimIndent()

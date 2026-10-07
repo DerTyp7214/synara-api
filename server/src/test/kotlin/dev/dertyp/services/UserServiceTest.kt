@@ -13,7 +13,6 @@ import dev.dertyp.serializers.AppJson
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -37,10 +36,7 @@ class UserServiceTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "user_test")
-        transaction(database) {
-            SchemaUtils.create(UserTable, ImageTable, ImageMetadataTable, UserCapabilityTable)
-        }
+        database = TestDatabase.connect(dialect, "user_test", UserTable, ImageTable, ImageMetadataTable, UserCapabilityTable)
         service = UserService()
     }
 
@@ -234,7 +230,7 @@ class UserServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `login checks the password against the stored hash`(dialect: DbDialect) = runBlocking {
+    fun `login checks the password against the stored hash`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
         val created = service.createUser(AuthenticationRequest("login", "secret"))!!
         val authService = AuthService(service, mockk(), mockk())

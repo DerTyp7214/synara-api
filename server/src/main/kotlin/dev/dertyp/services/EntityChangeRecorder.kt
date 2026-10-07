@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.core.db.Dialect
 import dev.dertyp.data.EntityChangeAspect
 import dev.dertyp.data.EntityChangeKind
 import dev.dertyp.data.EntityType
@@ -229,8 +230,9 @@ class EntityChangeRecorder : EntityWriteSubscriber, HookSubscriber {
         val stamp = commitStamp()
         val scoped = type == EntityType.SONG || type == EntityType.ALBUM
         val scopes = if (scoped && !keepScopes) knownScopes ?: scopesOf(type, entities) else emptyMap()
+        val upsertReturnsRows = Dialect.current() == Dialect.POSTGRES
         for (chunk in entities.sorted().chunked(CHUNK_SIZE)) {
-            EntityChangeTable.batchUpsert(
+            val upserted = EntityChangeTable.batchUpsert(
                 chunk,
                 EntityChangeTable.entityType,
                 EntityChangeTable.entityId,
@@ -245,7 +247,7 @@ class EntityChangeRecorder : EntityWriteSubscriber, HookSubscriber {
                         insertValue(EntityChangeTable.kind)
                     }
                 },
-                shouldReturnGeneratedValues = false
+                shouldReturnGeneratedValues = upsertReturnsRows
             ) { entity ->
                 this[EntityChangeTable.entityType] = type
                 this[EntityChangeTable.entityId] = entity
@@ -254,13 +256,17 @@ class EntityChangeRecorder : EntityWriteSubscriber, HookSubscriber {
                 this[EntityChangeTable.changedAt] = now
             }
 
-            val rows = EntityChangeTable
-                .select(EntityChangeTable.id, EntityChangeTable.entityId)
-                .where { EntityChangeTable.entityType eq type }
-                .andWhere { EntityChangeTable.aspect eq aspect }
-                .andWhere { EntityChangeTable.entityId inList chunk }
-                .orderBy(EntityChangeTable.id)
-                .map { it[EntityChangeTable.id].value to it[EntityChangeTable.entityId] }
+            val rows = if (upsertReturnsRows) {
+                upserted.map { it[EntityChangeTable.id].value to it[EntityChangeTable.entityId] }
+            } else {
+                EntityChangeTable
+                    .select(EntityChangeTable.id, EntityChangeTable.entityId)
+                    .where { EntityChangeTable.entityType eq type }
+                    .andWhere { EntityChangeTable.aspect eq aspect }
+                    .andWhere { EntityChangeTable.entityId inList chunk }
+                    .orderBy(EntityChangeTable.id)
+                    .map { it[EntityChangeTable.id].value to it[EntityChangeTable.entityId] }
+            }
             rows.mapTo(stamp.libraryRows) { it.first }
             if (!scoped) continue
 
@@ -299,8 +305,9 @@ class EntityChangeRecorder : EntityWriteSubscriber, HookSubscriber {
         if (entities.isEmpty()) return
         val now = Clock.System.now().toEpochMilliseconds()
         val stamp = commitStamp()
+        val upsertReturnsRows = Dialect.current() == Dialect.POSTGRES
         for (chunk in entities.sorted().chunked(CHUNK_SIZE)) {
-            UserEntityChangeTable.batchUpsert(
+            val upserted = UserEntityChangeTable.batchUpsert(
                 chunk,
                 UserEntityChangeTable.userId,
                 UserEntityChangeTable.entityType,
@@ -310,7 +317,7 @@ class EntityChangeRecorder : EntityWriteSubscriber, HookSubscriber {
                     it[UserEntityChangeTable.changedAt] = insertValue(UserEntityChangeTable.changedAt)
                     it[UserEntityChangeTable.kind] = insertValue(UserEntityChangeTable.kind)
                 },
-                shouldReturnGeneratedValues = false
+                shouldReturnGeneratedValues = upsertReturnsRows
             ) { entity ->
                 this[UserEntityChangeTable.userId] = userId
                 this[UserEntityChangeTable.entityType] = type
@@ -319,13 +326,17 @@ class EntityChangeRecorder : EntityWriteSubscriber, HookSubscriber {
                 this[UserEntityChangeTable.kind] = EntityChangeKind.UPDATED
                 this[UserEntityChangeTable.changedAt] = now
             }
-            UserEntityChangeTable
-                .select(UserEntityChangeTable.id)
-                .where { UserEntityChangeTable.userId eq userId }
-                .andWhere { UserEntityChangeTable.entityType eq type }
-                .andWhere { UserEntityChangeTable.aspect eq aspect }
-                .andWhere { UserEntityChangeTable.entityId inList chunk }
-                .mapTo(stamp.userRows) { it[UserEntityChangeTable.id].value }
+            if (upsertReturnsRows) {
+                upserted.mapTo(stamp.userRows) { it[UserEntityChangeTable.id].value }
+            } else {
+                UserEntityChangeTable
+                    .select(UserEntityChangeTable.id)
+                    .where { UserEntityChangeTable.userId eq userId }
+                    .andWhere { UserEntityChangeTable.entityType eq type }
+                    .andWhere { UserEntityChangeTable.aspect eq aspect }
+                    .andWhere { UserEntityChangeTable.entityId inList chunk }
+                    .mapTo(stamp.userRows) { it[UserEntityChangeTable.id].value }
+            }
         }
     }
 

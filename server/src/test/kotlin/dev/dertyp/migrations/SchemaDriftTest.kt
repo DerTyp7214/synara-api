@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import java.io.File
+import java.util.IdentityHashMap
 import java.util.UUID
 
 private object UnmigratedTable : Table("drift_probe") {
@@ -52,6 +53,17 @@ private object CustomMigrationWithRequiredColumn : Table(CustomMigrationTable.ta
 }
 
 class SchemaDriftTest {
+    private companion object {
+        val additions = listOf(
+            null,
+            UnmigratedTable,
+            CustomMigrationWithUnmigratedColumn,
+            CustomMigrationWithRenamedColumn,
+            CustomMigrationWithRequiredColumn,
+        )
+        val inspections = HashMap<DbDialect, IdentityHashMap<Table?, SchemaState>>()
+    }
+
     private val files = mutableListOf<File>()
 
     @AfterEach
@@ -65,9 +77,7 @@ class SchemaDriftTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `the table definitions need nothing beyond the base and its migrations`(dialect: DbDialect) {
-        val database = database(dialect) ?: return
-
-        val state = SchemaDrift.inspect(database)
+        val state = inspection(dialect)
 
         assertEquals(
             emptyList<String>(),
@@ -80,10 +90,10 @@ class SchemaDriftTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `every explicitly tolerated difference still exists`(dialect: DbDialect) {
-        val database = database(dialect) ?: return
+        val database = database(dialect)
         val explicit = SchemaDrift.explicitDifferences[database.dialect].orEmpty().map { it.statement }
 
-        val state = SchemaDrift.inspect(database)
+        val state = inspection(dialect)
 
         assertEquals(explicit.sorted(), state.required.filter { it in explicit }.sorted())
     }
@@ -91,9 +101,7 @@ class SchemaDriftTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `only differences Exposed proposes are tolerated and each has one cause`(dialect: DbDialect) {
-        val database = database(dialect) ?: return
-
-        val state = SchemaDrift.inspect(database)
+        val state = inspection(dialect)
 
         assertEquals(state.required.sorted(), state.tolerated.map { it.statement }.sorted())
     }
@@ -101,9 +109,9 @@ class SchemaDriftTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a table without a migration is drift`(dialect: DbDialect) {
-        val database = database(dialect) ?: return
+        val database = database(dialect)
 
-        val state = SchemaDrift.inspect(database, additionalTables = listOf(UnmigratedTable))
+        val state = inspection(dialect, UnmigratedTable)
 
         assertEquals(statements(database) { UnmigratedTable.ddl }, state.pending)
     }
@@ -111,9 +119,9 @@ class SchemaDriftTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a column and an index without a migration are drift`(dialect: DbDialect) {
-        val database = database(dialect) ?: return
+        val database = database(dialect)
 
-        val state = SchemaDrift.inspect(database, additionalTables = listOf(CustomMigrationWithUnmigratedColumn))
+        val state = inspection(dialect, CustomMigrationWithUnmigratedColumn)
 
         val expected = statements(database) {
             CustomMigrationWithUnmigratedColumn.unmigrated.ddl +
@@ -125,7 +133,7 @@ class SchemaDriftTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `an ordinary index no table declares is drift`(dialect: DbDialect) {
-        val database = database(dialect) ?: return
+        val database = database(dialect)
         val undeclared = Index(listOf(CustomMigrationTable.executedAt), unique = false, customName = "drift_probe_idx")
         SchemaDrift.manager(database).use { manager ->
             manager.init()
@@ -140,7 +148,7 @@ class SchemaDriftTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a second index over the columns of a declared one is drift`(dialect: DbDialect) {
-        val database = database(dialect) ?: return
+        val database = database(dialect)
         val declared = HueBridgeTable.indices.single()
         val copy = Index(declared.columns, unique = declared.unique, customName = "drift_probe_copy")
         SchemaDrift.manager(database).use { manager ->
@@ -156,9 +164,7 @@ class SchemaDriftTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `the migrated schema raises no data risk warning`(dialect: DbDialect) {
-        val database = database(dialect) ?: return
-
-        val state = SchemaDrift.inspect(database, additionalTables = listOf(CustomMigrationWithUnmigratedColumn))
+        val state = inspection(dialect, CustomMigrationWithUnmigratedColumn)
 
         assertEquals(emptyList<DataRisk>(), state.warnings.map { it.risk })
     }
@@ -166,9 +172,7 @@ class SchemaDriftTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a column that replaces another one is reported as a possible rename`(dialect: DbDialect) {
-        val database = database(dialect) ?: return
-
-        val state = SchemaDrift.inspect(database, additionalTables = listOf(CustomMigrationWithRenamedColumn))
+        val state = inspection(dialect, CustomMigrationWithRenamedColumn)
 
         val warning = state.warnings.single()
         assertEquals(CustomMigrationWithRenamedColumn, warning.table)
@@ -180,9 +184,7 @@ class SchemaDriftTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a new required column without a database default is reported`(dialect: DbDialect) {
-        val database = database(dialect) ?: return
-
-        val state = SchemaDrift.inspect(database, additionalTables = listOf(CustomMigrationWithRequiredColumn))
+        val state = inspection(dialect, CustomMigrationWithRequiredColumn)
 
         val warning = state.warnings.single()
         assertEquals(CustomMigrationWithRequiredColumn, warning.table)
@@ -190,23 +192,27 @@ class SchemaDriftTest {
         assertEquals(listOf(CustomMigrationWithRequiredColumn.required.name), warning.added)
     }
 
+    private fun inspection(dialect: DbDialect, additionalTable: Table? = null): SchemaState =
+        inspections.getOrPut(dialect) {
+            val states = SchemaDrift.inspectEach(database(dialect), additions.map { listOfNotNull(it) })
+            IdentityHashMap<Table?, SchemaState>().apply { additions.zip(states).forEach { (table, state) -> put(table, state) } }
+        }.getValue(additionalTable)
+
     private fun statements(database: MigrationDatabase, block: JdbcTransaction.() -> List<String>): List<String> =
         SchemaDrift.manager(database).use { it.tempConnection(block) }
 
-    private fun database(dialect: DbDialect): MigrationDatabase? = when (dialect) {
-        DbDialect.POSTGRES -> TestDatabase.postgresContainer?.let { container ->
+    private fun database(dialect: DbDialect): MigrationDatabase = when (dialect) {
+        DbDialect.POSTGRES -> {
+            val container = TestDatabase.postgresContainer
             MigrationDatabase(
                 dialect = Dialect.POSTGRES,
                 driver = "org.postgresql.Driver",
-                url = TestDatabase.getPostgresDbUrl(
+                url = TestDatabase.getMigratedPostgresDbUrl(
                     "schema_drift_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
                 ),
                 user = container.username,
                 password = container.password,
             )
-        } ?: run {
-            println("Skipping PostgreSQL schema drift test because Docker is not available.")
-            null
         }
 
         DbDialect.SQLITE -> {

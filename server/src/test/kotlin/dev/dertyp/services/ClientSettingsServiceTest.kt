@@ -20,7 +20,6 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -46,17 +45,15 @@ class ClientSettingsServiceTest : KoinTest {
     private fun setup(dialect: DbDialect) {
         startKoin { modules(module { }) }
 
-        database = TestDatabase.connect(dialect, "client_settings_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                ClientDeviceTable,
-                ClientSettingScopeTable,
-                ClientSettingTable,
-                ClientSettingHistoryTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "client_settings_test",
+            UserTable,
+            ImageTable,
+            ClientDeviceTable,
+            ClientSettingScopeTable,
+            ClientSettingTable,
+            ClientSettingHistoryTable,
+        )
         service = ClientSettingsService()
     }
 
@@ -628,7 +625,7 @@ class ClientSettingsServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `a scope is capped at the maximum number of entries`(dialect: DbDialect) = runBlocking {
+    fun `a scope is capped at the maximum number of entries`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
 

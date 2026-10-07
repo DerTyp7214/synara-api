@@ -25,7 +25,6 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -69,43 +68,43 @@ class CoverGenerationServiceTest {
         every { redisConfig.host } returns "none"
         startKoin { modules(module { single { storageService }; single { redisConfig } }) }
 
-        database = TestDatabase.connect(dialect, "cover_test")
+        database = TestDatabase.connect(
+            dialect, "cover_test",
+            UserTable,
+            ImageTable,
+            ImageMetadataTable,
+            AlbumTable,
+            ArtistTable,
+            SongTable,
+            SongVariantTable,
+            UserPlaylistTable,
+            UserPlaylistSongTable,
+            GenreTable,
+            SongGenreTable,
+            AlbumGenreTable,
+            ArtistGenreTable,
+            SongEmbeddingTable,
+            SongAudioDataTable,
+            CollectionTable,
+            CollectionSongTable,
+            CollectionAlbumTable,
+            CollectionArtistTable,
+            CollectionPlaylistTable,
+            PlaylistTable,
+            MBReleaseGroupTable,
+            MBReleaseGroupCoverTable,
+            RecentReleaseTable,
+            ProviderReleaseTable,
+            ProviderLinkTable,
+            RecentReleaseLinkTable,
+            ProviderReleaseLinkTable,
+            AnimatedImageTable,
+            RadioChannelTable,
+            PodcastShowTable,
+            PodcastEpisodeTable,
+            *entityChangeTables,
+        )
         transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                ImageMetadataTable,
-                AlbumTable,
-                ArtistTable,
-                SongTable,
-                SongVariantTable,
-                UserPlaylistTable,
-                UserPlaylistSongTable,
-                GenreTable,
-                SongGenreTable,
-                AlbumGenreTable,
-                ArtistGenreTable,
-                SongEmbeddingTable,
-                SongAudioDataTable,
-                CollectionTable,
-                CollectionSongTable,
-                CollectionAlbumTable,
-                CollectionArtistTable,
-                CollectionPlaylistTable,
-                PlaylistTable,
-                MBReleaseGroupTable,
-                MBReleaseGroupCoverTable,
-                RecentReleaseTable,
-                ProviderReleaseTable,
-                ProviderLinkTable,
-                RecentReleaseLinkTable,
-                ProviderReleaseLinkTable,
-                AnimatedImageTable,
-                RadioChannelTable,
-                PodcastShowTable,
-                PodcastEpisodeTable,
-                *entityChangeTables,
-            )
             UserTable.insert {
                 it[id] = userId
                 it[username] = "cover"

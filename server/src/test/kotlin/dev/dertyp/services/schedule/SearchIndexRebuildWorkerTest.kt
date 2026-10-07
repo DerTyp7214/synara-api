@@ -30,14 +30,16 @@ class SearchIndexRebuildWorkerTest : KoinTest {
     private data class Library(val song: UUID, val album: UUID, val artist: UUID)
 
     private fun setup(dialect: DbDialect): Library = runBlocking {
-        TestDatabase.connect(dialect, "search_index_rebuild_worker_test")
+        TestDatabase.connect(
+            dialect, "search_index_rebuild_worker_test",
+            ImageTable, ArtistTable, AlbumVersionGroupTable, AlbumTable, SongTable
+        )
         startKoin {
             modules(module {
                 single { ServerConfig(MapApplicationConfig()) }
             })
         }
         dbQuery {
-            SchemaUtils.create(ImageTable, ArtistTable, AlbumVersionGroupTable, AlbumTable, SongTable)
             val artist = ArtistTable.insertAndGetId { it[name] = "Indexed Artist" }
             val album = AlbumTable.insertAndGetId { it[name] = "Indexed Album" }
             val song = SongTable.insertAndGetId {

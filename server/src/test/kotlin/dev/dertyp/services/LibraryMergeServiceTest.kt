@@ -18,12 +18,13 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -33,6 +34,20 @@ import org.koin.test.KoinTest
 import java.util.UUID
 
 class LibraryMergeServiceTest : KoinTest {
+    companion object {
+        @BeforeAll
+        @JvmStatic
+        fun mockMetadataServices() {
+            mockkObject(MetadataService.Companion)
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun unmockMetadataServices() {
+            unmockkObject(MetadataService.Companion)
+        }
+    }
+
     private lateinit var database: Database
     private lateinit var service: LibraryMergeService
     private lateinit var environment: ApplicationEnvironment
@@ -63,53 +78,51 @@ class LibraryMergeServiceTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "merge_test")
-        transaction(database) {
-            SchemaUtils.create(
-                *entityChangeTables,
-                ArtistTable,
-                AlbumVersionGroupTable,
-                AlbumTable,
-                SongTable,
-                SongVariantTable,
-                SongTitleTagTable,
-                AlbumTitleTagTable,
-                ImageTable,
-                PlaylistTable,
-                UserTable,
-                UserPlaylistTable,
-                UserPlaylistSongTable,
-                PlaylistSongTable,
-                SongArtistTable,
-                AlbumArtistTable,
-                AlbumMusicBrainzTable,
-                SongMusicBrainzTable,
-                TranscodedSongTable,
-                UserSongTable,
-                SongProviderTable,
-                AlbumProviderTable,
-                CollectionTable,
-                CollectionSongTable,
-                CollectionAlbumTable,
-                CollectionArtistTable,
-                CollectionPlaylistTable,
-                MBReleaseGroupTable,
-                MBReleaseGroupCoverTable,
-                RecentReleaseTable,
-                ProviderReleaseTable,
-                AnimatedImageTable,
-                RadioChannelTable,
-                PodcastShowTable,
-                PodcastEpisodeTable
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "merge_test",
+            *entityChangeTables,
+            ArtistTable,
+            AlbumVersionGroupTable,
+            AlbumTable,
+            SongTable,
+            SongVariantTable,
+            SongTitleTagTable,
+            AlbumTitleTagTable,
+            ImageTable,
+            PlaylistTable,
+            UserTable,
+            UserPlaylistTable,
+            UserPlaylistSongTable,
+            PlaylistSongTable,
+            SongArtistTable,
+            AlbumArtistTable,
+            AlbumMusicBrainzTable,
+            SongMusicBrainzTable,
+            TranscodedSongTable,
+            UserSongTable,
+            SongProviderTable,
+            AlbumProviderTable,
+            CollectionTable,
+            CollectionSongTable,
+            CollectionAlbumTable,
+            CollectionArtistTable,
+            CollectionPlaylistTable,
+            MBReleaseGroupTable,
+            MBReleaseGroupCoverTable,
+            RecentReleaseTable,
+            ProviderReleaseTable,
+            AnimatedImageTable,
+            RadioChannelTable,
+            PodcastShowTable,
+            PodcastEpisodeTable
+        )
         service = LibraryMergeService()
     }
 
     @AfterEach
     fun tearDown() {
         runBlocking { events.stop() }
-        unmockkObject(MetadataService.Companion)
+        clearMocks(MetadataService.Companion)
         stopKoin()
         TestDatabase.cleanUp()
     }
@@ -119,7 +132,6 @@ class LibraryMergeServiceTest : KoinTest {
     fun `mergeDuplicates should merge exact duplicate songs`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
 
         transaction(database) {
@@ -201,7 +213,6 @@ class LibraryMergeServiceTest : KoinTest {
     fun `mergeDuplicates should merge same-album duplicate songs via SongService`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         coEvery { songService.deleteSongs(any()) } returns true
 
@@ -264,7 +275,6 @@ class LibraryMergeServiceTest : KoinTest {
     fun `mergeDuplicates should merge albums with same originalId`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
         coEvery { albumService.fetchMusicBrainzId(any()) } returns null
@@ -297,7 +307,6 @@ class LibraryMergeServiceTest : KoinTest {
     fun `mergeDuplicates should merge similar albums`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
         coEvery { albumService.fetchMusicBrainzId(any()) } returns null
@@ -399,7 +408,6 @@ class LibraryMergeServiceTest : KoinTest {
     fun `mergeDuplicates keeps similar albums with different title tags apart`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
         coEvery { albumService.fetchMusicBrainzId(any()) } returns null
@@ -428,7 +436,6 @@ class LibraryMergeServiceTest : KoinTest {
         runBlocking {
             setup(dialect)
 
-            mockkObject(MetadataService.Companion)
             every { MetadataService.getMetadataService(any(), any()) } returns tidalService
             coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
             coEvery { albumService.fetchMusicBrainzId(any()) } returns null
@@ -634,7 +641,6 @@ class LibraryMergeServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `mergeDuplicateSongs repoints collection song links to the kept song`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         val collectionId = UUID.randomUUID()
 
@@ -671,7 +677,6 @@ class LibraryMergeServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `mergeDuplicateSongs collapses a collection holding both songs into one row`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         val collectionId = UUID.randomUUID()
 
@@ -708,7 +713,6 @@ class LibraryMergeServiceTest : KoinTest {
     fun `mergeDuplicateAlbums repoints collection album links to the kept album`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
         coEvery { albumService.fetchMusicBrainzId(any()) } returns null
@@ -747,7 +751,6 @@ class LibraryMergeServiceTest : KoinTest {
     fun `mergeDuplicateAlbums rebuilds the album version groups after a merge`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
         coEvery { albumService.fetchMusicBrainzId(any()) } returns null
@@ -772,7 +775,6 @@ class LibraryMergeServiceTest : KoinTest {
     fun `mergeDuplicateAlbums leaves no album without a version group`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(any(), any()) } returns tidalService
         coEvery { tidalService.getAlbumsByIds(any()) } returns emptyList()
         coEvery { albumService.fetchMusicBrainzId(any()) } returns null

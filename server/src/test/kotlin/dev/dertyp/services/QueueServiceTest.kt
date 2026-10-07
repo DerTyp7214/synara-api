@@ -33,7 +33,6 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -70,20 +69,18 @@ class QueueServiceTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "queue_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                AlbumTable,
-                ArtistTable,
-                SongTable, SongVariantTable,
-                SessionTable,
-                UserQueueTable,
-                UserQueueEntryTable,
-                QueueSyncDeviceTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "queue_test",
+            UserTable,
+            ImageTable,
+            AlbumTable,
+            ArtistTable,
+            SongTable, SongVariantTable,
+            SessionTable,
+            UserQueueTable,
+            UserQueueEntryTable,
+            QueueSyncDeviceTable,
+        )
         service = QueueService()
     }
 

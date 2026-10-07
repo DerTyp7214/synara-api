@@ -14,7 +14,6 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.junit.jupiter.api.AfterEach
@@ -38,9 +37,8 @@ class ApiKeyServiceTest : KoinTest {
     private val userId = UUID.randomUUID()
 
     private fun setup(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "api_key_test")
+        TestDatabase.connect(dialect, "api_key_test", UserTable, ApiKeyTable)
         dbQuery {
-            SchemaUtils.create(UserTable, ApiKeyTable)
             UserTable.insert {
                 it[id] = userId
                 it[username] = "tester"

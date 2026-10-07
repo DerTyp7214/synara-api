@@ -3,27 +3,27 @@ package dev.dertyp.ui
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.PluginSettingTable
-import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ui.PluginSettingsService
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.seconds
 
 class PluginSettingsServiceTest {
     private val service = PluginSettingsService()
 
     private fun setup(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "plugin_settings_test")
-        dbQuery { SchemaUtils.create(PluginSettingTable) }
+        TestDatabase.connect(dialect, "plugin_settings_test", PluginSettingTable)
     }
 
     @AfterEach
@@ -63,5 +63,20 @@ class PluginSettingsServiceTest {
         settings.set("k", "v2")
         job.join()
         assertEquals(listOf(mapOf("k" to "v1"), mapOf("k" to "v2")), emissions)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a write made while the first map is handled reaches the collector`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val settings = service.forPlugin("racing")
+        settings.set("k", "v1")
+
+        val emissions = withTimeout(5.seconds) {
+            settings.changes()
+                .onEach { if (it["k"] == "v1") settings.set("k", "v2") }
+                .first { it["k"] == "v2" }
+        }
+        assertEquals(mapOf("k" to "v2"), emissions)
     }
 }

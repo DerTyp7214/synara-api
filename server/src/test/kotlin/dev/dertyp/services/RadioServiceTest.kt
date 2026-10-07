@@ -13,7 +13,6 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -33,8 +32,7 @@ class RadioServiceTest : KoinTest {
     private val recommendations = mockk<RecommendationServingService>()
 
     private fun setup(dialect: DbDialect): Set<UUID> = runBlocking {
-        TestDatabase.connect(dialect, "radio_test")
-        dbQuery { SchemaUtils.create(AlbumTable, SongTable, SongVariantTable) }
+        TestDatabase.connect(dialect, "radio_test", AlbumTable, SongTable, SongVariantTable)
 
         val albumId = UUID.randomUUID()
         val songIds = (1..50).map { UUID.randomUUID() }

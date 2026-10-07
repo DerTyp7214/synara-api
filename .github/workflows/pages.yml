@@ -38,6 +38,8 @@ jobs:
         run: python3 scripts/commit-stats.py
 
       - name: Assemble site
+        env:
+          PAGES_DOMAIN: synara-insights.dertyp.dev
         run: |
           set -euo pipefail
           SITE="$RUNNER_TEMP/site"
@@ -46,6 +48,7 @@ jobs:
           sed "s/__BUILD__/$BUILD/" docs/index.html > "$SITE/index.html"
           cp docs/RELATION_MAP.html docs/STATS.html "$SITE/"
           touch "$SITE/.nojekyll"
+          printf '%s\n' "$PAGES_DOMAIN" > "$SITE/CNAME"
           if grep -q '__BUILD__' "$SITE/index.html"; then
             echo "Error: build token was not replaced in index.html."
             exit 1

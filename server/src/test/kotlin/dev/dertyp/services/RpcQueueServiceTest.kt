@@ -17,7 +17,6 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -36,8 +35,7 @@ class RpcQueueServiceTest {
 
     @BeforeEach
     fun setUp() {
-        database = TestDatabase.connect(DbDialect.SQLITE, "rpc_queue_test")
-        transaction(database) { SchemaUtils.create(UserTable, SessionTable) }
+        database = TestDatabase.connect(DbDialect.SQLITE, "rpc_queue_test", UserTable, SessionTable)
         sessionService = SessionService()
     }
 

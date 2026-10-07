@@ -9,13 +9,14 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -26,6 +27,20 @@ import java.time.LocalDate
 import java.util.UUID
 
 class AppleMusicArtistResolverTest : KoinTest {
+    companion object {
+        @BeforeAll
+        @JvmStatic
+        fun mockMetadataServices() {
+            mockkObject(MetadataService.Companion)
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun unmockMetadataServices() {
+            unmockkObject(MetadataService.Companion)
+        }
+    }
+
 
     private lateinit var database: Database
     private lateinit var resolver: AppleMusicArtistResolver
@@ -39,31 +54,28 @@ class AppleMusicArtistResolverTest : KoinTest {
         environment = mockk(relaxed = true)
         every { appleMusicService.catalogEnabled } returns catalogEnabled
 
-        mockkObject(MetadataService.Companion)
         every {
             MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any())
         } returns appleMusicService
 
-        database = TestDatabase.connect(dialect, "apple_artist_resolver_test")
-        transaction(database) {
-            SchemaUtils.create(
-                ImageTable,
-                AnimatedImageTable,
-                ArtistTable,
-                ArtistAliasTable,
-                AlbumTable,
-                SongTable,
-                AlbumArtistTable,
-                SongArtistTable,
-                AlbumProviderTable,
-                SongProviderTable,
-                ArtistProviderTable,
-                MBAreaTable,
-                MBArtistTable,
-                ArtistMusicBrainzTable,
-                MBRelationProviderTable
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "apple_artist_resolver_test",
+            ImageTable,
+            AnimatedImageTable,
+            ArtistTable,
+            ArtistAliasTable,
+            AlbumTable,
+            SongTable,
+            AlbumArtistTable,
+            SongArtistTable,
+            AlbumProviderTable,
+            SongProviderTable,
+            ArtistProviderTable,
+            MBAreaTable,
+            MBArtistTable,
+            ArtistMusicBrainzTable,
+            MBRelationProviderTable
+        )
 
         resolver = AppleMusicArtistResolver(environment)
     }
@@ -71,7 +83,7 @@ class AppleMusicArtistResolverTest : KoinTest {
     @AfterEach
     fun tearDown() {
         stopKoin()
-        unmockkAll()
+        clearMocks(MetadataService.Companion)
         TestDatabase.cleanUp()
     }
 

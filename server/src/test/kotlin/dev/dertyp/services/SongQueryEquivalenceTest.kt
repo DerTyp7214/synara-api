@@ -36,10 +36,7 @@ class SongQueryEquivalenceTest : KoinTest {
     private val redisSearchService = mockk<RedisSearchService>(relaxed = true)
 
     private fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "song_query_equivalence")
-        transaction(database) {
-            SchemaUtils.create(*SongQueryFixture.tables)
-        }
+        database = TestDatabase.connect(dialect, "song_query_equivalence", *SongQueryFixture.tables)
 
         startKoin {
             modules(module {

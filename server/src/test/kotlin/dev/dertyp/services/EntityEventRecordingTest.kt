@@ -103,8 +103,7 @@ class EntityEventRecordingTest : KoinTest {
 
     private fun setup(dialect: DbDialect) {
         startKoin { modules(entityEventsModule(events)) }
-        database = TestDatabase.connect(dialect, "entity_event_recording_test")
-        transaction(database) { SchemaUtils.create(TimecodeTagTable, *entityChangeTables) }
+        database = TestDatabase.connect(dialect, "entity_event_recording_test", TimecodeTagTable, *entityChangeTables)
     }
 
     @AfterEach

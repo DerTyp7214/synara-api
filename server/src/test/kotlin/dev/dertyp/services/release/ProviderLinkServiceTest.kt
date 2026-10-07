@@ -7,7 +7,6 @@ import dev.dertyp.core.db.dbQuery
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -25,19 +24,19 @@ class ProviderLinkServiceTest {
 
     fun setup(dialect: DbDialect) {
         val owner = artistId
-        database = TestDatabase.connect(dialect, "provider_link_test")
+        database = TestDatabase.connect(
+            dialect, "provider_link_test",
+            ImageTable,
+            ArtistTable,
+            AlbumTable,
+            SongTable, SongVariantTable,
+            MBReleaseGroupTable,
+            ProviderReleaseTable,
+            ProviderLinkTable,
+            RecentReleaseLinkTable,
+            ProviderReleaseLinkTable
+        )
         transaction(database) {
-            SchemaUtils.create(
-                ImageTable,
-                ArtistTable,
-                AlbumTable,
-                SongTable, SongVariantTable,
-                MBReleaseGroupTable,
-                ProviderReleaseTable,
-                ProviderLinkTable,
-                RecentReleaseLinkTable,
-                ProviderReleaseLinkTable
-            )
             ArtistTable.insert { it[ArtistTable.id] = owner; it[ArtistTable.name] = "Artist" }
         }
 

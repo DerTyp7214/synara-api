@@ -20,16 +20,20 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.util.UUID
+import kotlin.time.Duration.Companion.seconds
 
 class UiServiceTest {
     private val registry = UiRegistry()
@@ -79,6 +83,20 @@ class UiServiceTest {
             }
         }
     }
+
+    private class ChangedWhileRendered(id: String, private val merged: Boolean) : Fake(id) {
+        private val other = MutableSharedFlow<Unit>()
+
+        override suspend fun render(scope: UiRenderScope): UiComponent {
+            if (renders == 0) ticks.tryEmit(Unit)
+            return super.render(scope)
+        }
+
+        override fun changes(scope: UiRenderScope): Flow<Unit> = if (merged) merge(ticks, other) else ticks
+    }
+
+    private fun renderNumber(render: UiRender): Int =
+        (render.root as UiComponent.Text).text.substringAfter('#').substringBefore(' ').toInt()
 
     private val adminOnly = Fake("core.admin", UiAccess(requiresAdmin = true))
     private val importOnly = Fake("core.import", UiAccess(capabilities = setOf(UserCapability.IMPORT)), order = 2)
@@ -138,6 +156,33 @@ class UiServiceTest {
         job.join()
         assertEquals(3, emissions.size)
         assertTrue(emissions.map { it.revision }.zipWithNext().all { (a, b) -> b > a })
+    }
+
+    @Test
+    fun `subscribe renders again for a change announced during the first render`() = runBlocking {
+        val contribution = ChangedWhileRendered("core.changing", merged = false)
+        registry.register(contribution, "server")
+        val frames = withTimeout(5.seconds) { service.subscribe(admin, client, "core.changing").take(2).toList() }
+        assertEquals(listOf(1, 2), frames.map { renderNumber(it) })
+    }
+
+    @Test
+    fun `subscribe renders again for a change a merged flow announces during the first render`() = runBlocking {
+        val contribution = ChangedWhileRendered("core.merged", merged = true)
+        registry.register(contribution, "server")
+        val frames = withTimeout(5.seconds) { service.subscribe(admin, client, "core.merged").take(2).toList() }
+        assertEquals(listOf(1, 2), frames.map { renderNumber(it) })
+    }
+
+    @Test
+    fun `subscribe renders once while nothing changes`() = runBlocking {
+        val emissions = mutableListOf<UiRender>()
+        val job = launch { service.subscribe(admin, client, "core.open").toList(emissions) }
+        while (emissions.isEmpty() || open.ticks.subscriptionCount.value == 0) yield()
+        repeat(100) { yield() }
+        assertEquals(1, open.renders)
+        assertEquals(1, emissions.size)
+        job.cancel()
     }
 
     @Test

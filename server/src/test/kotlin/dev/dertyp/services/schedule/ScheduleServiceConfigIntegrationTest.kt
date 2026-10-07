@@ -10,8 +10,6 @@ import dev.dertyp.db.ScheduledTaskConfigurationTable
 import kotlinx.coroutines.*
 import kotlinx.coroutines.Job
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -34,10 +32,7 @@ class ScheduleServiceConfigIntegrationTest : KoinTest {
     private val configService by inject<ScheduledTaskConfigurationService>()
 
     fun setupDb(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "schedule_config_integration_test")
-        transaction(database) {
-            SchemaUtils.create(ScheduledTaskConfigurationTable)
-        }
+        database = TestDatabase.connect(dialect, "schedule_config_integration_test", ScheduledTaskConfigurationTable)
     }
 
     @BeforeEach

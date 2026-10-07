@@ -11,7 +11,6 @@ import org.bytedeco.ffmpeg.global.avcodec
 import org.bytedeco.ffmpeg.global.avutil
 import org.bytedeco.javacv.FFmpegFrameRecorder
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -84,10 +83,7 @@ class AudioStartAnalysisServiceTest {
                 includes(entityEventsModule())
             })
         }
-        val db = TestDatabase.connect(DbDialect.SQLITE, "audio_start_test")
-        transaction(db) {
-            SchemaUtils.create(*entityChangeTables)
-        }
+        val db = TestDatabase.connect(DbDialect.SQLITE, "audio_start_test", *entityChangeTables)
 
         val file = tempDir.resolve("song.wav").toFile()
         writeWav(file, silenceMs = 200, toneMs = 200)

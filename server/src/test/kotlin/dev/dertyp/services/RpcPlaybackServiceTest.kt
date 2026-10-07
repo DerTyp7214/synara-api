@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -35,8 +34,7 @@ class RpcPlaybackServiceTest {
 
     @BeforeEach
     fun setUp() {
-        database = TestDatabase.connect(DbDialect.SQLITE, "rpc_playback_test")
-        transaction(database) { SchemaUtils.create(UserTable, SessionTable) }
+        database = TestDatabase.connect(DbDialect.SQLITE, "rpc_playback_test", UserTable, SessionTable)
         sessionService = SessionService()
     }
 

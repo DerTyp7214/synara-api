@@ -67,7 +67,7 @@ class FlywayMigrationTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `an empty database gets the base with its migrations and a second start changes nothing`(dialect: DbDialect) {
-        val target = emptyDatabase(dialect) ?: return
+        val target = emptyDatabase(dialect)
 
         manager(target, admin = true).init()
 
@@ -146,7 +146,7 @@ class FlywayMigrationTest {
     fun `a database upgraded by the last old version applies the later migrations and keeps its history`(
         dialect: DbDialect
     ) {
-        val target = upgradedDatabase(dialect) ?: return
+        val target = upgradedDatabase(dialect)
         val before = snapshot(target)
         val oldHistory = assertNotNull(before.history)
         assertEquals(109, oldHistory.size)
@@ -176,7 +176,7 @@ class FlywayMigrationTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `an upgraded database without the last custom migration is refused`(dialect: DbDialect) {
-        val target = upgradedDatabase(dialect, customMigrationRecorded = false) ?: return
+        val target = upgradedDatabase(dialect, customMigrationRecorded = false)
 
         assertRefused(target, Reason.CUSTOM_MIGRATIONS_UNFINISHED, foundVersion = "1.109")
     }
@@ -184,7 +184,7 @@ class FlywayMigrationTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `an upgraded database without the custom migration table is refused`(dialect: DbDialect) {
-        val target = upgradedDatabase(dialect, customMigrationRecorded = false) ?: return
+        val target = upgradedDatabase(dialect, customMigrationRecorded = false)
         manager(target).tempConnection { SchemaUtils.drop(CustomMigrationTable) }
         assertNull(snapshot(target).customMigrations)
 
@@ -194,7 +194,7 @@ class FlywayMigrationTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a database whose history ends below the base is refused`(dialect: DbDialect) {
-        val target = upgradedDatabase(dialect, versions = oldMigrations - 109) ?: return
+        val target = upgradedDatabase(dialect, versions = oldMigrations - 109)
 
         assertRefused(target, Reason.BELOW_BASE, foundVersion = "1.108")
     }
@@ -202,7 +202,7 @@ class FlywayMigrationTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a database with a failed last migration is refused`(dialect: DbDialect) {
-        val target = upgradedDatabase(dialect, failed = setOf(109)) ?: return
+        val target = upgradedDatabase(dialect, failed = setOf(109))
 
         assertRefused(target, Reason.FAILED_MIGRATION, foundVersion = "1.109")
     }
@@ -210,7 +210,7 @@ class FlywayMigrationTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a database with tables but without a history table is refused`(dialect: DbDialect) {
-        val target = upgradedDatabase(dialect) ?: return
+        val target = upgradedDatabase(dialect)
         connection(target).use { connection ->
             connection.createStatement().use { it.execute("DROP TABLE flyway_schema_history") }
         }
@@ -224,7 +224,7 @@ class FlywayMigrationTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a database that holds only an empty history table gets the base`(dialect: DbDialect) {
-        val target = emptyDatabase(dialect) ?: return
+        val target = emptyDatabase(dialect)
         val noMigrations = Files.createTempDirectory("no_migrations").toFile()
         directories += noMigrations
         Flyway.configure()
@@ -247,7 +247,7 @@ class FlywayMigrationTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a database with tables and an empty history table is refused`(dialect: DbDialect) {
-        val target = upgradedDatabase(dialect) ?: return
+        val target = upgradedDatabase(dialect)
         connection(target).use { connection ->
             connection.createStatement().use { it.executeUpdate("DELETE FROM flyway_schema_history") }
         }
@@ -259,7 +259,7 @@ class FlywayMigrationTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a database that is ahead of this build starts`(dialect: DbDialect) {
-        val target = upgradedDatabase(dialect) ?: return
+        val target = upgradedDatabase(dialect)
         manager(target).init()
         insertHistory(
             target,
@@ -281,7 +281,7 @@ class FlywayMigrationTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a database created from the base that is ahead of this build starts`(dialect: DbDialect) {
-        val target = emptyDatabase(dialect) ?: return
+        val target = emptyDatabase(dialect)
         manager(target).init()
         insertHistory(target, firstRank = headHistory.size + 1, versions = listOf(futureMigration), failed = emptySet())
         val before = snapshot(target)
@@ -313,20 +313,15 @@ class FlywayMigrationTest {
         assertEquals(before, snapshot(target))
     }
 
-    private fun emptyDatabase(dialect: DbDialect): Target? = when (dialect) {
-        DbDialect.POSTGRES -> TestDatabase.postgresContainer?.let { container ->
-            Target(
-                driver = "org.postgresql.Driver",
-                url = TestDatabase.getPostgresDbUrl(
-                    "flyway_test_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
-                ),
-                user = container.username,
-                password = container.password,
-            )
-        } ?: run {
-            println("Skipping PostgreSQL flyway migration test because Docker is not available.")
-            null
-        }
+    private fun postgresName() = "flyway_test_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
+
+    private fun postgresTarget(url: String): Target {
+        val container = TestDatabase.postgresContainer
+        return Target(driver = "org.postgresql.Driver", url = url, user = container.username, password = container.password)
+    }
+
+    private fun emptyDatabase(dialect: DbDialect): Target = when (dialect) {
+        DbDialect.POSTGRES -> postgresTarget(TestDatabase.getPostgresDbUrl(postgresName()))
 
         DbDialect.SQLITE -> {
             val file = File.createTempFile("flyway_test", ".db")
@@ -340,15 +335,22 @@ class FlywayMigrationTest {
         versions: List<Int> = oldMigrations,
         failed: Set<Int> = emptySet(),
         customMigrationRecorded: Boolean = true,
-    ): Target? {
-        val target = emptyDatabase(dialect) ?: return null
-        Flyway.configure()
-            .dataSource(target.url, target.user, target.password)
-            .locations(MigrationBase.location(Dialect.ofDriver(target.driver)))
-            .target(MigrationBase.VERSION)
-            .placeholderReplacement(false)
-            .load()
-            .migrate()
+    ): Target {
+        val target = when (dialect) {
+            DbDialect.POSTGRES -> postgresTarget(
+                TestDatabase.getMigratedPostgresDbUrl(postgresName(), upTo = MigrationBase.VERSION)
+            )
+
+            DbDialect.SQLITE -> emptyDatabase(dialect).also { empty ->
+                Flyway.configure()
+                    .dataSource(empty.url, empty.user, empty.password)
+                    .locations(MigrationBase.location(Dialect.ofDriver(empty.driver)))
+                    .target(MigrationBase.VERSION)
+                    .placeholderReplacement(false)
+                    .load()
+                    .migrate()
+            }
+        }
         connection(target).use { connection ->
             connection.createStatement().use { it.executeUpdate("DELETE FROM flyway_schema_history") }
         }

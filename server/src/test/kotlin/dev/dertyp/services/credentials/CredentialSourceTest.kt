@@ -3,7 +3,6 @@ package dev.dertyp.services.credentials
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.PluginSettingTable
-import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource
 import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource.Companion.KEY_API_KEY
 import dev.dertyp.services.podcast.index.PodcastIndexCredentialSource.Companion.KEY_API_SECRET
@@ -11,7 +10,6 @@ import dev.dertyp.services.podcast.index.PodcastIndexCredentials
 import dev.dertyp.services.ui.PluginSettingsService
 import io.ktor.server.config.MapApplicationConfig
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
@@ -27,8 +25,7 @@ class CredentialSourceTest {
     private val environment = mapOf("podcastIndex.apiKey" to "envKey", "podcastIndex.apiSecret" to "envSecret")
 
     private fun setup(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "credential_source_test")
-        dbQuery { SchemaUtils.create(PluginSettingTable) }
+        TestDatabase.connect(dialect, "credential_source_test", PluginSettingTable)
     }
 
     @AfterEach

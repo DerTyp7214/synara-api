@@ -14,7 +14,6 @@ import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -42,23 +41,21 @@ class ListenBrainzServiceTest : KoinTest {
                 single { changeNotifier }
             })
         }
-        database = TestDatabase.connect(dialect, "listenbrainz_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                AnimatedImageTable,
-                AlbumTable,
-                SongTable, SongVariantTable,
-                MBRecordingTable,
-                MBRecordingIsrcTable,
-                SongMusicBrainzTable,
-                ListenBrainzUserTable,
-                UserListenBrainzLinkTable,
-                ListenTable,
-                ListenLinkTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "listenbrainz_test",
+            UserTable,
+            ImageTable,
+            AnimatedImageTable,
+            AlbumTable,
+            SongTable, SongVariantTable,
+            MBRecordingTable,
+            MBRecordingIsrcTable,
+            SongMusicBrainzTable,
+            ListenBrainzUserTable,
+            UserListenBrainzLinkTable,
+            ListenTable,
+            ListenLinkTable,
+        )
         service = ListenBrainzService()
     }
 

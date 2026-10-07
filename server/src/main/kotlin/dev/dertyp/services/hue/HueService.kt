@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -200,11 +201,13 @@ class HueService : Service() {
         val normalized = ip.trim()
         require(normalized.isNotEmpty()) { "Bridge IP is required" }
         val key = userId to normalized
-        pairings[key]?.takeIf { it.job?.isActive == true }?.let { return it }
-        val session = PairingSession(userId, normalized, MutableStateFlow(HuePairingStatus(HuePairingState.CONNECTING)))
-        session.job = scope.launch { runPairing(session) }
-        pairings[key] = session
-        return session
+        return pairings.compute(key) { _, running ->
+            running?.takeIf { it.job?.isActive == true } ?: PairingSession(
+                userId,
+                normalized,
+                MutableStateFlow(HuePairingStatus(HuePairingState.CONNECTING)),
+            ).also { session -> session.job = scope.launch { runPairing(session) } }
+        } ?: throw IllegalStateException("Pairing $key vanished")
     }
 
     fun startPairing(userId: UUID, ip: String): Flow<HuePairingStatus> {
@@ -315,13 +318,15 @@ class HueService : Service() {
 
     suspend fun removeBridge(userId: UUID, id: UUID): Boolean {
         val owner = userId
-        val removed = dbQuery {
-            HueBridgeTable.deleteWhere { (HueBridgeTable.id eq id) and (HueBridgeTable.userId eq owner) } > 0
+        userLocks.getOrPut(userId) { Mutex() }.withLock {
+            val removed = dbQuery {
+                HueBridgeTable.deleteWhere { (HueBridgeTable.id eq id) and (HueBridgeTable.userId eq owner) } > 0
+            }
+            if (!removed) return false
+            stopStream(userId, id)
+            animations.keys.filter { it.second == id }.forEach { key -> animations.remove(key)?.cancel() }
+            runtimes.remove(id)?.let { it.queue.close(); it.client.close() }
         }
-        if (!removed) return false
-        stopStream(userId, id)
-        animations.keys.filter { it.second == id }.forEach { key -> animations.remove(key)?.cancel() }
-        runtimes.remove(id)?.let { it.queue.close(); it.client.close() }
         targetsCache.remove(id)
         scenesCache.remove(id)
         catalogs.remove(id)
@@ -464,34 +469,39 @@ class HueService : Service() {
             stopScenes = requested.stopScenes.distinctBy { it.groupType to it.groupId },
         )
         val owner = EntityID(userId, UserTable)
-        dbQuery {
-            HueUserLinkTable.upsert(HueUserLinkTable.userId, HueUserLinkTable.bridgeId) {
-                it[HueUserLinkTable.userId] = owner
-                it[bridgeId] = EntityID(link.bridgeId, HueBridgeTable)
-                it[enabled] = link.enabled
-                it[targets] = ApplicationScope.json.encodeToString(ListSerializer(HueTarget.serializer()), link.targets)
-                it[intensity] = link.intensity
-                it[transitionMode] = link.transitionMode
-                it[transitionMs] = link.transitionMs
-                it[onStop] = link.onStop
-                it[stopScenes] =
-                    ApplicationScope.json.encodeToString(ListSerializer(HueScene.serializer()), link.stopScenes)
-                it[motion] = link.motion
-                it[latencyMs] = link.latencyMs
-                it[updatedAt] = now
+        userLocks.getOrPut(userId) { Mutex() }.withLock {
+            dbQuery {
+                HueUserLinkTable.upsert(HueUserLinkTable.userId, HueUserLinkTable.bridgeId) {
+                    it[HueUserLinkTable.userId] = owner
+                    it[bridgeId] = EntityID(link.bridgeId, HueBridgeTable)
+                    it[enabled] = link.enabled
+                    it[targets] =
+                        ApplicationScope.json.encodeToString(ListSerializer(HueTarget.serializer()), link.targets)
+                    it[intensity] = link.intensity
+                    it[transitionMode] = link.transitionMode
+                    it[transitionMs] = link.transitionMs
+                    it[onStop] = link.onStop
+                    it[stopScenes] =
+                        ApplicationScope.json.encodeToString(ListSerializer(HueScene.serializer()), link.stopScenes)
+                    it[motion] = link.motion
+                    it[latencyMs] = link.latencyMs
+                    it[updatedAt] = now
+                }
             }
+            cancelMotion(userId, link.bridgeId)
+            stopStream(userId, link.bridgeId)
         }
-        cancelMotion(userId, link.bridgeId)
-        stopStream(userId, link.bridgeId)
         changeFlow.tryEmit(Unit)
         return link.copy(updatedAt = now)
     }
 
     suspend fun removeLink(userId: UUID, bridgeId: UUID): Boolean {
-        cancelMotion(userId, bridgeId)
-        stopStream(userId, bridgeId)
-        val removed = dbQuery {
-            HueUserLinkTable.deleteWhere { (HueUserLinkTable.userId eq userId) and (HueUserLinkTable.bridgeId eq bridgeId) } > 0
+        val removed = userLocks.getOrPut(userId) { Mutex() }.withLock {
+            cancelMotion(userId, bridgeId)
+            stopStream(userId, bridgeId)
+            dbQuery {
+                HueUserLinkTable.deleteWhere { (HueUserLinkTable.userId eq userId) and (HueUserLinkTable.bridgeId eq bridgeId) } > 0
+            }
         }
         if (removed) changeFlow.tryEmit(Unit)
         return removed
@@ -544,9 +554,11 @@ class HueService : Service() {
             pendingStops.remove(event.userId)?.cancel()
             pendingStops[event.userId] = scope.launch {
                 delay(STOP_GRACE)
-                pendingStops.remove(event.userId)
-                lastSong.remove(event.userId)
-                links.forEach { link -> stop(event.userId, link) }
+                userLocks.getOrPut(event.userId) { Mutex() }.withLock {
+                    if (!pendingStops.remove(event.userId, coroutineContext.job)) return@withLock
+                    lastSong.remove(event.userId)
+                    links.forEach { link -> stop(event.userId, link) }
+                }
             }
             return
         }
@@ -673,8 +685,8 @@ class HueService : Service() {
                 }
             },
         )
-        session.launch(scope)
         streams[key] = session
+        session.launch(scope)
         markSeen(row.id)
         return session
     }

@@ -8,10 +8,15 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class BaseImportServiceTest {
     private val context = mockk<PluginContext>(relaxed = true)
@@ -22,6 +27,7 @@ class BaseImportServiceTest {
         override suspend fun getAllImporters(): Collection<IImporter> = importers
 
         fun getQueue() = importQueue
+        fun finished() = finishedImports.size
     }
 
     @Test
@@ -64,5 +70,29 @@ class BaseImportServiceTest {
         // Fallback to first importer if no ID provided
         service.importIds(listOf("id3").asFlow(), Type.SONG, user, null)
         coVerify { importer1.importIds(listOf("id3"), Type.SONG, user, any()) }
+    }
+
+    @Test
+    fun `stopService ends startService without another queue entry`() = runBlocking {
+        service.addToQueue(UrlImportQueueEntry(urls = mutableListOf("url")))
+        val running = launch { service.startService() }
+        withTimeout(5.seconds) { while (service.finished() == 0) delay(10.milliseconds) }
+        service.stopService()
+        try {
+            withTimeout(5.seconds) { running.join() }
+        } finally {
+            running.cancel()
+        }
+    }
+
+    @Test
+    fun `stopService requested while startService begins ends it`() = runBlocking {
+        val running = launch { service.startService() }
+        launch { service.stopService() }
+        try {
+            withTimeout(5.seconds) { running.join() }
+        } finally {
+            running.cancel()
+        }
     }
 }

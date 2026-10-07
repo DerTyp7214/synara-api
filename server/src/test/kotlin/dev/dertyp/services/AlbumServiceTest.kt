@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.config.VersionGroupConfig
 import dev.dertyp.core.toCredit
 import dev.dertyp.data.*
 import dev.dertyp.db.*
@@ -33,6 +34,7 @@ import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.time.LocalDate
 import java.util.UUID
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 class AlbumServiceTest : KoinTest {
@@ -42,7 +44,9 @@ class AlbumServiceTest : KoinTest {
     private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
     private val storageService = mockk<StorageService>(relaxed = true)
     private val libraryMergeService = mockk<LibraryMergeService>(relaxed = true)
-    private val events = RecordedEntityEvents().subscribeLibraryReactions()
+    private var events = RecordedEntityEvents().subscribeLibraryReactions()
+    private val rebuildOnlyWhenCalled =
+        VersionGroupConfig(rebuildQuietPeriod = Duration.INFINITE, rebuildMaxWait = Duration.INFINITE)
 
     private val user = User(
         id = UUID.randomUUID(),
@@ -69,36 +73,34 @@ class AlbumServiceTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "album_test")
-        transaction(database) {
-            SchemaUtils.create(
-                *entityChangeTables,
-                UserTable,
-                AlbumVersionGroupTable,
-                AlbumTable,
-                AlbumTitleTagTable,
-                AlbumArtistTable,
-                ArtistTable,
-                ArtistMemberTable,
-                ArtistMusicBrainzTable,
-                ArtistAliasTable,
-                FollowedArtistTable,
-                AlbumMusicBrainzTable,
-                ImageTable,
-                ImageMetadataTable,
-                AnimatedImageTable,
-                SongTable, SongVariantTable,
-                SongArtistTable,
-                SongMusicBrainzTable,
-                ArtistSplitAliasTable,
-                GenreTable,
-                ArtistGenreTable,
-                SongGenreTable,
-                AlbumGenreTable,
-                AlbumProviderTable,
-                *allMusicBrainzTables
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "album_test",
+            *entityChangeTables,
+            UserTable,
+            AlbumVersionGroupTable,
+            AlbumTable,
+            AlbumTitleTagTable,
+            AlbumArtistTable,
+            ArtistTable,
+            ArtistMemberTable,
+            ArtistMusicBrainzTable,
+            ArtistAliasTable,
+            FollowedArtistTable,
+            AlbumMusicBrainzTable,
+            ImageTable,
+            ImageMetadataTable,
+            AnimatedImageTable,
+            SongTable, SongVariantTable,
+            SongArtistTable,
+            SongMusicBrainzTable,
+            ArtistSplitAliasTable,
+            GenreTable,
+            ArtistGenreTable,
+            SongGenreTable,
+            AlbumGenreTable,
+            AlbumProviderTable,
+            *allMusicBrainzTables
+        )
 
         every { storageService.albumsPath } returns null
 
@@ -2259,6 +2261,7 @@ class AlbumServiceTest : KoinTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `version groups rebuild after an insert`(dialect: DbDialect) = runBlocking {
+        events = RecordedEntityEvents(versionGroups = rebuildOnlyWhenCalled).subscribeLibraryReactions()
         setup(dialect)
         val artist = insertCreditedArtist("Grouped Artist")
 
@@ -2288,6 +2291,7 @@ class AlbumServiceTest : KoinTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `version groups rebuild after a MusicBrainz link change`(dialect: DbDialect) = runBlocking {
+        events = RecordedEntityEvents(versionGroups = rebuildOnlyWhenCalled).subscribeLibraryReactions()
         setup(dialect)
         val artist = insertCreditedArtist("Grouped Artist")
         val otherArtist = insertCreditedArtist("Other Artist")
@@ -2391,6 +2395,7 @@ class AlbumServiceTest : KoinTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `rebuildVersionGroups removes groups without albums and keeps the others`(dialect: DbDialect) = runBlocking {
+        events = RecordedEntityEvents(versionGroups = rebuildOnlyWhenCalled).subscribeLibraryReactions()
         setup(dialect)
         val artist = insertCreditedArtist("Grouped Artist")
 

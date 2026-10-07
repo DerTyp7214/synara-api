@@ -8,6 +8,7 @@ import dev.dertyp.plugins.JobStatus
 import dev.dertyp.plugins.Jobs
 import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -16,9 +17,11 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -35,8 +38,12 @@ class JobService {
         @Volatile var info: JobInfo,
     ) {
         internal val logLines = ArrayDeque<String>()
+        internal var loggedLines = 0
         internal val logFlow =
-            MutableSharedFlow<String>(extraBufferCapacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+            MutableSharedFlow<IndexedValue<String>>(
+                extraBufferCapacity = 256,
+                onBufferOverflow = BufferOverflow.DROP_OLDEST
+            )
 
         @Volatile
         internal var coroutine: kotlinx.coroutines.Job? = null
@@ -142,8 +149,10 @@ class JobService {
         var message: String? = null
         try {
             coroutineScope {
-                val coroutine = launch { job.run(context) }
+                val coroutine = launch(start = CoroutineStart.LAZY) { job.run(context) }
                 job.coroutine = coroutine
+                if (job.cancelled) coroutine.cancel()
+                coroutine.start()
                 coroutine.join()
                 if (coroutine.isCancelled) status = JobStatus.CANCELLED
             }
@@ -177,8 +186,8 @@ class JobService {
         synchronized(job.logLines) {
             job.logLines.addLast(line)
             while (job.logLines.size > LOG_LINES) job.logLines.removeFirst()
+            job.logFlow.tryEmit(IndexedValue(job.loggedLines++, line))
         }
-        job.logFlow.tryEmit(line)
     }
 
     fun get(jobId: UUID): Job? = byId[jobId]
@@ -193,13 +202,23 @@ class JobService {
     }
 
     fun jobsFlow(kind: String? = null, user: UserInfo? = null): Flow<List<JobInfo>> =
-        changes.onStart { emit(Unit) }.map { snapshot(kind, user) }
+        changeFlow.onSubscription { emit(Unit) }.map { snapshot(kind, user) }
 
     fun log(jobId: UUID): Flow<String> = flow {
         val job = byId[jobId] ?: return@flow
-        val buffered = synchronized(job.logLines) { job.logLines.toList() }
-        buffered.forEach { emit(it) }
-        job.logFlow.collect { emit(it) }
+        var emitted = -1
+        emitAll(
+            job.logFlow
+                .onSubscription {
+                    val (logged, buffered) = synchronized(job.logLines) { job.loggedLines to job.logLines.toList() }
+                    buffered.forEachIndexed { index, line -> emit(IndexedValue(logged - buffered.size + index, line)) }
+                }
+                .filter { it.index > emitted }
+                .map {
+                    emitted = it.index
+                    it.value
+                }
+        )
     }
 
     fun logLines(jobId: UUID): List<String> =

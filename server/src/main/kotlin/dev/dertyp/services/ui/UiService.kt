@@ -35,8 +35,11 @@ import dev.dertyp.ui.UiSlotRender
 import dev.dertyp.utils.mapChildren
 import io.ktor.server.application.ApplicationCall
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.emptyFlow
@@ -44,7 +47,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -240,8 +243,12 @@ class UiService(
         val changes = registered.contribution.changes(scope) ?: emptyFlow()
         val invalidations = registry.invalidations.filter { it == id }.map { }
         emitAll(
-            merge(changes, invalidations)
-                .onStart { emit(Unit) }
+            channelFlow {
+                launch(Dispatchers.Unconfined, CoroutineStart.UNDISPATCHED) {
+                    merge(changes, invalidations).collect { send(Unit) }
+                }
+                send(Unit)
+            }
                 .map { renderWith(registered, scope) }
                 .distinctUntilChangedBy { it.root to it.toolbar }
         )

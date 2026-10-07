@@ -2,7 +2,6 @@ package dev.dertyp.services.credentials
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.core.db.dbQuery
 import dev.dertyp.credentials.CredentialNames
 import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.db.PluginSettingTable
@@ -10,7 +9,6 @@ import dev.dertyp.services.credentials.FakeCredentialServer.Companion.grant
 import dev.dertyp.services.ui.PluginSettingsService
 import io.ktor.server.config.MapApplicationConfig
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
@@ -30,8 +28,7 @@ class PluginCredentialsTest {
     }
 
     private fun setup(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "plugin_credentials_test")
-        dbQuery { SchemaUtils.create(PluginSettingTable) }
+        TestDatabase.connect(dialect, "plugin_credentials_test", PluginSettingTable)
     }
 
     @AfterEach

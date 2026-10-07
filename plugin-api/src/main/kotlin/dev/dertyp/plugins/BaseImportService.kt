@@ -40,7 +40,7 @@ abstract class BaseImportService(val context: PluginContext) : IPluginImportServ
         coroutineScope {
             launch {
                 queueUpdateFlow
-                    .onStart { emit(Unit) }
+                    .onSubscription { emit(Unit) }
                     .debounce(100.milliseconds)
                     .takeWhile { !stopped.load() }
                     .collect {
@@ -55,6 +55,7 @@ abstract class BaseImportService(val context: PluginContext) : IPluginImportServ
 
     open suspend fun stopService() {
         stopped.store(true)
+        queueUpdateFlow.tryEmit(Unit)
     }
 
     override suspend fun addToQueue(vararg importEntries: ImportQueueEntry) {

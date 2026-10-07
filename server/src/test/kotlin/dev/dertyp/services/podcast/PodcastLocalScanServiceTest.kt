@@ -29,7 +29,6 @@ import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -89,18 +88,16 @@ class PodcastLocalScanServiceTest : KoinTest {
         every { environment.config } returns config
         storageService = StorageService(ServerConfig(environment.config))
 
-        database = TestDatabase.connect(dialect, "podcast_scan_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                PodcastShowTable,
-                PodcastEpisodeTable,
-                PodcastTranscriptTable,
-                PodcastSubscriptionTable,
-                PodcastEpisodeProgressTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "podcast_scan_test",
+            UserTable,
+            ImageTable,
+            PodcastShowTable,
+            PodcastEpisodeTable,
+            PodcastTranscriptTable,
+            PodcastSubscriptionTable,
+            PodcastEpisodeProgressTable,
+        )
 
         imageId = transaction(database) {
             val id = UUID.randomUUID()

@@ -3,11 +3,9 @@ package dev.dertyp.services.release
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
-import dev.dertyp.core.db.dbQuery
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -24,19 +22,17 @@ class ReleaseArtistServiceTest {
     private lateinit var service: ReleaseArtistService
 
     fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "release_artist_test")
-        transaction(database) {
-            SchemaUtils.create(
-                ImageTable,
-                ArtistTable,
-                AlbumTable,
-                SongTable, SongVariantTable,
-                MBReleaseGroupTable,
-                RecentReleaseTable,
-                ProviderReleaseTable,
-                ReleaseArtistTable
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "release_artist_test",
+            ImageTable,
+            ArtistTable,
+            AlbumTable,
+            SongTable, SongVariantTable,
+            MBReleaseGroupTable,
+            RecentReleaseTable,
+            ProviderReleaseTable,
+            ReleaseArtistTable
+        )
 
         service = ReleaseArtistService()
     }

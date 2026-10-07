@@ -64,9 +64,9 @@ CURATED = {
         "group": "backup",
         "does": "Writes a backup zip with the database dump, the file inventory and the image index, then rotates old zips.",
         "targets": [
-            ("backup-dir", "Backup zip", "local files", "backup-<time>.zip plus deduplicated image blobs, keeps 10 zips", S + "services/BackupService.kt:156", "BACKUP_DIR"),
+            ("backup-dir", "Backup zip", "local files", "backup-<time>.zip plus deduplicated image blobs, keeps 10 zips", S + "services/BackupService.kt:123", "BACKUP_DIR"),
             ("database", "Database dump", "JDBC", "reads every table except search_index_queue into a zstd compressed CBOR dump", S + "services/DbManagementService.kt:111", None),
-            ("library-files", "File inventory and images", "filesystem walk", "walks the audio directories for the file tree and copies image files into the blob store", S + "services/BackupService.kt:282", None),
+            ("library-files", "File inventory and images", "filesystem walk", "walks the audio directories for the file tree and copies image files into the blob store", S + "services/BackupService.kt:302", None),
         ],
     },
     "user-playlist-backup": {

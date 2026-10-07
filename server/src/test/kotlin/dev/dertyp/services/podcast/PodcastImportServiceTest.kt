@@ -32,7 +32,6 @@ import io.mockk.spyk
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -91,18 +90,16 @@ class PodcastImportServiceTest : KoinTest {
         every { environment.config } returns config
         storageService = StorageService(ServerConfig(environment.config))
 
-        database = TestDatabase.connect(dialect, "podcast_import_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                PodcastShowTable,
-                PodcastEpisodeTable,
-                PodcastTranscriptTable,
-                PodcastSubscriptionTable,
-                PodcastEpisodeProgressTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "podcast_import_test",
+            UserTable,
+            ImageTable,
+            PodcastShowTable,
+            PodcastEpisodeTable,
+            PodcastTranscriptTable,
+            PodcastSubscriptionTable,
+            PodcastEpisodeProgressTable,
+        )
 
         val http = mockHttp()
         podcastService = PodcastService(http)

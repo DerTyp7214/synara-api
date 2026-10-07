@@ -27,13 +27,14 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -50,6 +51,20 @@ import kotlin.time.Duration.Companion.hours
 import dev.dertyp.data.Artist as DataArtist
 
 class ReleaseServiceTest : KoinTest {
+    companion object {
+        @BeforeAll
+        @JvmStatic
+        fun mockMetadataServices() {
+            mockkObject(MetadataService.Companion)
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun unmockMetadataServices() {
+            unmockkObject(MetadataService.Companion)
+        }
+    }
+
     private lateinit var database: Database
     private lateinit var service: ReleaseService
 
@@ -98,37 +113,35 @@ class ReleaseServiceTest : KoinTest {
         coEvery { appleMusicReleaseService.linkedReleaseUrls(any()) } returns emptyList()
         coEvery { appleMusicReleaseService.findUnlinkedAppleRelease(any(), any(), any()) } returns null
 
-        database = TestDatabase.connect(dialect, "release_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                ImageMetadataTable,
-                ArtistTable,
-                ArtistMusicBrainzTable,
-                AlbumTable,
-                AlbumArtistTable,
-                AlbumMusicBrainzTable,
-                SongTable,
-                SongVariantTable,
-                SongTitleTagTable,
-                AlbumTitleTagTable,
-                SongArtistTable,
-                SongMusicBrainzTable,
-                FollowedArtistTable,
-                RecentReleaseTable,
-                ArtistProviderTable,
-                ProviderReleaseTable,
-                ProviderLinkTable,
-                RecentReleaseLinkTable,
-                ProviderReleaseLinkTable,
-                HiddenReleaseTable,
-                ArtistSourceRuleTable,
-                ReleaseArtistTable,
-                *allMusicBrainzTables,
-                *entityChangeTables,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "release_test",
+            UserTable,
+            ImageTable,
+            ImageMetadataTable,
+            ArtistTable,
+            ArtistMusicBrainzTable,
+            AlbumTable,
+            AlbumArtistTable,
+            AlbumMusicBrainzTable,
+            SongTable,
+            SongVariantTable,
+            SongTitleTagTable,
+            AlbumTitleTagTable,
+            SongArtistTable,
+            SongMusicBrainzTable,
+            FollowedArtistTable,
+            RecentReleaseTable,
+            ArtistProviderTable,
+            ProviderReleaseTable,
+            ProviderLinkTable,
+            RecentReleaseLinkTable,
+            ProviderReleaseLinkTable,
+            HiddenReleaseTable,
+            ArtistSourceRuleTable,
+            ReleaseArtistTable,
+            *allMusicBrainzTables,
+            *entityChangeTables,
+        )
 
         service = ReleaseService(environment)
     }
@@ -136,7 +149,8 @@ class ReleaseServiceTest : KoinTest {
     @AfterEach
     fun tearDown() {
         stopKoin()
-        unmockkAll()
+        clearMocks(MetadataService.Companion)
+        unmockkObject(ApiClient)
         TestDatabase.cleanUp()
     }
 
@@ -254,7 +268,6 @@ class ReleaseServiceTest : KoinTest {
     fun `fetchNewReleases should download releases and resolve links`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -338,7 +351,6 @@ class ReleaseServiceTest : KoinTest {
     fun `fetchNewReleases should include releases already in library but link them`(dialect: DbDialect) = runBlocking {
         setup(dialect)
 
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -624,7 +636,6 @@ class ReleaseServiceTest : KoinTest {
         val artistId = UUID.randomUUID()
         val userId = UUID.randomUUID()
 
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -656,7 +667,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fetchNewReleases should handle title matching ambiguity`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -846,7 +856,6 @@ class ReleaseServiceTest : KoinTest {
     fun `refreshRecentRelease re-fetches a cached release and prunes stale providers`(dialect: DbDialect) =
         runBlocking {
             setup(dialect)
-            mockkObject(MetadataService.Companion)
             every {
                 MetadataService.getMetadataService(
                     IMetadataService.MetadataType.tidal,
@@ -953,7 +962,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `refreshRecentRelease inserts a not-yet-cached release`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -1030,7 +1038,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fetchNewReleases refreshes a released entry inside the refresh window`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -1097,7 +1104,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fetchNewReleases skips an upcoming entry`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -1162,7 +1168,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fetchNewReleases skips a released entry still within cooldown`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -1313,7 +1318,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fetchNewReleases does not fetch images for unfollowed artists`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -2289,7 +2293,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fetchNewReleases links the processing artist and every credited artist`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -2351,7 +2354,6 @@ class ReleaseServiceTest : KoinTest {
     fun `fetchNewReleases links a stored group of another artist without processing it`(dialect: DbDialect) =
         runBlocking {
             setup(dialect)
-            mockkObject(MetadataService.Companion)
             every {
                 MetadataService.getMetadataService(
                     IMetadataService.MetadataType.tidal,
@@ -2587,7 +2589,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fetchNewReleases merges a matched Apple release and skips the Apple search`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -2640,7 +2641,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fetchNewReleases hands barcodes and link keys to the Apple matcher`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -2717,7 +2717,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `refreshRecentRelease keeps the links of a merged Apple release`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -2782,7 +2781,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fetchNewReleases merges the Apple release found by the title search`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -3356,7 +3354,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `trackReleaseGroup stores a release group that is not on the radar`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(
@@ -3406,7 +3403,6 @@ class ReleaseServiceTest : KoinTest {
     fun `trackReleaseGroup returns false for a known group and an artist without a MusicBrainz id`(dialect: DbDialect) =
         runBlocking {
             setup(dialect)
-            mockkObject(MetadataService.Companion)
             every {
                 MetadataService.getMetadataService(
                     IMetadataService.MetadataType.tidal,
@@ -3449,7 +3445,6 @@ class ReleaseServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `fetchNewReleases caches the releases of the processed group`(dialect: DbDialect) = runBlocking {
         setup(dialect)
-        mockkObject(MetadataService.Companion)
         every { MetadataService.getMetadataService(IMetadataService.MetadataType.tidal, any()) } returns tidalService
         every {
             MetadataService.getMetadataService(

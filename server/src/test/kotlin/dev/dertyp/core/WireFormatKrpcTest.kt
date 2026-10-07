@@ -82,9 +82,9 @@ class WireFormatKrpcTest {
         val received: MutableList<ByteArray> = Collections.synchronizedList(mutableListOf())
         val format = Recording(if (wire == null) AppCbor else FixtureLegacyCbor, wire, sent, received)
 
-        fun sentText(): String = sent.joinToString("") { it.latin1() }
+        fun sentText(): String = synchronized(sent) { sent.joinToString("") { it.latin1() } }
 
-        fun receivedText(): String = received.joinToString("") { it.latin1() }
+        fun receivedText(): String = synchronized(received) { received.joinToString("") { it.latin1() } }
     }
 
     private class CallResults(

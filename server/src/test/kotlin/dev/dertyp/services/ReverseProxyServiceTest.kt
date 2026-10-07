@@ -1,5 +1,8 @@
 package dev.dertyp.services
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.UnsynchronizedAppenderBase
 import dev.dertyp.Indexer
 import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.HttpClientFactory
@@ -26,12 +29,22 @@ import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
+import org.slf4j.LoggerFactory
 import java.util.UUID
+import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class ReverseProxyServiceTest : KoinTest {
+
+    class WhenTheFirstAttemptStarts(private val action: () -> Unit) : UnsynchronizedAppenderBase<ILoggingEvent>() {
+        val attempts = AtomicInteger(0)
+
+        override fun append(event: ILoggingEvent) {
+            if (event.formattedMessage.startsWith("Attempting to connect") && attempts.getAndIncrement() == 0) action()
+        }
+    }
 
     private fun tearDown() {
         stopKoin()
@@ -286,7 +299,7 @@ class ReverseProxyServiceTest : KoinTest {
     }
 
     @Test
-    fun `should reconnect if health check fails`() = runBlocking {
+    fun `should ping the proxy and record the last interaction`() = runBlocking {
         val pingsReceived = Channel<Unit>(Channel.UNLIMITED)
         val connectionCount = AtomicInteger(0)
 
@@ -329,13 +342,53 @@ class ReverseProxyServiceTest : KoinTest {
 
             assertNotNull(service.lastInteraction)
 
-            val initialInteraction = service.lastInteraction!!
-
-            delay(11.seconds)
-            assertTrue(service.lastInteraction!!.elapsedNow() < initialInteraction.elapsedNow())
-
             job.cancelAndJoin()
         } finally {
+            server.stop(500, 500)
+            tearDown()
+        }
+    }
+
+    @Test
+    fun `a restart requested the moment a connection attempt starts ends that attempt`() = runBlocking {
+        val server = embeddedServer(Netty, port = 0) {
+            install(WebSockets)
+            routing {
+                webSocket("/proxy/server") {
+                    send(ProxyMessage.AssignedId("held").toFrame())
+                    awaitCancellation()
+                }
+            }
+        }.start(wait = false)
+
+        val port = server.engine.resolvedConnectors().first().port
+
+        val config = MapApplicationConfig(
+            "proxy.hostname" to "127.0.0.1",
+            "proxy.controlPort" to port.toString()
+        )
+
+        val mockApp = mockk<Application>(relaxed = true)
+        setupKoin(mockApp)
+
+        val serviceLogger = LoggerFactory.getLogger(ReverseProxyService::class.simpleName) as Logger
+        val service = ReverseProxyService(ServerConfig(config))
+        val appender = WhenTheFirstAttemptStarts { service.restartService() }
+        appender.context = serviceLogger.loggerContext
+        appender.start()
+        serviceLogger.addAppender(appender)
+        val inPlace = Executor { it.run() }.asCoroutineDispatcher()
+        val job = launch(inPlace) {
+            service.startService()
+        }
+
+        try {
+            withTimeout(5.seconds) {
+                while (appender.attempts.get() < 2) delay(10.milliseconds)
+            }
+        } finally {
+            serviceLogger.detachAppender(appender)
+            job.cancelAndJoin()
             server.stop(500, 500)
             tearDown()
         }

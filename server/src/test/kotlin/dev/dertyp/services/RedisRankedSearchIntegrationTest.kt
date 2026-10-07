@@ -12,7 +12,6 @@ import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -54,12 +53,9 @@ class RedisRankedSearchIntegrationTest : KoinTest {
 
     @BeforeEach
     fun setup() {
-        if (TestRedis.redisContainer == null) return
+        TestRedis.redisContainer
 
-        database = TestDatabase.connect(DbDialect.POSTGRES, "redis_ranked_search")
-        transaction(database) {
-            SchemaUtils.create(*allTables)
-        }
+        database = TestDatabase.connect(DbDialect.POSTGRES, "redis_ranked_search", *allTables)
 
         val config = RedisCacheProvider.Config().apply {
             host = TestRedis.host
@@ -105,8 +101,6 @@ class RedisRankedSearchIntegrationTest : KoinTest {
 
     @Test
     fun `rankedSearchQuery should use Redis and return results from DB in Redis order`() = runBlocking {
-        if (TestRedis.redisContainer == null) return@runBlocking
-
         val userId = UUID.randomUUID()
         val songId1 = UUID.randomUUID()
         val songId2 = UUID.randomUUID()
@@ -154,8 +148,6 @@ class RedisRankedSearchIntegrationTest : KoinTest {
 
     @Test
     fun `rankedSearchQuery should fall back to DB if Redis returns no results`() = runBlocking {
-        if (TestRedis.redisContainer == null) return@runBlocking
-
         val userId = UUID.randomUUID()
         val songId = UUID.randomUUID()
 

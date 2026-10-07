@@ -7,7 +7,6 @@ import dev.dertyp.db.FavSyncTable
 import dev.dertyp.db.UserTable
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -23,10 +22,7 @@ class FavSyncServiceTest {
     private val service = FavSyncService()
 
     fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "favsync_test")
-        transaction(database) {
-            SchemaUtils.create(UserTable, FavSyncTable)
-        }
+        database = TestDatabase.connect(dialect, "favsync_test", UserTable, FavSyncTable)
     }
 
     @AfterEach

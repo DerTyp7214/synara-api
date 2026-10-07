@@ -7,6 +7,7 @@ import dev.dertyp.data.AudioBand
 import dev.dertyp.data.HueIntensity
 import dev.dertyp.data.HueMotionMode
 import dev.dertyp.data.HuePairingState
+import dev.dertyp.data.HuePairingStatus
 import dev.dertyp.data.HueScene
 import dev.dertyp.data.HueStopMode
 import dev.dertyp.data.HueTarget
@@ -27,6 +28,8 @@ import dev.dertyp.services.AudioAnalysisService
 import dev.dertyp.services.HookService
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.SongService
+import io.mockk.clearConstructorMockk
+import io.mockk.clearStaticMockk
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -34,26 +37,37 @@ import io.mockk.mockk
 import io.mockk.mockkConstructor
 import io.mockk.mockkObject
 import io.mockk.mockkStatic
-import io.mockk.unmockkAll
+import io.mockk.unmockkConstructor
+import io.mockk.unmockkObject
+import io.mockk.unmockkStatic
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -62,12 +76,36 @@ import org.koin.dsl.module
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CopyOnWriteArraySet
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class HueServiceTest {
     private companion object {
         const val STOP_GRACE_MS = 3_000L
         const val PAIRING_POLL_MS = 2_000L
         const val SLOW_MOTION_INTERVAL_MS = 8_000L
+
+        val constructed = arrayOf(HueBridgeClient::class, HueDtlsStream::class, HueEntertainmentSession::class)
+        val facades = arrayOf(
+            Class.forName("kotlinx.coroutines.DelayKt").kotlin,
+            Class.forName("kotlinx.coroutines.flow.StateFlowKt").kotlin,
+        )
+
+        @BeforeAll
+        @JvmStatic
+        fun mockGlobals() {
+            mockkConstructor(*constructed)
+            mockkStatic(*facades)
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun unmockGlobals() {
+            unmockkConstructor(*constructed)
+            unmockkStatic(*facades)
+        }
     }
 
     private lateinit var database: Database
@@ -108,6 +146,7 @@ class HueServiceTest {
     }
 
     private fun setup(dialect: DbDialect) {
+        database = TestDatabase.connect(dialect, "hue_test", UserTable, HueBridgeTable, HueUserLinkTable)
         songService = mockk()
         imageService = mockk()
         audioAnalysisService = mockk()
@@ -136,7 +175,6 @@ class HueServiceTest {
         routeBridgeClients()
         routeStreams()
         trackMotions()
-        mockkStatic("kotlinx.coroutines.DelayKt")
         coEvery { delay(STOP_GRACE_MS) } coAnswers { delay(100L) }
         startKoin {
             modules(module {
@@ -148,9 +186,7 @@ class HueServiceTest {
                 single { mockk<HttpClientFactory>(relaxed = true) }
             })
         }
-        database = TestDatabase.connect(dialect, "hue_test")
         transaction(database) {
-            SchemaUtils.create(UserTable, HueBridgeTable, HueUserLinkTable)
             UserTable.insert {
                 it[id] = userId
                 it[username] = "hue"
@@ -162,14 +198,18 @@ class HueServiceTest {
 
     @AfterEach
     fun tearDown() {
-        runBlocking { service.stopService() }
-        unmockkAll()
-        stopKoin()
-        TestDatabase.cleanUp()
+        try {
+            if (::service.isInitialized) runBlocking { service.stopService() }
+        } finally {
+            clearConstructorMockk(*constructed)
+            clearStaticMockk(*facades)
+            unmockkObject(HueLightScore)
+            stopKoin()
+            TestDatabase.cleanUp()
+        }
     }
 
     private fun routeBridgeClients() {
-        mockkConstructor(HueBridgeClient::class)
         coEvery { anyConstructed<HueBridgeClient>().pair(any()) } coAnswers { pairingApi.pair(firstArg()) }
         coEvery { anyConstructed<HueBridgeClient>().bridge() } coAnswers { pairingApi.bridge() }
         coEvery { anyConstructed<HueBridgeClient>().config() } coAnswers { api.config() }
@@ -208,16 +248,13 @@ class HueServiceTest {
     }
 
     private fun routeStreams() {
-        mockkConstructor(HueDtlsStream::class)
         coEvery { anyConstructed<HueDtlsStream>().start() } coAnswers { streamTarget.start() }
         every { anyConstructed<HueDtlsStream>().send(any()) } answers { streamTarget.send(firstArg()) }
         every { anyConstructed<HueDtlsStream>().close() } answers { streamTarget.close() }
-        mockkConstructor(HueEntertainmentSession::class)
         every { anyConstructed<HueEntertainmentSession>().launch(any()) } answers { callOriginal().also { streamJobs += it } }
     }
 
     private fun trackMotions() {
-        mockkStatic("kotlinx.coroutines.flow.StateFlowKt")
         every { MutableStateFlow(ofType<PlaybackClock>()) } answers { callOriginal().also { playbackClocks += it } }
     }
 
@@ -1095,7 +1132,7 @@ class HueServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `listScenes maps scenes to their rooms and zones`(dialect: DbDialect) = runBlocking {
+    fun `listScenes maps scenes to their rooms and zones`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
         val bridgeId = bridge()
         coEvery { api.lights() } returns emptyList()
@@ -1163,5 +1200,112 @@ class HueServiceTest {
         assertEquals("192.0.2.20", stored.ip)
         assertEquals(stored, states.last().bridge)
         assertTrue(service.activePairings(userId).isEmpty())
+    }
+
+    private suspend fun changeDuringHandler(dialect: DbDialect, change: suspend (UUID) -> Unit) {
+        setup(dialect)
+        val bridgeId = bridge()
+        mockkObject(HueLightScore)
+        every { HueLightScore.build(null, null, any(), SLOW_MOTION_INTERVAL_MS, any()) } answers {
+            HueLightScore.build(
+                null,
+                null,
+                thirdArg(),
+                400L,
+                arg(4)
+            )
+        }
+        service.setLink(
+            userId,
+            HueUserLink(bridgeId, true, listOf(light("l1", "Desk")), motion = HueMotionMode.SLOW, latencyMs = 0)
+        )
+        val songId = UUID.randomUUID()
+        playingSong(songId, UUID.randomUUID(), listOf(0xFFE01020.toInt(), 0xFF1030E0.toInt()))
+        val reached = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        coEvery { api.lights() } coAnswers {
+            reached.complete(Unit)
+            gate.await()
+            emptyList()
+        }
+        try {
+            coroutineScope {
+                val handler = launch(Dispatchers.Default) {
+                    service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
+                }
+                reached.await()
+                val changed = launch(Dispatchers.Default) { change(bridgeId) }
+                withTimeoutOrNull(500) { changed.join() }
+                gate.complete(Unit)
+                handler.join()
+                changed.join()
+            }
+        } finally {
+            gate.complete(Unit)
+        }
+        delay(300)
+        val count = sent.size
+        delay(900)
+        assertEquals(0, runningMotions())
+        assertEquals(count, sent.size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a link changed while a song starts leaves no motion of the old link`(dialect: DbDialect) = runBlocking {
+        changeDuringHandler(dialect) { bridgeId ->
+            service.setLink(userId, HueUserLink(bridgeId, true, listOf(light("l2", "Shelf"))))
+        }
+        assertEquals(listOf(light("l2", "Shelf")), service.getLinks(userId).single().targets)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a link removed while a song starts leaves no motion`(dialect: DbDialect) = runBlocking {
+        changeDuringHandler(dialect) { bridgeId -> assertTrue(service.removeLink(userId, bridgeId)) }
+        assertTrue(service.getLinks(userId).isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a bridge removed while a song starts leaves no motion`(dialect: DbDialect) = runBlocking {
+        changeDuringHandler(dialect) { bridgeId -> assertTrue(service.removeBridge(userId, bridgeId)) }
+        assertTrue(service.listBridges(userId).isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `two concurrent pairing requests for one bridge share one pairing`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val pairApi = mockk<HueBridgeApi>(relaxed = true)
+        val polls = AtomicInteger()
+        coEvery { pairApi.pair(any()) } coAnswers {
+            polls.incrementAndGet()
+            awaitCancellation()
+        }
+        pairingApi = pairApi
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val held = AtomicBoolean()
+        every { MutableStateFlow(ofType<HuePairingStatus>()) } answers {
+            if (held.compareAndSet(false, true)) {
+                entered.countDown()
+                release.await()
+            }
+            callOriginal()
+        }
+        try {
+            val first = async(Dispatchers.IO) { service.beginPairing(userId, "192.0.2.20") }
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            val second = async(Dispatchers.IO) { service.beginPairing(userId, "192.0.2.20") }
+            withTimeoutOrNull(500) { second.join() }
+            release.countDown()
+            assertSame(first.await(), second.await())
+        } finally {
+            release.countDown()
+        }
+        delay(200)
+        assertEquals(1, polls.get())
+        assertEquals(1, service.activePairings(userId).size)
     }
 }

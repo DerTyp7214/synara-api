@@ -14,7 +14,6 @@ import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.params.ParameterizedTest
@@ -43,13 +42,13 @@ class RadioChannelServiceTest : KoinTest {
     private val members = setOf(songExplicit, songInAlbum, songByArtistA, songByArtistB)
 
     private fun setup(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "radio_channel_test")
+        TestDatabase.connect(
+            dialect, "radio_channel_test",
+            ImageTable, AnimatedImageTable, UserTable, AlbumTable, ArtistTable, ArtistAliasTable,
+            SongTable, SongVariantTable, SongArtistTable, AlbumArtistTable,
+            RadioChannelTable, RadioChannelSongTable, RadioChannelArtistTable, RadioChannelAlbumTable,
+        )
         dbQuery {
-            SchemaUtils.create(
-                ImageTable, AnimatedImageTable, UserTable, AlbumTable, ArtistTable, ArtistAliasTable,
-                SongTable, SongVariantTable, SongArtistTable, AlbumArtistTable,
-                RadioChannelTable, RadioChannelSongTable, RadioChannelArtistTable, RadioChannelAlbumTable,
-            )
             UserTable.insert { it[id] = creatorId; it[username] = "admin"; it[passwordHash] = "x" }
             AlbumTable.insert { it[id] = channelAlbum; it[name] = "Channel Album" }
             AlbumTable.insert { it[id] = otherAlbum; it[name] = "Other Album" }
@@ -200,9 +199,8 @@ class RadioChannelServiceTest : KoinTest {
                 single { AlbumService() }
             })
         }
-        TestDatabase.connect(dialect, "radio_channel_search_test")
+        TestDatabase.connect(dialect, "radio_channel_search_test", *searchTables)
         dbQuery {
-            SchemaUtils.create(*searchTables)
             UserTable.insert { it[id] = creatorId; it[username] = "admin"; it[passwordHash] = "x" }
         }
     }

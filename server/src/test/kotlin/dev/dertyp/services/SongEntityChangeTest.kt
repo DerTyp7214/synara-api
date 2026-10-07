@@ -6,6 +6,7 @@ import dev.dertyp.data.AudioInfo
 import dev.dertyp.data.EntityType
 import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.data.InsertableSong
+import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.MBRecordingTable
 import dev.dertyp.db.SongProviderTable
 import dev.dertyp.db.SongTable
@@ -338,6 +339,247 @@ class SongEntityChangeTest : EntityChangeLibraryTest() {
         assertEquals(setOf(updated(EntityType.SONG, song)), recordedChanges(database))
         clearRecordedChanges(database)
         songService.setMusicBrainzId(song, recording, owner)
+        assertEquals(emptySet<Any>(), recordedChanges(database))
+    }
+
+    private fun locations() = db { SongTable.selectAll().associate { it[SongTable.id].value to it[SongTable.filePath] } }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving songs replaces the prefix at the start and records each matched song once`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val album = album("Album")
+        val direct = song(album, "Direct", location = "/old/direct.flac")
+        val repeated = song(album, "Repeated", location = "/old/sub/old/repeated.flac")
+        val exact = song(album, "Exact", location = "/old")
+        val longer = song(album, "Longer", location = "/oldish/longer.flac")
+        val elsewhere = song(album, "Elsewhere", location = "/other/old/elsewhere.flac")
+        val relative = song(album, "Relative", location = "old/relative.flac")
+        val pathless = song(album, "Pathless", location = "")
+
+        assertEquals(4, songService.moveSongs("/old", "/new/er"))
+
+        assertEquals(
+            mapOf(
+                direct to "/new/er/direct.flac",
+                repeated to "/new/er/sub/old/repeated.flac",
+                exact to "/new/er",
+                longer to "/new/erish/longer.flac",
+                elsewhere to "/other/old/elsewhere.flac",
+                relative to "old/relative.flac",
+                pathless to "",
+            ),
+            locations()
+        )
+        assertEquals(
+            setOf(
+                updated(EntityType.SONG, direct),
+                updated(EntityType.SONG, repeated),
+                updated(EntityType.SONG, exact),
+                updated(EntityType.SONG, longer),
+            ),
+            recordedChanges(database)
+        )
+        assertEquals(setOf(EntityType.ALBUM to album), recordedScopes(database, EntityType.SONG, direct))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving songs keeps a trailing separator of the prefix and an empty prefix prepends`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val album = album("Album")
+        val inside = song(album, "Inside", location = "/old/inside.flac")
+        val sibling = song(album, "Sibling", location = "/older/sibling.flac")
+
+        assertEquals(1, songService.moveSongs("/old/", "/new"))
+        assertEquals(mapOf(inside to "/newinside.flac", sibling to "/older/sibling.flac"), locations())
+        assertEquals(setOf(updated(EntityType.SONG, inside)), recordedChanges(database))
+        clearRecordedChanges(database)
+
+        assertEquals(2, songService.moveSongs("", "/mnt"))
+        assertEquals(mapOf(inside to "/mnt/newinside.flac", sibling to "/mnt/older/sibling.flac"), locations())
+        assertEquals(
+            setOf(updated(EntityType.SONG, inside), updated(EntityType.SONG, sibling)),
+            recordedChanges(database)
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving songs matches case the way the database does and replaces the exact prefix only`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val album = album("Album")
+        val lower = song(album, "Lower", location = "/old/lower.flac")
+        val upper = song(album, "Upper", location = "/OLD/upper.flac")
+        val mixed = song(album, "Mixed", location = "/OLD/sub/old/mixed.flac")
+
+        val moved = songService.moveSongs("/old", "/new")
+
+        if (dialect == DbDialect.SQLITE) {
+            assertEquals(3, moved)
+            assertEquals(
+                mapOf(lower to "/new/lower.flac", upper to "/OLD/upper.flac", mixed to "/OLD/sub/new/mixed.flac"),
+                locations()
+            )
+            assertEquals(
+                setOf(
+                    updated(EntityType.SONG, lower),
+                    updated(EntityType.SONG, upper),
+                    updated(EntityType.SONG, mixed),
+                ),
+                recordedChanges(database)
+            )
+        } else {
+            assertEquals(1, moved)
+            assertEquals(
+                mapOf(lower to "/new/lower.flac", upper to "/OLD/upper.flac", mixed to "/OLD/sub/old/mixed.flac"),
+                locations()
+            )
+            assertEquals(setOf(updated(EntityType.SONG, lower)), recordedChanges(database))
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving songs with percent and underscore in the prefix moves the songs below that prefix`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val album = album("Album")
+        val literal = song(album, "Literal", location = "/100%_lib/50%_off.flac")
+        val wildcard = song(album, "Wildcard", location = "/100xylib/wildcard.flac")
+        val later = song(album, "Later", location = "/100abclib/100%_lib/later.flac")
+        val unrelated = song(album, "Unrelated", location = "/200%_lib/unrelated.flac")
+
+        assertEquals(3, songService.moveSongs("/100%_lib", "/lib_%"))
+
+        assertEquals(
+            mapOf(
+                literal to "/lib_%/50%_off.flac",
+                wildcard to "/100xylib/wildcard.flac",
+                later to "/100abclib/lib_%/later.flac",
+                unrelated to "/200%_lib/unrelated.flac",
+            ),
+            locations()
+        )
+        assertEquals(
+            setOf(
+                updated(EntityType.SONG, literal),
+                updated(EntityType.SONG, wildcard),
+                updated(EntityType.SONG, later),
+            ),
+            recordedChanges(database)
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving songs with a backslash in the prefix matches the way the database does`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val album = album("Album")
+        val windows = song(album, "Windows", location = "C:\\music\\windows.flac")
+        val slashless = song(album, "Slashless", location = "C:music/slashless.flac")
+
+        val moved = songService.moveSongs("C:\\music", "D:\\media")
+
+        if (dialect == DbDialect.SQLITE) {
+            assertEquals(1, moved)
+            assertEquals(
+                mapOf(windows to "D:\\media\\windows.flac", slashless to "C:music/slashless.flac"),
+                locations()
+            )
+            assertEquals(setOf(updated(EntityType.SONG, windows)), recordedChanges(database))
+        } else {
+            assertEquals(1, moved)
+            assertEquals(
+                mapOf(windows to "C:\\music\\windows.flac", slashless to "C:music/slashless.flac"),
+                locations()
+            )
+            assertEquals(setOf(updated(EntityType.SONG, slashless)), recordedChanges(database))
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving songs keeps paths outside the basic latin letters intact`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val album = album("Album")
+        val oldPrefix = "/Müsik 😀🎧/日本 cafe\u0301"
+        val newPrefix = "/Neu ß 🎵"
+        val umlauts = song(album, "Umlauts", location = "$oldPrefix/Ünï çödé – Öl.flac")
+        val emoji = song(album, "Emoji", location = "$oldPrefix/🎶 😀🎧 100% _live_.flac")
+        val spaces = song(album, "Spaces", location = "$oldPrefix  two  spaces .flac")
+        val composed = song(album, "Composed", location = "/Müsik 😀🎧/日本 café/composed.flac")
+        val shorter = song(album, "Shorter", location = "/Müsik 😀/日本 cafe\u0301/shorter.flac")
+
+        assertEquals(3, songService.moveSongs(oldPrefix, newPrefix))
+
+        assertEquals(
+            mapOf(
+                umlauts to "$newPrefix/Ünï çödé – Öl.flac",
+                emoji to "$newPrefix/🎶 😀🎧 100% _live_.flac",
+                spaces to "$newPrefix  two  spaces .flac",
+                composed to "/Müsik 😀🎧/日本 café/composed.flac",
+                shorter to "/Müsik 😀/日本 cafe\u0301/shorter.flac",
+            ),
+            locations()
+        )
+        assertEquals(
+            setOf(
+                updated(EntityType.SONG, umlauts),
+                updated(EntityType.SONG, emoji),
+                updated(EntityType.SONG, spaces),
+            ),
+            recordedChanges(database)
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving songs of albums with an original id prefix leaves the other albums alone`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val imported = album("Imported")
+        val other = album("Other")
+        val local = album("Local")
+        db {
+            AlbumTable.update({ AlbumTable.id eq imported }) { it[originalId] = "tidal:123" }
+            AlbumTable.update({ AlbumTable.id eq other }) { it[originalId] = "apple:123" }
+        }
+        val first = song(imported, "First", location = "/old/first.flac")
+        val second = song(other, "Second", location = "/old/second.flac")
+        val third = song(local, "Third", location = "/old/third.flac")
+        val fourth = song(imported, "Fourth", location = "/elsewhere/fourth.flac")
+
+        assertEquals(1, songService.moveSongs("/old", "/new", "tidal:"))
+
+        assertEquals(
+            mapOf(
+                first to "/new/first.flac",
+                second to "/old/second.flac",
+                third to "/old/third.flac",
+                fourth to "/elsewhere/fourth.flac",
+            ),
+            locations()
+        )
+        assertEquals(setOf(updated(EntityType.SONG, first)), recordedChanges(database))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving songs without a match changes and records nothing`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        assertEquals(0, songService.moveSongs("/old", "/new"))
+        assertEquals(emptyMap<UUID, String>(), locations())
+        assertEquals(emptySet<Any>(), recordedChanges(database))
+
+        val song = song(album("Album"), "Title", location = "/music/title.flac")
+
+        assertEquals(0, songService.moveSongs("/old", "/new"))
+        assertEquals(0, songService.moveSongs("/music", "/new", "tidal:"))
+        assertEquals(mapOf(song to "/music/title.flac"), locations())
         assertEquals(emptySet<Any>(), recordedChanges(database))
     }
 

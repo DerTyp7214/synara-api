@@ -16,7 +16,6 @@ import dev.dertyp.services.audio.highHz
 import dev.dertyp.services.audio.lowHz
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -59,11 +58,10 @@ class AudioTimelineTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `missing timeline query skips ok rows and retries stale failures`(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "audio_timeline_test")
+        TestDatabase.connect(dialect, "audio_timeline_test", AlbumTable, SongTable, SongVariantTable, SongAudioTimelineTable)
         val now = System.currentTimeMillis()
         val songs = List(4) { UUID.randomUUID() }
         dbQuery {
-            SchemaUtils.create(AlbumTable, SongTable, SongVariantTable, SongAudioTimelineTable)
             val album = AlbumTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "Album"
@@ -100,11 +98,10 @@ class AudioTimelineTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `band levels round trip through the timeline row`(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "audio_timeline_bands_test")
+        TestDatabase.connect(dialect, "audio_timeline_bands_test", AlbumTable, SongTable, SongVariantTable, SongAudioTimelineTable)
         val songId = UUID.randomUUID()
         val fiveBands = AudioBand.entries.mapIndexed { index, _ -> FloatArray(20) { -70f + (index * 4 + it) * 2f } }
         dbQuery {
-            SchemaUtils.create(AlbumTable, SongTable, SongVariantTable, SongAudioTimelineTable)
             val album = AlbumTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "Album"
@@ -151,10 +148,9 @@ class AudioTimelineTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a row without bands returns empty bands`(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "audio_timeline_no_bands_test")
+        TestDatabase.connect(dialect, "audio_timeline_no_bands_test", AlbumTable, SongTable, SongVariantTable, SongAudioTimelineTable)
         val songId = UUID.randomUUID()
         dbQuery {
-            SchemaUtils.create(AlbumTable, SongTable, SongVariantTable, SongAudioTimelineTable)
             val album = AlbumTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "Album"
@@ -182,11 +178,10 @@ class AudioTimelineTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `stale timelines are those below the codec version`(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "audio_timeline_stale_version_test")
+        TestDatabase.connect(dialect, "audio_timeline_stale_version_test", AlbumTable, SongTable, SongVariantTable, SongAudioTimelineTable)
         val staleSongId = UUID.randomUUID()
         val currentSongId = UUID.randomUUID()
         dbQuery {
-            SchemaUtils.create(AlbumTable, SongTable, SongVariantTable, SongAudioTimelineTable)
             val album = AlbumTable.insert {
                 it[id] = UUID.randomUUID()
                 it[name] = "Album"

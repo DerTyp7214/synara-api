@@ -11,7 +11,6 @@ import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -46,10 +45,7 @@ class SongCreditedNameTest : KoinTest {
     )
 
     fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "song_credited_name")
-        transaction(database) {
-            SchemaUtils.create(*allTables)
-        }
+        database = TestDatabase.connect(dialect, "song_credited_name", *allTables)
 
         startKoin {
             modules(module {

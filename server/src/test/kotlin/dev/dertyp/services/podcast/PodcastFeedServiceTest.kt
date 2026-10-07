@@ -26,7 +26,6 @@ import io.mockk.spyk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -63,17 +62,17 @@ class PodcastFeedServiceTest : KoinTest {
     private fun setup(dialect: DbDialect) {
         startKoin { modules(module { }) }
 
-        database = TestDatabase.connect(dialect, "podcast_feed_test")
+        database = TestDatabase.connect(
+            dialect, "podcast_feed_test",
+            UserTable,
+            ImageTable,
+            PodcastShowTable,
+            PodcastEpisodeTable,
+            PodcastTranscriptTable,
+            PodcastSubscriptionTable,
+            PodcastEpisodeProgressTable,
+        )
         transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                PodcastShowTable,
-                PodcastEpisodeTable,
-                PodcastTranscriptTable,
-                PodcastSubscriptionTable,
-                PodcastEpisodeProgressTable,
-            )
             ImageTable.insert {
                 it[id] = artworkId
                 it[path] = "images/artwork.jpg"
@@ -443,7 +442,7 @@ class PodcastFeedServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `normalizeFeedUrl trims drops fragments and rejects unsupported urls`(dialect: DbDialect) = runBlocking {
+    fun `normalizeFeedUrl trims drops fragments and rejects unsupported urls`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
 
         assertEquals(feedAddress, feedService.normalizeFeedUrl("  $feedAddress  "))

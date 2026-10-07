@@ -34,7 +34,7 @@ class MigrationBaseCheckTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `an applied migration that this build lacks below a newer one is refused`(dialect: DbDialect) {
-        val target = baseDatabase(dialect) ?: return
+        val target = baseDatabase(dialect)
         recordApplied(target, 111)
         val before = history(target)
 
@@ -48,7 +48,7 @@ class MigrationBaseCheckTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `an applied migration above everything this build has is accepted`(dialect: DbDialect) {
-        val target = baseDatabase(dialect) ?: return
+        val target = baseDatabase(dialect)
         recordApplied(target, 111)
         val before = history(target)
 
@@ -59,7 +59,7 @@ class MigrationBaseCheckTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `an applied migration that this build has is accepted with a newer one pending`(dialect: DbDialect) {
-        val target = baseDatabase(dialect) ?: return
+        val target = baseDatabase(dialect)
         recordApplied(target, 111)
         val before = history(target)
 
@@ -70,7 +70,7 @@ class MigrationBaseCheckTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a database at the base is accepted with a newer migration pending`(dialect: DbDialect) {
-        val target = baseDatabase(dialect, upTo = MigrationBase.VERSION) ?: return
+        val target = baseDatabase(dialect, upTo = MigrationBase.VERSION)
 
         assertNull(check(target, later(111)).refusal())
         assertEquals(listOf(MigrationBase.VERSION), history(target))
@@ -98,32 +98,28 @@ class MigrationBaseCheckTest {
         return configuration.load()
     }
 
-    private fun baseDatabase(dialect: DbDialect, upTo: String? = null): Target? {
-        val target = when (dialect) {
-            DbDialect.POSTGRES -> {
-                val container = TestDatabase.postgresContainer ?: run {
-                    println("Skipping PostgreSQL migration base check test because Docker is not available.")
-                    return null
-                }
-                Target(
-                    dialect = Dialect.POSTGRES,
-                    driver = "org.postgresql.Driver",
-                    url = TestDatabase.getPostgresDbUrl(
-                        "base_check_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
-                    ),
-                    user = container.username,
-                    password = container.password,
-                )
-            }
+    private fun baseDatabase(dialect: DbDialect, upTo: String? = null): Target = when (dialect) {
+        DbDialect.POSTGRES -> {
+            val container = TestDatabase.postgresContainer
+            Target(
+                dialect = Dialect.POSTGRES,
+                driver = "org.postgresql.Driver",
+                url = TestDatabase.getMigratedPostgresDbUrl(
+                    "base_check_${UUID.randomUUID().toString().replace("-", "")}".lowercase(),
+                    upTo,
+                ),
+                user = container.username,
+                password = container.password,
+            )
+        }
 
-            DbDialect.SQLITE -> {
-                val file = File.createTempFile("base_check", ".db")
-                files += file
-                Target(Dialect.SQLITE, "org.sqlite.JDBC", "jdbc:sqlite:${file.absolutePath}", "", "")
+        DbDialect.SQLITE -> {
+            val file = File.createTempFile("base_check", ".db")
+            files += file
+            Target(Dialect.SQLITE, "org.sqlite.JDBC", "jdbc:sqlite:${file.absolutePath}", "", "").also {
+                flyway(it, additional = null, upTo = upTo).migrate()
             }
         }
-        flyway(target, additional = null, upTo = upTo).migrate()
-        return target
     }
 
     private fun recordApplied(target: Target, minor: Int) {

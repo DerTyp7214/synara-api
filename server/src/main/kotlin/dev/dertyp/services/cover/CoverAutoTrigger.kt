@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import org.koin.core.component.inject
 import java.util.concurrent.ConcurrentHashMap
@@ -33,7 +34,7 @@ class CoverAutoTrigger(
             previous?.cancel()
             scope.launch {
                 delay(config.debounce)
-                pending.remove(target)
+                if (!pending.remove(target, coroutineContext.job)) return@launch
                 val row = service.row(target) ?: return@launch
                 service.enqueueAuto(target, row.name, row.creator)
             }

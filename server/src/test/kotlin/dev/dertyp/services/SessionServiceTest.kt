@@ -9,7 +9,6 @@ import dev.dertyp.db.UserTable
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -34,10 +33,7 @@ class SessionServiceTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "session_test")
-        transaction(database) {
-            SchemaUtils.create(UserTable, SessionTable, RefreshTokenTable, QueueSyncDeviceTable)
-        }
+        database = TestDatabase.connect(dialect, "session_test", UserTable, SessionTable, RefreshTokenTable, QueueSyncDeviceTable)
         service = SessionService()
     }
 

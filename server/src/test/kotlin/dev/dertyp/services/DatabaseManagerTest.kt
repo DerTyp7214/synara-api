@@ -14,7 +14,6 @@ import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import java.io.File
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class DatabaseManagerTest {
@@ -59,7 +58,7 @@ class DatabaseManagerTest {
 
     @Test
     fun `postgres connections run without jit`() {
-        val container = assertNotNull(TestDatabase.postgresContainer)
+        val container = TestDatabase.postgresContainer
         val manager = DatabaseManager(
             ServerConfig(
                 MapApplicationConfig(

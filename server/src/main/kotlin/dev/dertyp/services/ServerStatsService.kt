@@ -4,6 +4,7 @@ import dev.dertyp.data.PodcastImportState
 import dev.dertyp.data.ProxyInfo
 import dev.dertyp.data.ServerStats
 import dev.dertyp.db.*
+import dev.dertyp.core.BuildInfo
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.metadata.MusicBrainzCacheService
@@ -117,8 +118,8 @@ class ServerStatsService(
             musicBrainzCache = musicBrainzCacheService.getStats(),
             version = ServerStats.Version(
                 version = BuildConfig.VERSION,
-                buildTime = BuildConfig.BUILD_TIME,
-                commitHash = BuildConfig.GIT_HASH,
+                buildTime = BuildInfo.buildTime,
+                commitHash = BuildInfo.gitHash,
                 runtime = "$osName ($osArch)",
                 kernel = osVersion
             )

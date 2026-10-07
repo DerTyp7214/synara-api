@@ -4,8 +4,10 @@ import dev.dertyp.data.UserInfo
 import dev.dertyp.plugins.JobStatus
 import dev.dertyp.services.jobs.JobService
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -72,5 +74,61 @@ class JobServiceTest {
         assertEquals(listOf("running"), service.snapshot("c", user).map { it.title })
         assertEquals(setOf("running", "pending"), service.snapshot("c", admin).map { it.title }.toSet())
         assertEquals(2, service.jobsFlow("c", admin).first().size)
+    }
+
+    @Test
+    fun `a job cancelled the moment it starts running is stopped`() = runBlocking {
+        repeat(1000) {
+            val job = service.enqueue("r", "r", userId) { awaitCancellation() }
+            await(job.id, JobStatus.RUNNING)
+            assertTrue(service.cancel(job.id, user))
+            await(job.id, JobStatus.CANCELLED)
+        }
+    }
+
+    @Test
+    fun `a job that cancels itself as its first step is stopped`() = runBlocking {
+        repeat(1000) {
+            val job = service.enqueue("s", "s", userId) {
+                service.cancel(jobId)
+                awaitCancellation()
+            }
+            await(job.id, JobStatus.CANCELLED)
+        }
+    }
+
+    @Test
+    fun `a job enqueued while the first list is handled reaches the collector`() = runBlocking {
+        service.pause("f")
+        val listed = withTimeout(5.seconds) {
+            service.jobsFlow("f")
+                .onEach { if (it.isEmpty()) service.enqueue("f", "late", userId) { } }
+                .first { it.isNotEmpty() }
+        }
+        assertEquals(listOf("late"), listed.map { it.title })
+        service.resume("f")
+    }
+
+    @Test
+    fun `a line logged while the earlier lines are handled reaches the collector`() = runBlocking {
+        val gate = CompletableDeferred<Unit>()
+        val job = service.enqueue("l", "l", userId) {
+            log("one")
+            gate.await()
+            log("two")
+        }
+        withTimeout(5.seconds) { while (service.logLines(job.id).isEmpty()) yield() }
+        val lines = withTimeout(5.seconds) {
+            service.log(job.id)
+                .onEach {
+                    if (it == "one") {
+                        gate.complete(Unit)
+                        await(job.id, JobStatus.SUCCEEDED)
+                    }
+                }
+                .take(2)
+                .toList()
+        }
+        assertEquals(listOf("one", "two"), lines)
     }
 }

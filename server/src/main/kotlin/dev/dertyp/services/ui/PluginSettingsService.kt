@@ -6,7 +6,7 @@ import dev.dertyp.plugins.PluginSettings
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.onSubscription
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -56,7 +56,7 @@ class PluginSettingsService {
         flowFor(pluginId).emit(getAll(pluginId))
     }
 
-    fun changes(pluginId: String): Flow<Map<String, String>> = flowFor(pluginId).onStart { emit(getAll(pluginId)) }
+    fun changes(pluginId: String): Flow<Map<String, String>> = flowFor(pluginId).onSubscription { emit(getAll(pluginId)) }
 
     fun forPlugin(pluginId: String): PluginSettings = object : PluginSettings {
         override suspend fun get(key: String): String? = this@PluginSettingsService.get(pluginId, key)

@@ -11,7 +11,6 @@ import io.mockk.mockk
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.inList
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -31,13 +30,11 @@ class DiscoveryServiceTest : KoinTest {
     private val mockAudioAnalysisService = mockk<AudioAnalysisService>()
 
     private fun setup(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "discovery_test")
-        dbQuery {
-            SchemaUtils.create(
-                AlbumTable, SongTable, SongVariantTable, SongAudioDataTable,
-                PersonTable, SongComposerTable, SongLyricistTable, SongProducerTable
-            )
-        }
+        TestDatabase.connect(
+            dialect, "discovery_test",
+            AlbumTable, SongTable, SongVariantTable, SongAudioDataTable,
+            PersonTable, SongComposerTable, SongLyricistTable, SongProducerTable
+        )
 
         startKoin {
             modules(module {

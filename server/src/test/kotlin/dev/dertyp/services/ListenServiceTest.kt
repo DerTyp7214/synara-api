@@ -56,31 +56,29 @@ class ListenServiceTest : KoinTest {
                 single { changeNotifier }
             })
         }
-        database = TestDatabase.connect(dialect, "listen_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                AlbumTable,
-                ArtistTable,
-                ArtistAliasTable,
-                SongTable, SongVariantTable,
-                SongArtistTable,
-                UserSongTable,
-                MBArtistTable,
-                MBRecordingTable,
-                MBReleaseGroupTable,
-                MBReleaseTable,
-                MBRecordingIsrcTable,
-                SongMusicBrainzTable,
-                AlbumMusicBrainzTable,
-                ArtistMusicBrainzTable,
-                ListenBrainzUserTable,
-                UserListenBrainzLinkTable,
-                ListenTable,
-                ListenLinkTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "listen_test",
+            UserTable,
+            ImageTable,
+            AlbumTable,
+            ArtistTable,
+            ArtistAliasTable,
+            SongTable, SongVariantTable,
+            SongArtistTable,
+            UserSongTable,
+            MBArtistTable,
+            MBRecordingTable,
+            MBReleaseGroupTable,
+            MBReleaseTable,
+            MBRecordingIsrcTable,
+            SongMusicBrainzTable,
+            AlbumMusicBrainzTable,
+            ArtistMusicBrainzTable,
+            ListenBrainzUserTable,
+            UserListenBrainzLinkTable,
+            ListenTable,
+            ListenLinkTable,
+        )
         service = ListenService()
     }
 
@@ -161,8 +159,7 @@ class ListenServiceTest : KoinTest {
                 single { AlbumService() }
             })
         }
-        database = TestDatabase.connect(dialect, "listen_library_test")
-        transaction(database) { SchemaUtils.create(*libraryTables) }
+        database = TestDatabase.connect(dialect, "listen_library_test", *libraryTables)
         service = ListenService()
     }
 

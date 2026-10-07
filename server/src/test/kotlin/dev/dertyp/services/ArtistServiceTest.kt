@@ -23,7 +23,6 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -63,37 +62,35 @@ class ArtistServiceTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "artist_test")
-        transaction(database) {
-            SchemaUtils.create(
-                *entityChangeTables,
-                UserTable,
-                ArtistTable,
-                ArtistMusicBrainzTable,
-                ArtistAliasTable,
-                FollowedArtistTable,
-                ArtistSplitAliasTable,
-                ImageTable,
-                ImageMetadataTable,
-                SongTable, SongVariantTable,
-                SongArtistTable,
-                AlbumTable,
-                AlbumArtistTable,
-                ArtistMemberTable,
-                GenreTable,
-                ArtistGenreTable,
-                SongGenreTable,
-                AlbumGenreTable,
-                CollectionTable,
-                CollectionArtistTable,
-                *allMusicBrainzTables,
-                RecentReleaseTable,
-                ProviderReleaseTable,
-                HiddenReleaseTable,
-                ArtistSourceRuleTable,
-                ReleaseArtistTable
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "artist_test",
+            *entityChangeTables,
+            UserTable,
+            ArtistTable,
+            ArtistMusicBrainzTable,
+            ArtistAliasTable,
+            FollowedArtistTable,
+            ArtistSplitAliasTable,
+            ImageTable,
+            ImageMetadataTable,
+            SongTable, SongVariantTable,
+            SongArtistTable,
+            AlbumTable,
+            AlbumArtistTable,
+            ArtistMemberTable,
+            GenreTable,
+            ArtistGenreTable,
+            SongGenreTable,
+            AlbumGenreTable,
+            CollectionTable,
+            CollectionArtistTable,
+            *allMusicBrainzTables,
+            RecentReleaseTable,
+            ProviderReleaseTable,
+            HiddenReleaseTable,
+            ArtistSourceRuleTable,
+            ReleaseArtistTable
+        )
 
         service = ArtistService()
     }

@@ -37,7 +37,6 @@ class SearchIndexIntegrationTest : KoinTest {
 
     fun setup() {
         val container = TestDatabase.postgresContainer
-        assertNotNull(container, "PostgreSQL testcontainer must be available")
 
         val dbName = "integration_test_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
         val dbUrl = TestDatabase.getPostgresDbUrl(dbName)
@@ -45,7 +44,7 @@ class SearchIndexIntegrationTest : KoinTest {
         val config = MapApplicationConfig(
             "storage.driverClassName" to "org.postgresql.Driver",
             "storage.jdbcURL" to dbUrl,
-            "storage.user" to container!!.username,
+            "storage.user" to container.username,
             "storage.password" to container.password,
             "client.id" to "test-client",
             "client.secret" to "test-secret"
@@ -95,11 +94,6 @@ class SearchIndexIntegrationTest : KoinTest {
 
     @Test
     fun `database triggers and search index worker integration test`() = runBlocking {
-        if (TestDatabase.postgresContainer == null) {
-            println("Skipping PostgreSQL integration test because Docker is not available.")
-            return@runBlocking
-        }
-
         setup()
 
         val userId = UUID.randomUUID()
@@ -173,11 +167,6 @@ class SearchIndexIntegrationTest : KoinTest {
 
     @Test
     fun `title tag labels are indexed for ranked search`() = runBlocking {
-        if (TestDatabase.postgresContainer == null) {
-            println("Skipping PostgreSQL integration test because Docker is not available.")
-            return@runBlocking
-        }
-
         setup()
 
         val userId = UUID.randomUUID()
@@ -222,11 +211,6 @@ class SearchIndexIntegrationTest : KoinTest {
 
     @Test
     fun `album title tag labels are indexed for album and song search`() = runBlocking {
-        if (TestDatabase.postgresContainer == null) {
-            println("Skipping PostgreSQL integration test because Docker is not available.")
-            return@runBlocking
-        }
-
         setup()
 
         val userId = UUID.randomUUID()

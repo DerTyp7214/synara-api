@@ -58,35 +58,33 @@ class AlbumServiceDeletionTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "album_deletion_test")
-        transaction(database) {
-            SchemaUtils.create(
-                *entityChangeTables,
-                UserTable,
-                AlbumTable,
-                AlbumArtistTable,
-                ArtistTable,
-                ArtistMemberTable,
-                ArtistMusicBrainzTable,
-                ArtistAliasTable,
-                FollowedArtistTable,
-                AlbumMusicBrainzTable,
-                ImageTable,
-                ImageMetadataTable,
-                AnimatedImageTable,
-                SongTable, SongVariantTable,
-                SongArtistTable,
-                SongMusicBrainzTable,
-                ArtistSplitAliasTable,
-                GenreTable,
-                ArtistGenreTable,
-                SongGenreTable,
-                AlbumGenreTable,
-                AlbumProviderTable,
-                ProviderEnrichmentCheckTable,
-                *allMusicBrainzTables
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "album_deletion_test",
+            *entityChangeTables,
+            UserTable,
+            AlbumTable,
+            AlbumArtistTable,
+            ArtistTable,
+            ArtistMemberTable,
+            ArtistMusicBrainzTable,
+            ArtistAliasTable,
+            FollowedArtistTable,
+            AlbumMusicBrainzTable,
+            ImageTable,
+            ImageMetadataTable,
+            AnimatedImageTable,
+            SongTable, SongVariantTable,
+            SongArtistTable,
+            SongMusicBrainzTable,
+            ArtistSplitAliasTable,
+            GenreTable,
+            ArtistGenreTable,
+            SongGenreTable,
+            AlbumGenreTable,
+            AlbumProviderTable,
+            ProviderEnrichmentCheckTable,
+            *allMusicBrainzTables
+        )
 
         every { storageService.albumsPath } returns null
         every { redisSearchService.isEnabled() } returns true
@@ -97,7 +95,7 @@ class AlbumServiceDeletionTest : KoinTest {
     @AfterEach
     fun tearDown() {
         runBlocking { events.stop() }
-        runBlocking { service.stopService() }
+        if (::service.isInitialized) runBlocking { service.stopService() }
         stopKoin()
         TestDatabase.cleanUp()
     }

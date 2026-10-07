@@ -71,15 +71,13 @@ class ImageReferenceCleanupTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "image_ref_test")
-        transaction(database) {
-            SchemaUtils.create(
-                ImageTable, ImageMetadataTable, AlbumTable, ArtistTable, SongTable, SongVariantTable, PlaylistTable,
-                UserPlaylistTable, UserTable, MBReleaseGroupTable, MBReleaseGroupCoverTable, RecentReleaseTable,
-                ProviderReleaseTable, ProviderLinkTable, RecentReleaseLinkTable, ProviderReleaseLinkTable,
-                AnimatedImageTable, CollectionTable, RadioChannelTable, PodcastShowTable, PodcastEpisodeTable
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "image_ref_test",
+            ImageTable, ImageMetadataTable, AlbumTable, ArtistTable, SongTable, SongVariantTable, PlaylistTable,
+            UserPlaylistTable, UserTable, MBReleaseGroupTable, MBReleaseGroupCoverTable, RecentReleaseTable,
+            ProviderReleaseTable, ProviderLinkTable, RecentReleaseLinkTable, ProviderReleaseLinkTable,
+            AnimatedImageTable, CollectionTable, RadioChannelTable, PodcastShowTable, PodcastEpisodeTable
+        )
 
         service = ImageService(storageService, redisConfig)
         animatedService = AnimatedImageService(storageService, redisConfig, service)

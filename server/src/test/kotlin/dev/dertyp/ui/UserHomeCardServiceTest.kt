@@ -12,7 +12,6 @@ import dev.dertyp.services.ui.UserHomeCardService
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.params.ParameterizedTest
@@ -35,9 +34,8 @@ class UserHomeCardServiceTest {
 
     private fun setup(dialect: DbDialect) = runBlocking {
         startKoin { modules(module { single { changeNotifier } }) }
-        TestDatabase.connect(dialect, "home_card_test")
+        TestDatabase.connect(dialect, "home_card_test", ImageTable, UserTable, UserHomeCardTable)
         dbQuery {
-            SchemaUtils.create(ImageTable, UserTable, UserHomeCardTable)
             UserTable.insert {
                 it[id] = accountId
                 it[username] = "tester"

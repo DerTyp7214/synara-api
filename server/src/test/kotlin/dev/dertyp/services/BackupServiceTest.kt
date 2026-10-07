@@ -12,12 +12,14 @@ import dev.dertyp.services.import.ImportBackend
 import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.cbor.Cbor
 import kotlinx.serialization.decodeFromByteArray
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -27,6 +29,7 @@ import org.junit.jupiter.params.provider.EnumSource
 import java.io.*
 import java.nio.file.Files
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -46,19 +49,17 @@ class BackupServiceTest {
     private lateinit var database: Database
 
     fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "backup_test")
-        transaction(database) {
-            SchemaUtils.create(
-                SongTable,
-                SongVariantTable,
-                FlacInfoTable,
-                PcmInfoTable,
-                SongMusicBrainzTable,
-                MBRecordingTable,
-                AlbumTable,
-                ImageTable
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "backup_test",
+            SongTable,
+            SongVariantTable,
+            FlacInfoTable,
+            PcmInfoTable,
+            SongMusicBrainzTable,
+            MBRecordingTable,
+            AlbumTable,
+            ImageTable
+        )
 
         tempDir = Files.createTempDirectory("backup_test_root").toFile()
         backupDir = tempDir.resolve("backups")
@@ -81,6 +82,9 @@ class BackupServiceTest {
         every { environment.config } returns config
 
         every { storageService.tracksPath } returns tracksDir.absolutePath
+        every { storageService.albumsPath } returns null
+        every { storageService.playlistsPath } returns null
+        every { storageService.customAudioPath } returns tempDir.resolve("custom").absolutePath
         every { storageService.imagesPath } returns imagesDir.absolutePath
 
         val mockDownloader = mockk<IImporter>()
@@ -89,6 +93,8 @@ class BackupServiceTest {
 
         val downloaderStorage = mockk<StorageService>(relaxed = true)
         every { downloaderStorage.tracksPath } returns downloaderTracksDir.absolutePath
+        every { downloaderStorage.albumsPath } returns null
+        every { downloaderStorage.playlistsPath } returns null
         every { storageService.forImporter(ImportBackend("tiddl")) } returns downloaderStorage
     }
 
@@ -332,7 +338,7 @@ class BackupServiceTest {
             )
         }
 
-        repeat(11) { i ->
+        val created = List(11) { i ->
             imagesDir.deleteRecursively()
             imagesDir.mkdirs()
 
@@ -348,12 +354,14 @@ class BackupServiceTest {
             dir.mkdirs()
             dir.resolve("${hash.substring(8)}.jpg").writeBytes(byteArrayOf(i.toByte()))
 
-            service.createBackup()
-            Thread.sleep(1005)
+            service.createBackup().fileName
         }
 
         val backups = backupDir.listFiles { it.extension == "zip" }
         assertEquals(10, backups?.size, "Should only keep 10 backups")
+        assertEquals(11, created.toSet().size, "Every backup should have its own name")
+        assertFalse(backupDir.resolve(created.first()).exists(), "The oldest backup should have been deleted")
+        assertEquals(created.drop(1), service.listBackups().map { it.name }, "The ten newest backups should remain, oldest first")
 
         val firstBlobHash = String.format("%016x", 0)
         val firstBlob = blobsDir.resolve("00/00/00/00/$firstBlobHash")
@@ -367,8 +375,8 @@ class BackupServiceTest {
     private fun backupService() =
         BackupService(dbManagementService, databaseManager, storageService, pluginManager, ServerConfig(environment.config))
 
-    private fun zipBackup(version: String?): File {
-        val file = backupDir.resolve("handmade-${UUID.randomUUID()}.zip")
+    private fun zipBackup(version: String?, name: String = "handmade-${UUID.randomUUID()}.zip"): File {
+        val file = backupDir.resolve(name)
         ZipOutputStream(file.outputStream()).use { zip ->
             if (version != null) {
                 zip.putNextEntry(ZipEntry("schema.version"))
@@ -451,4 +459,106 @@ class BackupServiceTest {
             assertEquals("1.109", refusal.serverVersion)
             coVerify(exactly = 0) { dbManagementService.importData(any<InputStream>()) }
         }
+
+    private val generatedName = Regex("""backup-(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:-(\d+))?\.zip""")
+
+    private fun exportsItsOwnByte(): AtomicInteger {
+        val exports = AtomicInteger(0)
+        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers {
+            firstArg<OutputStream>().write(byteArrayOf(exports.incrementAndGet().toByte()))
+        }
+        return exports
+    }
+
+    private fun databaseEntry(fileName: String): List<Byte> = ZipFile(backupDir.resolve(fileName)).use { zip ->
+        assertNotNull(zip.getEntry("schema.version"))
+        assertNotNull(zip.getEntry("files.tree.cbor.zst"))
+        assertNotNull(zip.getEntry("images.index.cbor.zst"))
+        zip.getInputStream(zip.getEntry("database.cbor.zst")).use { it.readBytes().toList() }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `backups created right after each other get distinct names and each restores its own data`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val service = backupService()
+            exportsItsOwnByte()
+            val restored = mutableListOf<List<Byte>>()
+            coEvery { dbManagementService.importData(any<InputStream>()) } answers {
+                restored += firstArg<InputStream>().readBytes().toList()
+            }
+
+            val created = List(4) { service.createBackup().fileName }
+
+            assertEquals(4, created.toSet().size)
+            created.groupBy { generatedName.matchEntire(it)!!.groupValues[1] }.forEach { (timestamp, names) ->
+                val expected = List(names.size) { if (it == 0) "backup-$timestamp.zip" else "backup-$timestamp-${it + 1}.zip" }
+                assertEquals(expected, names)
+            }
+            assertEquals(created, service.listBackups().map { it.name })
+            assertEquals(listOf(1, 2, 3, 4).map { listOf(it.toByte()) }, created.map { databaseEntry(it) })
+
+            created.forEach { service.loadBackup(it) }
+
+            assertEquals(listOf(1, 2, 3, 4).map { listOf(it.toByte()) }, restored)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `backups created at the same time get distinct files`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val service = backupService()
+        exportsItsOwnByte()
+
+        val created = List(8) { async(Dispatchers.IO) { service.createBackup().fileName } }.awaitAll()
+
+        assertEquals(8, created.toSet().size)
+        assertEquals(created.toSet(), backupDir.listFiles { it.extension == "zip" }.orEmpty().map { it.name }.toSet())
+        assertTrue(created.all { generatedName.matches(it) })
+        assertEquals((1..8).map { listOf(it.toByte()) }.toSet(), created.map { databaseEntry(it) }.toSet())
+        assertEquals(created.toSet(), service.listBackups().map { it.name }.toSet())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `backups with and without a counter in the name are listed, rotated, restored and deleted in the order of their age`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val service = backupService()
+        exportsItsOwnByte()
+        coEvery { dbManagementService.importData(any<InputStream>()) } returns Unit
+
+        val sameModification = listOf(
+            "backup-2020-01-01_00-00-00.zip",
+            "backup-2020-01-01_00-00-00-2.zip",
+            "backup-2020-01-01_00-00-00-10.zip",
+            "backup-2020-01-01_00-00-01.zip"
+        )
+        sameModification.shuffled().forEach { zipBackup("1.109", it).setLastModified(1_577_836_800_000) }
+        val modifiedLater = "backup-2019-06-01_12-00-00.zip"
+        zipBackup("1.109", modifiedLater).setLastModified(1_577_836_900_000)
+        val existing = sameModification + modifiedLater
+
+        assertEquals(existing, service.listBackups().map { it.name })
+        assertEquals(
+            listOf(1_577_836_800_000, 1_577_836_800_000, 1_577_836_800_000, 1_577_836_800_000, 1_577_836_900_000),
+            service.listBackups().map { it.date }
+        )
+
+        val created = List(7) { service.createBackup().fileName }
+
+        assertEquals(existing.drop(2) + created, service.listBackups().map { it.name })
+        assertFalse(backupDir.resolve("backup-2020-01-01_00-00-00.zip").exists())
+        assertFalse(backupDir.resolve("backup-2020-01-01_00-00-00-2.zip").exists())
+
+        service.loadBackup("backup-2020-01-01_00-00-00-10.zip")
+        service.loadBackup(modifiedLater)
+        coVerify(exactly = 2) { dbManagementService.importData(any<InputStream>()) }
+
+        service.deleteBackup("backup-2020-01-01_00-00-01.zip")
+
+        assertEquals(listOf("backup-2020-01-01_00-00-00-10.zip", modifiedLater) + created, service.listBackups().map { it.name })
+    }
 }

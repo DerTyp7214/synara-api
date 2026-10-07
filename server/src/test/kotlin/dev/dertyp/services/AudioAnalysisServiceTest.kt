@@ -16,7 +16,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.innerJoin
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -40,13 +39,11 @@ class AudioAnalysisServiceTest {
                 includes(entityEventsModule())
             })
         }
-        TestDatabase.connect(dialect, "audio_analysis_test")
-        dbQuery {
-            SchemaUtils.create(
-                *entityChangeTables, SongAudioDataTable, SongAudioTimelineTable,
-                PersonTable, SongComposerTable, SongLyricistTable, SongProducerTable
-            )
-        }
+        TestDatabase.connect(
+            dialect, "audio_analysis_test",
+            *entityChangeTables, SongAudioDataTable, SongAudioTimelineTable,
+            PersonTable, SongComposerTable, SongLyricistTable, SongProducerTable
+        )
     }
 
     @AfterEach

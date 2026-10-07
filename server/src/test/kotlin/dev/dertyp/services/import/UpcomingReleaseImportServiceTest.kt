@@ -223,7 +223,7 @@ class UpcomingReleaseImportServiceTest {
     }
 
     @Test
-    fun `detect finds an incomplete apple album even with a past date`() = runBlocking {
+    fun `detect finds an incomplete apple album even with a past date`(): Unit = runBlocking {
         every { appleMock.catalogEnabled } returns true
         coEvery { appleMock.getCatalogAlbumsByIds(listOf(APPLE_ID), any()) } returns listOf(
             catalogAlbum(releaseDate = LocalDate.now().minusDays(3), isComplete = false)

@@ -1,6 +1,9 @@
+import com.sun.management.OperatingSystemMXBean
+import java.lang.management.ManagementFactory
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Properties
 
 plugins {
     id("synara.kotlin-jvm")
@@ -80,6 +83,10 @@ ksp {
     arg("rest.doc.publicServices", "serverStats,auth,handshake")
 }
 
+tasks.matching { it.name == "kspKotlin" }.configureEach {
+    outputs.file(rootProject.file("docs/REST_API.md"))
+}
+
 dependencies {
     add("ksp", project(":common-rpc:doc-compiler"))
     add("ksp", project(":common-rpc:rest-compiler"))
@@ -122,7 +129,6 @@ dependencies {
     implementation(libs.exposed.dao)
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)
-    implementation(libs.h2)
     implementation(libs.javacpp)
     implementation(libs.ffmpeg)
     implementation(libs.javacv)
@@ -185,13 +191,25 @@ dependencies {
     testImplementation(libs.exposed.migration.jdbc)
 }
 
+val testForks: Int = (project.findProperty("testForks") as String?)?.toInt() ?: run {
+    val memoryGigabytes = (ManagementFactory.getOperatingSystemMXBean() as OperatingSystemMXBean).totalMemorySize shr 30
+    val byMemory = (memoryGigabytes - 7) / 3
+    val byProcessors = Runtime.getRuntime().availableProcessors() / 4
+    minOf(byMemory.toInt(), byProcessors, 4).coerceAtLeast(1)
+}
+
 tasks.test {
     useJUnitPlatform {
         if (project.findProperty("equivalence") == "true") includeTags("equivalence") else excludeTags("equivalence")
     }
     systemProperty("net.bytebuddy.experimental", "true")
     systemProperty("updateRestGolden", project.findProperty("updateRestGolden") ?: "false")
+    systemProperty("withoutContainers", project.findProperty("withoutContainers") ?: "false")
+    addTestOutputListener { _, event ->
+        if (event.message.startsWith("TEST CONTAINERS: ")) logger.lifecycle(event.message.trim())
+    }
     maxHeapSize = "2g"
+    maxParallelForks = testForks
 }
 
 val ktorBaseImageTag = "synara-api-base:latest"
@@ -204,20 +222,43 @@ ktor {
     }
 }
 
-val gitHashProvider: Provider<String> = providers.exec {
-    commandLine("git", "rev-parse", "HEAD")
-    isIgnoreExitValue = true
-}.standardOutput.asText.map { it.trim().ifEmpty { "unknown" } }
+abstract class GenerateBuildInfo : DefaultTask() {
+    @get:Input
+    abstract val gitHash: Property<String>
 
-val buildTimestamp: String = DateTimeFormatter
-    .ofPattern("yyyy-MM-dd HH:mm:ss")
-    .withZone(ZoneId.systemDefault())
-    .format(Instant.now())
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val buildTime = DateTimeFormatter
+            .ofPattern("yyyy-MM-dd HH:mm:ss")
+            .withZone(ZoneId.systemDefault())
+            .format(Instant.now())
+        outputDirectory.file("build-info.properties").get().asFile.writer().use { writer ->
+            Properties().apply {
+                setProperty("buildTime", buildTime)
+                setProperty("gitHash", gitHash.get())
+            }.store(writer, null)
+        }
+    }
+}
+
+val generateBuildInfo = tasks.register<GenerateBuildInfo>("generateBuildInfo") {
+    gitHash = providers.exec {
+        commandLine("git", "rev-parse", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { it.trim().ifEmpty { "unknown" } }
+    outputDirectory = layout.buildDirectory.dir("generated/build-info")
+    outputs.upToDateWhen { false }
+}
+
+tasks.shadowJar {
+    from(generateBuildInfo)
+}
 
 buildConfig {
     packageName("dev.dertyp.server")
     buildConfigField("VERSION", project.version.toString())
     buildConfigField("APP_NAME", "Synara API")
-    buildConfigField("BUILD_TIME", buildTimestamp)
-    buildConfigField("GIT_HASH", gitHashProvider.get())
 }

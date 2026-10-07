@@ -42,7 +42,7 @@ private fun postgresServer(): PostgresServer {
     System.getProperty("postgresUrl")?.takeIf { it.isNotBlank() }?.let { url ->
         return PostgresServer(url, System.getProperty("postgresUser").orEmpty(), System.getProperty("postgresPassword").orEmpty())
     }
-    val container = TestDatabase.postgresContainer ?: throw GeneratorFailure(
+    val container = runCatching { TestDatabase.postgresContainer }.getOrNull() ?: throw GeneratorFailure(
         "No PostgreSQL available, nothing was written. Start Docker so the postgres:15-alpine test container can run, " +
             "or pass a server with -PpostgresUrl=jdbc:postgresql://host:port/postgres -PpostgresUser=... " +
             "-PpostgresPassword=... (a scratch database is created on it and dropped again)."

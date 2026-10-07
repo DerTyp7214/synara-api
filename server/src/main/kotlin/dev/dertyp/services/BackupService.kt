@@ -107,6 +107,28 @@ class BackupService(
 
     private companion object {
         const val SCHEMA_VERSION_ENTRY = "schema.version"
+        val NAME_TIMESTAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
+        val NAME_PATTERN = Regex("""backup-(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:-(\d+))?\.zip""")
+    }
+
+    private class StoredBackup(val file: File) {
+        private val nameParts = NAME_PATTERN.matchEntire(file.name)?.groupValues
+        val modified = file.lastModified()
+        val timestamp = nameParts?.get(1).orEmpty()
+        val sequence = nameParts?.get(2)?.toIntOrNull() ?: 1
+    }
+
+    private val oldestFirst = compareBy<StoredBackup>({ it.modified }, { it.timestamp }, { it.sequence }, { it.file.name })
+
+    private fun newBackupFile(): File {
+        val timestamp = LocalDateTime.now().format(NAME_TIMESTAMP)
+        val highestSequence = backupDir.listFiles().orEmpty()
+            .map { StoredBackup(it) }
+            .filter { it.timestamp == timestamp }
+            .maxOfOrNull { it.sequence } ?: 0
+        return generateSequence(highestSequence + 1) { it + 1 }
+            .map { backupDir.resolve(if (it == 1) "backup-$timestamp.zip" else "backup-$timestamp-$it.zip") }
+            .first { it.createNewFile() }
     }
 
     private val imagePath = Paths.get(storageService.imagesPath).toFile()
@@ -151,9 +173,7 @@ class BackupService(
         logger.info("Starting backup creation")
         onProgress(0.0, "Starting backup creation")
 
-        val timestamp = LocalDateTime.now()
-            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
-        val backupFile = backupDir.resolve("backup-$timestamp.zip")
+        val backupFile = newBackupFile()
 
         try {
             logger.info("Writing backup to $backupFile")
@@ -321,13 +341,15 @@ class BackupService(
         return withContext(Dispatchers.IO) {
             backupDir.listFiles {
                 it.extension == "zip"
-            }.map {
-                BackupInfo(
-                    name = it.name,
-                    size = it.length(),
-                    date = it.lastModified()
-                )
-            }.sortedBy { it.date }
+            }.map { StoredBackup(it) }
+                .sortedWith(oldestFirst)
+                .map {
+                    BackupInfo(
+                        name = it.file.name,
+                        size = it.file.length(),
+                        date = it.modified
+                    )
+                }
         }
     }
 
@@ -408,9 +430,9 @@ class BackupService(
         logger.debug("Rotating backups")
         val backups = backupDir
             .listFiles { it.isFile && it.name.endsWith(".zip") }
-            .map { it to it.lastModified() }
-            .sortedBy { it.second }
-            .map { it.first }
+            .map { StoredBackup(it) }
+            .sortedWith(oldestFirst)
+            .map { it.file }
 
         if (backups.size > maxBackups) {
             val toDelete = backups.take(backups.size - maxBackups)

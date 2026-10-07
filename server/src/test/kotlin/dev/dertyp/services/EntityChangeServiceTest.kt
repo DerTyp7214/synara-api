@@ -41,7 +41,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -71,32 +70,30 @@ class EntityChangeServiceTest : KoinTest {
 
     private fun setup(dialect: DbDialect) {
         startKoin { modules(module { }) }
-        database = TestDatabase.connect(dialect, "entity_change_service_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                AlbumTable,
-                ArtistTable,
-                ArtistMemberTable,
-                SongTable, SongVariantTable,
-                SongArtistTable,
-                AlbumArtistTable,
-                PlaylistTable,
-                PlaylistSongTable,
-                UserPlaylistTable,
-                UserPlaylistSongTable,
-                CollectionTable,
-                CollectionSongTable,
-                CollectionAlbumTable,
-                CollectionArtistTable,
-                CollectionPlaylistTable,
-                EntityChangeTable,
-                UserEntityChangeTable,
-                EntityChangeScopeTable,
-                EntityChangeTrackingTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "entity_change_service_test",
+            UserTable,
+            ImageTable,
+            AlbumTable,
+            ArtistTable,
+            ArtistMemberTable,
+            SongTable, SongVariantTable,
+            SongArtistTable,
+            AlbumArtistTable,
+            PlaylistTable,
+            PlaylistSongTable,
+            UserPlaylistTable,
+            UserPlaylistSongTable,
+            CollectionTable,
+            CollectionSongTable,
+            CollectionAlbumTable,
+            CollectionArtistTable,
+            CollectionPlaylistTable,
+            EntityChangeTable,
+            UserEntityChangeTable,
+            EntityChangeScopeTable,
+            EntityChangeTrackingTable,
+        )
     }
 
     @AfterEach

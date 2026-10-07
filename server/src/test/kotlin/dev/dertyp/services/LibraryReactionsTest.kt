@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.config.VersionGroupConfig
 import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.EntityType
 import dev.dertyp.data.TaskKeys
@@ -36,7 +37,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -58,7 +58,10 @@ import kotlin.time.measureTime
 
 class LibraryReactionsTest : KoinTest {
     private lateinit var database: Database
-    private val events = RecordedEntityEvents().subscribeLibraryReactions()
+    private val quietPeriod = 300.milliseconds
+    private val maxWait = quietPeriod * 5
+    private val events =
+        RecordedEntityEvents(versionGroups = VersionGroupConfig(quietPeriod, maxWait)).subscribeLibraryReactions()
     private val publisher = events.publisher
     private val scheduleService = events.subscribe(ScheduleService())
     private val albumService = mockk<AlbumService>()
@@ -99,8 +102,7 @@ class LibraryReactionsTest : KoinTest {
                 single { AudioStartAnalysisWorker() }
             })
         }
-        database = TestDatabase.connect(dialect, "library_reactions_test")
-        transaction(database) { SchemaUtils.create(TimecodeTagTable, *entityChangeTables) }
+        database = TestDatabase.connect(dialect, "library_reactions_test", TimecodeTagTable, *entityChangeTables)
         postIndexKeys.forEach { key -> scheduleService.registerManagedTask(key, key) { postIndexRuns.send(key) } }
     }
 
@@ -137,7 +139,7 @@ class LibraryReactionsTest : KoinTest {
                     transaction(database) { write() }
                     rebuilds.next()
                 }
-                assertTrue(waited >= 1.seconds, "rebuild after $waited")
+                assertTrue(waited >= quietPeriod, "rebuild after $waited")
             }
 
             transaction(database) {
@@ -147,7 +149,7 @@ class LibraryReactionsTest : KoinTest {
                 publisher.merging(EntityType.SONG, UUID.randomUUID(), listOf(UUID.randomUUID()))
                 publisher.deleting(EntityType.ARTIST, listOf(UUID.randomUUID()))
             }
-            rebuilds.assertNothingMore(1500.milliseconds)
+            rebuilds.assertNothingMore(quietPeriod * 1.5)
         }
 
     @ParameterizedTest
@@ -165,15 +167,15 @@ class LibraryReactionsTest : KoinTest {
 
             var lastWrite = TimeSource.Monotonic.markNow()
             for (write in albumWrites) {
-                delay(300.milliseconds)
+                delay(quietPeriod * 0.3)
                 lastWrite = TimeSource.Monotonic.markNow()
                 transaction(database) { write() }
             }
 
             rebuilds.next()
-            assertTrue(lastWrite.elapsedNow() >= 1.seconds, "rebuild ${lastWrite.elapsedNow()} after the last write")
+            assertTrue(lastWrite.elapsedNow() >= quietPeriod, "rebuild ${lastWrite.elapsedNow()} after the last write")
             merges.next()
-            rebuilds.assertNothingMore(1500.milliseconds)
+            rebuilds.assertNothingMore(quietPeriod * 1.5)
         }
 
     @ParameterizedTest
@@ -187,13 +189,13 @@ class LibraryReactionsTest : KoinTest {
             events.versionGroupTrigger.requestRebuild()
 
             rebuilds.next()
-            rebuilds.assertNothingMore(1500.milliseconds)
+            rebuilds.assertNothingMore(quietPeriod * 1.5)
 
             val waited = measureTime {
                 events.versionGroupTrigger.requestRebuild()
                 rebuilds.next()
             }
-            assertTrue(waited >= 1.seconds, "rebuild after $waited")
+            assertTrue(waited >= quietPeriod, "rebuild after $waited")
         }
 
     @ParameterizedTest
@@ -205,19 +207,19 @@ class LibraryReactionsTest : KoinTest {
             val stream = launch(Dispatchers.IO) {
                 repeat(60) {
                     transaction(database) { publisher.updated(EntityType.ALBUM, listOf(UUID.randomUUID())) }
-                    delay(200.milliseconds)
+                    delay(quietPeriod / 5)
                 }
             }
 
-            withTimeout(9.seconds) { rebuilds.receive() }
+            withTimeout(maxWait * 1.8) { rebuilds.receive() }
             val waited = started.elapsedNow()
             assertTrue(stream.isActive)
-            assertTrue(waited >= 5.seconds, "rebuild after $waited")
+            assertTrue(waited >= maxWait, "rebuild after $waited")
 
             stream.cancelAndJoin()
             transaction(database) { publisher.updated(EntityType.ALBUM, listOf(UUID.randomUUID())) }
             rebuilds.next()
-            rebuilds.assertNothingMore(1500.milliseconds)
+            rebuilds.assertNothingMore(quietPeriod * 1.5)
         }
 
     @ParameterizedTest
@@ -387,7 +389,7 @@ class LibraryReactionsTest : KoinTest {
             }
         }
 
-        rebuilds.assertNothingMore(1500.milliseconds)
+        rebuilds.assertNothingMore(quietPeriod * 1.5)
         merges.assertNothingMore()
         removals.assertNothingMore()
         postIndexRuns.assertNothingMore()

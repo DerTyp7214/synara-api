@@ -9,6 +9,7 @@ import dev.dertyp.services.metadata.MetadataService
 import io.ktor.server.application.ApplicationCall
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.UUID
@@ -31,6 +32,11 @@ class ImportRpcServiceTest {
         every { importerProxy.defaultService } returns ImportBackend.Tiddl
 
         rpcService = ImportRpcService(user, call, importService, importerProxy)
+    }
+
+    @AfterEach
+    fun tearDown() {
+        unmockkStatic("dev.dertyp.core.CallKt")
     }
 
     @Test

@@ -36,12 +36,12 @@ class SubsonicQueryServiceTest {
 
     private fun setup(dialect: DbDialect) = runBlocking {
         startKoin { modules(entityEventsModule()) }
-        TestDatabase.connect(dialect, "subsonic_query_test")
+        TestDatabase.connect(
+            dialect, "subsonic_query_test",
+            UserTable, ImageTable, AnimatedImageTable, AlbumTable, SongTable, SongVariantTable,
+            ListenBrainzUserTable, ListenTable, UserAlbumTable, *entityChangeTables,
+        )
         dbQuery {
-            SchemaUtils.create(
-                UserTable, ImageTable, AnimatedImageTable, AlbumTable, SongTable, SongVariantTable,
-                ListenBrainzUserTable, ListenTable, UserAlbumTable, *entityChangeTables,
-            )
             UserTable.insert {
                 it[id] = userId
                 it[username] = "tester"

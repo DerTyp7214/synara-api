@@ -25,10 +25,7 @@ class MusicBrainzCacheServiceTest {
     private lateinit var service: MusicBrainzCacheService
 
     fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "mb_cache_test")
-        transaction(database) {
-            SchemaUtils.create(*allMusicBrainzTables)
-        }
+        database = TestDatabase.connect(dialect, "mb_cache_test", *allMusicBrainzTables)
 
         service = MusicBrainzCacheService()
     }

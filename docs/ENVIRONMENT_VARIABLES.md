@@ -106,6 +106,8 @@ Most variables have sensible defaults and are **optional**. Only variables witho
 |:---|:---|:---:|:---|:---|
 | `ENTITY_CHANGE_RETENTION_DAYS` | How long (in days) recorded library changes are kept for clients that ask what changed since their last pull. A client that was away longer reads everything again. | No | `30` | - |
 | `SERVER_SSL_SUPPORTED` |  | No | `false` | - |
+| `VERSION_GROUP_REBUILD_MAX_WAIT_SECONDS` | Longest time in seconds that album changes wait until the versions of an album are grouped again, even while further changes keep arriving. A value below VERSION_GROUP_REBUILD_QUIET_SECONDS counts as that value. | No | `5` | - |
+| `VERSION_GROUP_REBUILD_QUIET_SECONDS` | Seconds without a further album change before the versions of an album are grouped again. A value below 1 counts as 1. | No | `1` | - |
 | `WORKER_THREAD_MULTIPLIER` | Multiplier for background worker threads. Scales the number of parallel tasks relative to CPU cores. | No | `1.0` | - |
 | `YOUTUBE_API_KEY` | Youtube API key for YouTube Data API v3 (Downloader). | No | - | - |
 

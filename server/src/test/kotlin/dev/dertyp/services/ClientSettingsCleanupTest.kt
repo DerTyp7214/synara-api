@@ -16,7 +16,6 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.AfterEach
@@ -39,17 +38,15 @@ class ClientSettingsCleanupTest : KoinTest {
     private fun setup(dialect: DbDialect) {
         startKoin { modules(module { }) }
 
-        database = TestDatabase.connect(dialect, "client_settings_cleanup_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                ClientDeviceTable,
-                ClientSettingScopeTable,
-                ClientSettingTable,
-                ClientSettingHistoryTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "client_settings_cleanup_test",
+            UserTable,
+            ImageTable,
+            ClientDeviceTable,
+            ClientSettingScopeTable,
+            ClientSettingTable,
+            ClientSettingHistoryTable,
+        )
         service = ClientSettingsService()
     }
 

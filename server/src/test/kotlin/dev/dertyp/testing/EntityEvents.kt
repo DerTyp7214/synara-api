@@ -1,5 +1,6 @@
 package dev.dertyp.testing
 
+import dev.dertyp.config.VersionGroupConfig
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.services.DuplicateAlbumMergeTrigger
 import dev.dertyp.services.EntityChangeRecorder
@@ -14,11 +15,18 @@ import org.koin.core.module.Module
 import org.koin.dsl.bind
 import org.koin.dsl.module
 import org.koin.dsl.onClose
+import kotlin.time.Duration.Companion.milliseconds
 
-class RecordedEntityEvents(val hooks: HookService = HookService()) {
+class RecordedEntityEvents(
+    val hooks: HookService = HookService(),
+    versionGroups: VersionGroupConfig = VersionGroupConfig(
+        rebuildQuietPeriod = 500.milliseconds,
+        rebuildMaxWait = 2500.milliseconds,
+    ),
+) {
     val recorder = EntityChangeRecorder().also { it.subscribe(hooks) }
     val publisher = EntityEventPublisher(hooks)
-    val versionGroupTrigger = VersionGroupTrigger()
+    val versionGroupTrigger = VersionGroupTrigger(versionGroups)
     private val reactions = mutableListOf<Service>(versionGroupTrigger)
 
     fun <T> subscribe(reaction: T): T where T : Service, T : HookSubscriber {

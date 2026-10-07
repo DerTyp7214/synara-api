@@ -111,7 +111,7 @@ server/src/main/kotlin/dev/dertyp/services/ImageService.kt | analyzeImage | Imag
 server/src/main/kotlin/dev/dertyp/services/ImageService.kt | createBatch | ImageTable | batchInsert | 1 | BOOKKEEPING: new image rows nothing points to yet
 server/src/main/kotlin/dev/dertyp/services/ImageService.kt | deleteImagesByIds | ImageTable | deleteWhere | 1 | BOOKKEEPING: only called for images no row references, so no cover is set to null
 server/src/main/kotlin/dev/dertyp/services/ImageService.kt | markAnalysisAttempt | ImageTable | update | 1 | BOOKKEEPING: lastAnalysisAttempt / analysisUnrecoverable only
-server/src/main/kotlin/dev/dertyp/services/ImageService.kt | moveImages | ImageTable | update | 1 | BOOKKEEPING: ImageTable.path only, not exposed
+server/src/main/kotlin/dev/dertyp/services/ImageService.kt | moveImages | ImageTable | update | 2 | BOOKKEEPING: ImageTable.path only, not exposed
 server/src/main/kotlin/dev/dertyp/services/ImageService.kt | upsertImage | ImageTable | upsert | 1 | BOOKKEEPING: image row (path, hash, origin), no song, album or artist field changes
 server/src/main/kotlin/dev/dertyp/services/LibraryFileDeleter.kt | deleteSongRows | AlbumTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/LibraryFileDeleter.kt | deleteSongRows | SongTable | deleteWhere | 1 | RECORDED
@@ -198,7 +198,7 @@ server/src/main/kotlin/dev/dertyp/services/SongService.kt | fetchMusicBrainzId |
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | fetchMusicBrainzId | SongGenreTable | batchInsert | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | fetchMusicBrainzId | SongGenreTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | insertVariants | SongVariantTable | insertIgnore | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/SongService.kt | moveSongs | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | moveSongs | SongTable | update | 2 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | setArtists | SongArtistTable | batchInsert | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | setArtists | SongArtistTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | setLikeLevelReturning | UserSongTable | insertIgnore | 1 | RECORDED

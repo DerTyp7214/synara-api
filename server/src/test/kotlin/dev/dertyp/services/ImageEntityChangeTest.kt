@@ -17,8 +17,8 @@ import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -59,22 +59,20 @@ class ImageEntityChangeTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "image_entity_change")
-        transaction(database) {
-            SchemaUtils.create(
-                *entityChangeTables,
-                ImageMetadataTable,
-                MBReleaseGroupCoverTable,
-                RecentReleaseTable,
-                ProviderReleaseTable,
-                ProviderLinkTable,
-                RecentReleaseLinkTable,
-                ProviderReleaseLinkTable,
-                RadioChannelTable,
-                PodcastShowTable,
-                PodcastEpisodeTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "image_entity_change",
+            *entityChangeTables,
+            ImageMetadataTable,
+            MBReleaseGroupCoverTable,
+            RecentReleaseTable,
+            ProviderReleaseTable,
+            ProviderLinkTable,
+            RecentReleaseLinkTable,
+            ProviderReleaseLinkTable,
+            RadioChannelTable,
+            PodcastShowTable,
+            PodcastEpisodeTable,
+        )
         service = ImageService(storageService, redisConfig)
     }
 
@@ -192,4 +190,134 @@ class ImageEntityChangeTest {
 
             assertEquals(emptySet<Any>(), recordedChanges(database))
         }
+
+    private fun stored(location: String): UUID = transaction(database) {
+        ImageTable.insertAndGetId {
+            it[path] = location
+            it[imageHash] = UUID.randomUUID().toString()
+            it[origin] = "test"
+        }.value
+    }
+
+    private fun locations() = transaction(database) {
+        ImageTable.selectAll().associate { it[ImageTable.id].value to it[ImageTable.path] }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving images replaces the prefix at the start and records nothing`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val direct = stored("old/images/direct.jpg")
+        val repeated = stored("old/images/sub/old/images/repeated.jpg")
+        val exact = stored("old/images")
+        val longer = stored("old/images2/longer.jpg")
+        val elsewhere = stored("other/old/images/elsewhere.jpg")
+        val absolute = stored("/old/images/absolute.jpg")
+        covered(direct)
+        pictured(direct)
+
+        assertEquals(4, service.moveImages("old/images", "new/pictures/"))
+
+        assertEquals(
+            mapOf(
+                direct to "new/pictures//direct.jpg",
+                repeated to "new/pictures//sub/old/images/repeated.jpg",
+                exact to "new/pictures/",
+                longer to "new/pictures/2/longer.jpg",
+                elsewhere to "other/old/images/elsewhere.jpg",
+                absolute to "/old/images/absolute.jpg",
+            ),
+            locations()
+        )
+        assertEquals(emptySet<Any>(), recordedChanges(database))
+
+        assertEquals(6, service.moveImages("", "/mnt/"))
+        assertEquals(
+            mapOf(
+                direct to "/mnt/new/pictures//direct.jpg",
+                repeated to "/mnt/new/pictures//sub/old/images/repeated.jpg",
+                exact to "/mnt/new/pictures/",
+                longer to "/mnt/new/pictures/2/longer.jpg",
+                elsewhere to "/mnt/other/old/images/elsewhere.jpg",
+                absolute to "/mnt//old/images/absolute.jpg",
+            ),
+            locations()
+        )
+        assertEquals(emptySet<Any>(), recordedChanges(database))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving images matches case, percent, underscore and backslash the way the database does`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val lower = stored("/old/lower.jpg")
+        val upper = stored("/OLD/sub/old/upper.jpg")
+        val literal = stored("/100%_lib/50%_off.jpg")
+        val wildcard = stored("/100xylib/wildcard.jpg")
+        val later = stored("/100abclib/100%_lib/later.jpg")
+        val windows = stored("C:\\covers\\windows.jpg")
+        val slashless = stored("C:covers/slashless.jpg")
+        val sqlite = dialect == DbDialect.SQLITE
+
+        assertEquals(if (sqlite) 2 else 1, service.moveImages("/old", "/new"))
+        assertEquals(3, service.moveImages("/100%_lib", "/lib_%"))
+        assertEquals(1, service.moveImages("C:\\covers", "D:\\art"))
+
+        assertEquals(
+            mapOf(
+                lower to "/new/lower.jpg",
+                upper to if (sqlite) "/OLD/sub/new/upper.jpg" else "/OLD/sub/old/upper.jpg",
+                literal to "/lib_%/50%_off.jpg",
+                wildcard to "/100xylib/wildcard.jpg",
+                later to "/100abclib/lib_%/later.jpg",
+                windows to if (sqlite) "D:\\art\\windows.jpg" else "C:\\covers\\windows.jpg",
+                slashless to "C:covers/slashless.jpg",
+            ),
+            locations()
+        )
+        assertEquals(emptySet<Any>(), recordedChanges(database))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving images keeps paths outside the basic latin letters intact`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val oldPrefix = "/Bilder 😀🎧/日本 cafe\u0301"
+        val newPrefix = "/Neu ß 🎵"
+        val umlauts = stored("$oldPrefix/Ünï çödé – Öl.jpg")
+        val emoji = stored("$oldPrefix/🎶 😀🎧 100% _live_.jpg")
+        val spaces = stored("$oldPrefix  two  spaces .jpg")
+        val composed = stored("/Bilder 😀🎧/日本 café/composed.jpg")
+        val shorter = stored("/Bilder 😀/日本 cafe\u0301/shorter.jpg")
+
+        assertEquals(3, service.moveImages(oldPrefix, newPrefix))
+
+        assertEquals(
+            mapOf(
+                umlauts to "$newPrefix/Ünï çödé – Öl.jpg",
+                emoji to "$newPrefix/🎶 😀🎧 100% _live_.jpg",
+                spaces to "$newPrefix  two  spaces .jpg",
+                composed to "/Bilder 😀🎧/日本 café/composed.jpg",
+                shorter to "/Bilder 😀/日本 cafe\u0301/shorter.jpg",
+            ),
+            locations()
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `moving images without a match changes nothing`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        assertEquals(0, service.moveImages("old/images", "new/images"))
+        assertEquals(emptyMap<UUID, String>(), locations())
+
+        val kept = stored("covers/kept.jpg")
+
+        assertEquals(0, service.moveImages("old/images", "new/images"))
+        assertEquals(mapOf(kept to "covers/kept.jpg"), locations())
+        assertEquals(emptySet<Any>(), recordedChanges(database))
+    }
 }

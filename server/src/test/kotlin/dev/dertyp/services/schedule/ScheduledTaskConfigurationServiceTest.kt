@@ -12,8 +12,6 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -43,10 +41,7 @@ class ScheduledTaskConfigurationServiceTest : KoinTest {
     }
 
     fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "task_config_test")
-        transaction(database) {
-            SchemaUtils.create(ScheduledTaskConfigurationTable)
-        }
+        database = TestDatabase.connect(dialect, "task_config_test", ScheduledTaskConfigurationTable)
     }
 
     @AfterEach

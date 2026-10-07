@@ -92,30 +92,32 @@ object SchemaDrift {
         )
     )
 
-    fun inspect(database: MigrationDatabase, additionalTables: List<Table> = emptyList()): SchemaState {
-        val tables = tables(database.dialect) + additionalTables
-        return manager(database).use { manager ->
+    fun inspect(database: MigrationDatabase, additionalTables: List<Table> = emptyList()): SchemaState =
+        inspectEach(database, listOf(additionalTables)).single()
+
+    fun inspectEach(database: MigrationDatabase, additions: List<List<Table>>): List<SchemaState> =
+        manager(database).use { manager ->
             manager.init()
-            manager.tempConnection {
-                val required = MigrationUtils
-                    .statementsRequiredForDatabaseMigration(*tables.toTypedArray(), withLogs = false)
-                    .distinct()
-                val tolerated = toleratedIndexes(database.dialect, tables) +
-                    explicitDifferences[database.dialect].orEmpty()
-                val known = tolerated.map { it.statement }.toSet()
-                val withTriggers = if (required.all { it in known }) emptyList() else {
-                    val triggerTables = tablesWithTriggers(database.dialect)
-                    tables
-                        .filter { it.tableName.lowercase() in triggerTables }
-                        .filter { table ->
-                            MigrationUtils.statementsRequiredForDatabaseMigration(table, withLogs = false)
-                                .any { it !in known }
-                        }
-                        .map { it.tableName }
-                }
-                SchemaState(required, tolerated, withTriggers, dataRiskWarnings(tables))
-            }
+            manager.tempConnection { additions.map { state(database.dialect, tables(database.dialect) + it) } }
         }
+
+    private fun JdbcTransaction.state(dialect: Dialect, tables: List<Table>): SchemaState {
+        val required = MigrationUtils
+            .statementsRequiredForDatabaseMigration(*tables.toTypedArray(), withLogs = false)
+            .distinct()
+        val tolerated = toleratedIndexes(dialect, tables) + explicitDifferences[dialect].orEmpty()
+        val known = tolerated.map { it.statement }.toSet()
+        val withTriggers = if (required.all { it in known }) emptyList() else {
+            val triggerTables = tablesWithTriggers(dialect)
+            tables
+                .filter { it.tableName.lowercase() in triggerTables }
+                .filter { table ->
+                    MigrationUtils.statementsRequiredForDatabaseMigration(table, withLogs = false)
+                        .any { it !in known }
+                }
+                .map { it.tableName }
+        }
+        return SchemaState(required, tolerated, withTriggers, dataRiskWarnings(tables))
     }
 
     private fun JdbcTransaction.dataRiskWarnings(tables: List<Table>): List<DataRiskWarning> {

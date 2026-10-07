@@ -4,11 +4,12 @@ import dev.dertyp.config.ServerConfig
 import io.ktor.util.logging.KtorSimpleLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.koin.core.component.KoinComponent
@@ -18,7 +19,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.floor
-import kotlin.time.Duration.Companion.milliseconds
 
 class WorkerAlreadyRunningException(val workerName: String) : Exception("$workerName is already running")
 
@@ -58,83 +58,52 @@ abstract class Worker(val name: String) : KoinComponent {
      * Runs the block for each item from the flow in parallel, dynamically scaling the number of coroutines.
      * Uses a buffered channel to avoid pre-fetching everything into memory.
      */
-    @OptIn(DelicateCoroutinesApi::class)
     protected suspend fun <T> runParallel(
         items: Flow<T>,
         baseThreadCount: Int,
         workerName: String = name,
         onItemProcessed: suspend (Int) -> Unit = {},
         block: suspend (T) -> Unit
-    ) = coroutineScope {
+    ) {
         val desired = (baseThreadCount * threadMultiplier).toInt().coerceAtLeast(1)
         val itemChannel = Channel<T>(Channel.BUFFERED)
         val processedCount = AtomicInteger(0)
         val localGrantedThreads = if (workerName == name) grantedThreads else MutableStateFlow(0)
 
         registerWorker(workerName, desired, localGrantedThreads)
-        localGrantedThreads.first { it > 0 }
 
         try {
-            val activeWorkerJobs = ConcurrentHashMap<Int, Job>()
-            val outerScope = this
+            localGrantedThreads.first { it > 0 }
 
-            val supervisor = launch {
-                while (isActive) {
-                    if (itemChannel.isClosedForReceive) break
+            coroutineScope {
+                val itemScope = this
+                val runningItems = MutableStateFlow(0)
 
-                    val targetCount = localGrantedThreads.value
-                    for (i in 0 until targetCount) {
-                        if (activeWorkerJobs.containsKey(i)) continue
+                launch {
+                    for (item in itemChannel) {
+                        localGrantedThreads.combine(runningItems) { granted, running -> running < granted }.first { it }
+                        runningItems.update { it + 1 }
 
-                        val job = outerScope.launch(start = CoroutineStart.LAZY) {
+                        itemScope.launch {
                             val thisJob = coroutineContext.job
                             try {
-                                while (isActive) {
-                                    if (i >= localGrantedThreads.value) break
-
-                                    val result = itemChannel.tryReceive()
-                                    val item = when {
-                                        result.isSuccess -> result.getOrThrow()
-                                        result.isClosed -> break
-                                        else -> try {
-                                            itemChannel.receive()
-                                        } catch (_: ClosedReceiveChannelException) {
-                                            break
-                                        }
-                                    }
-
-                                    try {
-                                        block(item)
-                                    } catch (e: Throwable) {
-                                        if (thisJob.isActive) onItemProcessed(processedCount.incrementAndGet())
-                                        throw e
-                                    }
-                                    onItemProcessed(processedCount.incrementAndGet())
+                                try {
+                                    block(item)
+                                } catch (e: Throwable) {
+                                    if (thisJob.isActive) onItemProcessed(processedCount.incrementAndGet())
+                                    throw e
                                 }
+                                onItemProcessed(processedCount.incrementAndGet())
                             } finally {
-                                activeWorkerJobs.remove(i, thisJob)
+                                runningItems.update { it - 1 }
                             }
                         }
-
-                        if (activeWorkerJobs.putIfAbsent(i, job) == null) {
-                            job.start()
-                        } else {
-                            job.cancel()
-                        }
                     }
-                    delay(50.milliseconds)
                 }
+
+                items.collect { itemChannel.send(it) }
+                itemChannel.close()
             }
-
-            items.collect { itemChannel.send(it) }
-            itemChannel.close()
-
-            while (isActive) {
-                if (activeWorkerJobs.isEmpty() && itemChannel.isClosedForReceive) break
-                delay(10.milliseconds)
-            }
-
-            supervisor.cancel()
         } finally {
             unregisterWorker(workerName)
         }

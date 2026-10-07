@@ -105,7 +105,7 @@ class ProxyApplicationTest {
             val assigned = ProxyMessage.fromFrame(incoming.receive()) as ProxyMessage.AssignedId
             assertEquals("test-server", assigned.id)
 
-            launch {
+            val clientExchange = launch {
                 client.webSocket("/test-server/rpc/hello") {
                     send("Hello from client")
                     val response = incoming.receive() as Frame.Text
@@ -122,6 +122,7 @@ class ProxyApplicationTest {
             assertEquals("Hello from client", String(clientFrame.data))
 
             send(ProxyMessage.ClientFrame(clientId, "Hello from server".toByteArray(), false).toFrame())
+            clientExchange.join()
         }
     }
 

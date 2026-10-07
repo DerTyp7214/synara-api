@@ -1,3 +1,5 @@
+import kotlinx.kover.gradle.plugin.dsl.KoverProjectExtension
+
 plugins {
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.ktor) apply false
@@ -12,6 +14,26 @@ plugins {
 subprojects {
     group = "dev.dertyp"
     version = "0.0.2"
+
+    plugins.withId("org.jetbrains.kotlinx.kover") {
+        extensions.configure<KoverProjectExtension> {
+            currentProject {
+                instrumentation {
+                    disabledForAll = providers.gradleProperty("withoutCoverage").map(String::toBoolean).orElse(false)
+                }
+            }
+        }
+    }
+}
+
+project(":common-rpc") {
+    tasks.matching { it.name == "kspCommonMainKotlinMetadata" }.configureEach {
+        outputs.files(
+            rootProject.file("docs/RPC_SERVICES.md"),
+            rootProject.file("docs/MODELS.md"),
+            rootProject.file("docs/PERMISSIONS.md"),
+        )
+    }
 }
 
 tasks.register("generateDocs") {
@@ -279,6 +301,14 @@ tasks.register("generateEnvDocs") {
             ),
             "ENTITY_CHANGE_RETENTION_DAYS" to mapOf(
                 "desc" to "How long (in days) recorded library changes are kept for clients that ask what changed since their last pull. A client that was away longer reads everything again.",
+                "cat" to "Other"
+            ),
+            "VERSION_GROUP_REBUILD_QUIET_SECONDS" to mapOf(
+                "desc" to "Seconds without a further album change before the versions of an album are grouped again. A value below 1 counts as 1.",
+                "cat" to "Other"
+            ),
+            "VERSION_GROUP_REBUILD_MAX_WAIT_SECONDS" to mapOf(
+                "desc" to "Longest time in seconds that album changes wait until the versions of an album are grouped again, even while further changes keep arriving. A value below VERSION_GROUP_REBUILD_QUIET_SECONDS counts as that value.",
                 "cat" to "Other"
             ),
             "METRICS_ENABLED" to mapOf(

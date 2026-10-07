@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.config.VersionGroupConfig
 import dev.dertyp.data.EntityType
 import dev.dertyp.plugins.HookEvent
 import kotlinx.coroutines.Job
@@ -7,9 +8,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import org.koin.core.component.inject
-import kotlin.time.Duration.Companion.seconds
 
-class VersionGroupTrigger : Service(), HookSubscriber {
+class VersionGroupTrigger(private val config: VersionGroupConfig) : Service(), HookSubscriber {
     private val albumService by inject<AlbumService>()
     private val timers = Any()
     private var quiet: Job? = null
@@ -27,12 +27,12 @@ class VersionGroupTrigger : Service(), HookSubscriber {
     fun requestRebuild(): Unit = synchronized(timers) {
         quiet?.cancel()
         quiet = scope.launch {
-            delay(QUIET_PERIOD)
+            delay(config.rebuildQuietPeriod)
             rebuildWhenDue(coroutineContext.job)
         }
         if (deadline == null) {
             deadline = scope.launch {
-                delay(MAX_WAIT)
+                delay(config.rebuildMaxWait)
                 rebuildWhenDue(coroutineContext.job)
             }
         }
@@ -59,10 +59,5 @@ class VersionGroupTrigger : Service(), HookSubscriber {
             deadline = null
         }
         scope.launch { albumService.rebuildVersionGroups() }
-    }
-
-    private companion object {
-        val QUIET_PERIOD = 1.seconds
-        val MAX_WAIT = 5.seconds
     }
 }

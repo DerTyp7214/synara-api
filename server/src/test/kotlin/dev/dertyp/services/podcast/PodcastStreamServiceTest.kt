@@ -26,7 +26,6 @@ import io.mockk.spyk
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -60,18 +59,16 @@ class PodcastStreamServiceTest : KoinTest {
     private fun setup(dialect: DbDialect) {
         startKoin { modules(module { }) }
 
-        database = TestDatabase.connect(dialect, "podcast_stream_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                PodcastShowTable,
-                PodcastEpisodeTable,
-                PodcastTranscriptTable,
-                PodcastSubscriptionTable,
-                PodcastEpisodeProgressTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "podcast_stream_test",
+            UserTable,
+            ImageTable,
+            PodcastShowTable,
+            PodcastEpisodeTable,
+            PodcastTranscriptTable,
+            PodcastSubscriptionTable,
+            PodcastEpisodeProgressTable,
+        )
 
         directory = Files.createTempDirectory("podcast-stream").toFile()
 
@@ -91,7 +88,7 @@ class PodcastStreamServiceTest : KoinTest {
     fun tearDown() {
         requests.clear()
         respondTo = { respondError(HttpStatusCode.NotFound) }
-        directory.deleteRecursively()
+        if (::directory.isInitialized) directory.deleteRecursively()
         stopKoin()
         TestDatabase.cleanUp()
     }

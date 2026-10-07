@@ -7,7 +7,6 @@ import dev.dertyp.db.RpcCallStatsTable
 import dev.dertyp.db.RpcCallTotalsTable
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -19,10 +18,7 @@ class RpcMetricsCollectorTest {
     private lateinit var database: Database
 
     private fun setup(dialect: DbDialect, name: String, enabled: Boolean = true): RpcMetricsCollector {
-        database = TestDatabase.connect(dialect, name)
-        transaction(database) {
-            SchemaUtils.create(RpcCallTotalsTable, RpcCallStatsTable, RpcCallEventTable)
-        }
+        database = TestDatabase.connect(dialect, name, RpcCallTotalsTable, RpcCallStatsTable, RpcCallEventTable)
         return RpcMetricsCollector(MetricsConfig(enabled = enabled))
     }
 

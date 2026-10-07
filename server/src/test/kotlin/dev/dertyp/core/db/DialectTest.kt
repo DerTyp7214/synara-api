@@ -21,7 +21,7 @@ class DialectTest {
 
     private fun expected(dialect: DbDialect): Dialect = when (dialect) {
         DbDialect.SQLITE -> Dialect.SQLITE
-        DbDialect.POSTGRES -> if (TestDatabase.postgresContainer != null) Dialect.POSTGRES else Dialect.OTHER
+        DbDialect.POSTGRES -> Dialect.POSTGRES
     }
 
     @ParameterizedTest

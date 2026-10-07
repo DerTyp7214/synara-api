@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -46,7 +47,7 @@ class ServiceLifecycleShutdownTest {
     }
 
     @Test
-    fun `resources registered first are closed after every service`() = runTest {
+    fun `resources registered first are closed after every service`() = runBlocking {
         val stopped = Collections.synchronizedList(mutableListOf<String>())
         val database = RecordingResource("database", stopped)
         val http = RecordingService("http", stopped)

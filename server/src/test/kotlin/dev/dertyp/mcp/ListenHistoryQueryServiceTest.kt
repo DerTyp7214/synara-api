@@ -17,7 +17,6 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -40,32 +39,30 @@ class ListenHistoryQueryServiceTest {
     private val songDtos = HashMap<UUID, UserSong>()
 
     private fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "listen_history_query_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                AlbumTable,
-                ArtistTable,
-                ArtistAliasTable,
-                SongTable, SongVariantTable,
-                SongArtistTable,
-                MBArtistTable,
-                MBRecordingTable,
-                MBRecordingArtistCreditTable,
-                MBReleaseGroupTable,
-                MBReleaseGroupCoverTable,
-                MBReleaseTable,
-                MBRecordingIsrcTable,
-                SongMusicBrainzTable,
-                AlbumMusicBrainzTable,
-                ArtistMusicBrainzTable,
-                ListenBrainzUserTable,
-                UserListenBrainzLinkTable,
-                ListenTable,
-                ListenLinkTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "listen_history_query_test",
+            UserTable,
+            ImageTable,
+            AlbumTable,
+            ArtistTable,
+            ArtistAliasTable,
+            SongTable, SongVariantTable,
+            SongArtistTable,
+            MBArtistTable,
+            MBRecordingTable,
+            MBRecordingArtistCreditTable,
+            MBReleaseGroupTable,
+            MBReleaseGroupCoverTable,
+            MBReleaseTable,
+            MBRecordingIsrcTable,
+            SongMusicBrainzTable,
+            AlbumMusicBrainzTable,
+            ArtistMusicBrainzTable,
+            ListenBrainzUserTable,
+            UserListenBrainzLinkTable,
+            ListenTable,
+            ListenLinkTable,
+        )
         songDtos.clear()
         songService = mockk()
         coEvery { songService.byIds(any(), any()) } answers {

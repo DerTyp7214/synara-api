@@ -18,8 +18,10 @@ import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -31,6 +33,20 @@ import java.time.LocalDate
 import java.util.UUID
 
 class AppleMusicReleaseServiceTest : KoinTest {
+    companion object {
+        @BeforeAll
+        @JvmStatic
+        fun mockMetadataServices() {
+            mockkObject(MetadataService.Companion)
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun unmockMetadataServices() {
+            unmockkObject(MetadataService.Companion)
+        }
+    }
+
     private lateinit var database: Database
     private lateinit var service: AppleMusicReleaseService
 
@@ -78,45 +94,42 @@ class AppleMusicReleaseServiceTest : KoinTest {
         coEvery { musicBrainzService.fetchReleasesByUrls(any(), any()) } returns emptyList()
 
         appleMusicService = mockk(relaxed = true)
-        mockkObject(MetadataService.Companion)
         every {
             MetadataService.getMetadataService(IMetadataService.MetadataType.appleMusic, any())
         } returns appleMusicService
         every { appleMusicService.catalogEnabled } returns true
         coEvery { artistResolver.resolve(testArtistId, any()) } returns appleArtistId
 
-        database = TestDatabase.connect(dialect, "apple_release_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                ImageMetadataTable,
-                ArtistTable,
-                ArtistMusicBrainzTable,
-                ArtistProviderTable,
-                AlbumTable,
-                AlbumArtistTable,
-                AlbumMusicBrainzTable,
-                AlbumProviderTable,
-                SongTable,
-                SongVariantTable,
-                SongTitleTagTable,
-                AlbumTitleTagTable,
-                SongArtistTable,
-                SongMusicBrainzTable,
-                SongProviderTable,
-                FollowedArtistTable,
-                RecentReleaseTable,
-                ProviderReleaseTable,
-                ProviderLinkTable,
-                RecentReleaseLinkTable,
-                ProviderReleaseLinkTable,
-                HiddenReleaseTable,
-                ReleaseArtistTable,
-                ArtistSourceRuleTable,
-                *allMusicBrainzTables
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "apple_release_test",
+            UserTable,
+            ImageTable,
+            ImageMetadataTable,
+            ArtistTable,
+            ArtistMusicBrainzTable,
+            ArtistProviderTable,
+            AlbumTable,
+            AlbumArtistTable,
+            AlbumMusicBrainzTable,
+            AlbumProviderTable,
+            SongTable,
+            SongVariantTable,
+            SongTitleTagTable,
+            AlbumTitleTagTable,
+            SongArtistTable,
+            SongMusicBrainzTable,
+            SongProviderTable,
+            FollowedArtistTable,
+            RecentReleaseTable,
+            ProviderReleaseTable,
+            ProviderLinkTable,
+            RecentReleaseLinkTable,
+            ProviderReleaseLinkTable,
+            HiddenReleaseTable,
+            ReleaseArtistTable,
+            ArtistSourceRuleTable,
+            *allMusicBrainzTables
+        )
 
         service = AppleMusicReleaseService(environment)
     }
@@ -124,7 +137,7 @@ class AppleMusicReleaseServiceTest : KoinTest {
     @AfterEach
     fun tearDown() {
         stopKoin()
-        unmockkAll()
+        clearMocks(MetadataService.Companion)
         TestDatabase.cleanUp()
     }
 

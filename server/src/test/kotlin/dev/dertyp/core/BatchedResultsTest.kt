@@ -19,10 +19,7 @@ class BatchedResultsTest {
     private lateinit var database: Database
 
     private fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "batched_results")
-        transaction(database) {
-            SchemaUtils.create(AlbumTable, ArtistTable, SongTable, ArtistSplitAliasTable)
-        }
+        database = TestDatabase.connect(dialect, "batched_results", AlbumTable, ArtistTable, SongTable, ArtistSplitAliasTable)
     }
 
     @AfterEach

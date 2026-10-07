@@ -18,7 +18,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -42,18 +41,16 @@ class TimecodeTagServiceTest : KoinTest {
     private fun setup(dialect: DbDialect) {
         startKoin { modules(entityEventsModule()) }
 
-        database = TestDatabase.connect(dialect, "timecode_tag_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                AlbumTable,
-                ArtistTable,
-                SongTable, SongVariantTable,
-                TimecodeTagTable,
-                *entityChangeTables,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "timecode_tag_test",
+            UserTable,
+            ImageTable,
+            AlbumTable,
+            ArtistTable,
+            SongTable, SongVariantTable,
+            TimecodeTagTable,
+            *entityChangeTables,
+        )
         service = TimecodeTagService()
     }
 

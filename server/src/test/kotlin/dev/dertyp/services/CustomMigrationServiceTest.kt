@@ -8,7 +8,6 @@ import dev.dertyp.db.CustomMigrationTable
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -33,10 +32,7 @@ class CustomMigrationServiceTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "migration_test")
-        transaction(database) {
-            SchemaUtils.create(CustomMigrationTable)
-        }
+        database = TestDatabase.connect(dialect, "migration_test", CustomMigrationTable)
     }
 
     @AfterEach

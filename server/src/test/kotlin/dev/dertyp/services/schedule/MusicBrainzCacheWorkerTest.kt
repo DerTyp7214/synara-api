@@ -5,7 +5,6 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.data.MusicBrainzArtist
 import dev.dertyp.db.*
-import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ReleaseService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
@@ -14,7 +13,6 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
@@ -27,25 +25,23 @@ import java.util.UUID
 class MusicBrainzCacheWorkerTest : KoinTest {
 
     private fun setup(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "mb_cache_worker_test")
-        dbQuery {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                AnimatedImageTable,
-                AlbumTable,
-                SongTable, SongVariantTable,
-                ListenBrainzUserTable,
-                ListenTable,
-                MBArtistTable,
-                MBReleaseGroupTable,
-                MBReleaseGroupCoverTable,
-                MBReleaseTable,
-                MBRecordingTable,
-                MBRecordingArtistCreditTable,
-                MBRecordingReleaseTable,
-            )
-        }
+        TestDatabase.connect(
+            dialect, "mb_cache_worker_test",
+            UserTable,
+            ImageTable,
+            AnimatedImageTable,
+            AlbumTable,
+            SongTable, SongVariantTable,
+            ListenBrainzUserTable,
+            ListenTable,
+            MBArtistTable,
+            MBReleaseGroupTable,
+            MBReleaseGroupCoverTable,
+            MBReleaseTable,
+            MBRecordingTable,
+            MBRecordingArtistCreditTable,
+            MBRecordingReleaseTable,
+        )
     }
 
     @AfterEach

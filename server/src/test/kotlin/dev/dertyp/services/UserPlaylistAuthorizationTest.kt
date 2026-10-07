@@ -8,7 +8,6 @@ import io.mockk.mockk
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -25,14 +24,12 @@ class UserPlaylistAuthorizationTest : KoinTest {
     private lateinit var database: Database
 
     fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "playlist_auth")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable, ImageTable, UserPlaylistTable, SongTable, SongVariantTable,
-                UserPlaylistSongTable, SongMusicBrainzTable, MBReleaseTable,
-                AlbumTable, ArtistTable, SongArtistTable, AlbumArtistTable
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "playlist_auth",
+            UserTable, ImageTable, UserPlaylistTable, SongTable, SongVariantTable,
+            UserPlaylistSongTable, SongMusicBrainzTable, MBReleaseTable,
+            AlbumTable, ArtistTable, SongArtistTable, AlbumArtistTable
+        )
 
         startKoin {
             modules(module {

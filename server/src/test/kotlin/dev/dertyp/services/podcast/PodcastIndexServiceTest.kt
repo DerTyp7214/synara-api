@@ -20,8 +20,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -70,18 +68,16 @@ class PodcastIndexServiceTest : KoinTest {
     private fun setup(dialect: DbDialect, registered: List<IPodcastIndex>) {
         startKoin { modules(module { }) }
 
-        database = TestDatabase.connect(dialect, "podcast_index_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                PodcastShowTable,
-                PodcastEpisodeTable,
-                PodcastTranscriptTable,
-                PodcastSubscriptionTable,
-                PodcastEpisodeProgressTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "podcast_index_test",
+            UserTable,
+            ImageTable,
+            PodcastShowTable,
+            PodcastEpisodeTable,
+            PodcastTranscriptTable,
+            PodcastSubscriptionTable,
+            PodcastEpisodeProgressTable,
+        )
 
         val http = spyk(PodcastHttp())
         val imageService = mockk<ImageService>(relaxed = true)

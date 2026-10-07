@@ -89,7 +89,7 @@ class ReverseProxyService(
         try {
             coroutineScope {
                 while (isActive) {
-                    val job = launch {
+                    val job = launch(start = CoroutineStart.LAZY) {
                         try {
                             connectToProxy()
                         } catch (e: Exception) {
@@ -102,6 +102,7 @@ class ReverseProxyService(
                         }
                     }
                     connectionJob = job
+                    job.start()
                     job.join()
                 }
             }

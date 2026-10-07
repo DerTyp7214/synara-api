@@ -6,7 +6,6 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.config.EntityChangeConfig
 import dev.dertyp.config.ServerConfig
-import dev.dertyp.core.db.Dialect
 import dev.dertyp.core.db.SchemaTables
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.data.EntityType
@@ -43,7 +42,6 @@ import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.cbor.Cbor
 import kotlinx.serialization.encodeToByteArray
-import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -92,39 +90,18 @@ class DbManagementServiceTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "db_mgmt_test")
         service = DbManagementService(EntityChangeRecorder(), databaseManager)
-        val tables = getDiscoveredTables(service).toTypedArray()
-
-        transaction(database) {
-            SchemaUtils.create(*tables)
-        }
+        database = TestDatabase.connect(dialect, "db_mgmt_test", *getDiscoveredTables(service).toTypedArray())
     }
 
-    private fun setupFromBase(dialect: DbDialect): Boolean {
-        val container = TestDatabase.postgresContainer
-        if (dialect == DbDialect.POSTGRES && container == null) {
-            println("Skipping PostgreSQL export test on the migration base because Docker is not available.")
-            return false
-        }
+    private fun setupFromBase(dialect: DbDialect) {
         startKoin {
             modules(module {
                 single { mockk<ImageService>(relaxed = true) }
             })
         }
-        database = TestDatabase.connect(dialect, "db_mgmt_base_test")
-        val location = when (dialect) {
-            DbDialect.POSTGRES -> MigrationBase.location(Dialect.POSTGRES)
-            DbDialect.SQLITE -> MigrationBase.location(Dialect.SQLITE)
-        }
-        Flyway.configure()
-            .dataSource(database.url, container?.username.orEmpty(), container?.password.orEmpty())
-            .locations(location)
-            .placeholderReplacement(false)
-            .load()
-            .migrate()
+        database = TestDatabase.connectMigrated(dialect, "db_mgmt_base_test")
         service = DbManagementService(EntityChangeRecorder(), databaseManager)
-        return true
     }
 
     @OptIn(ExperimentalSerializationApi::class)
@@ -177,7 +154,7 @@ class DbManagementServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `an export leaves out the derived search data and its import keeps the rows`(dialect: DbDialect) =
         runBlocking {
-            if (!setupFromBase(dialect)) return@runBlocking
+            setupFromBase(dialect)
             val imageId = UUID.randomUUID()
             val albumId = UUID.randomUUID()
             val songId = UUID.randomUUID()
@@ -244,7 +221,7 @@ class DbManagementServiceTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `a dump that carries search vectors and the search queue imports without them`(dialect: DbDialect) =
         runBlocking {
-            if (!setupFromBase(dialect)) return@runBlocking
+            setupFromBase(dialect)
             insertLibrary(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "current")
             val imageId = UUID.randomUUID()
             val albumId = UUID.randomUUID()
@@ -981,7 +958,7 @@ class DbManagementServiceTest : KoinTest {
     fun `on the migration base a failed import leaves rows and search queue untouched and the repaired dump imports`(
         dialect: DbDialect
     ) = runBlocking {
-        if (!setupFromBase(dialect)) return@runBlocking
+        setupFromBase(dialect)
         val account = seedAccountWithLibrary(EntityChangeRecorder())
         val imageId = UUID.randomUUID()
         val albumId = UUID.randomUUID()

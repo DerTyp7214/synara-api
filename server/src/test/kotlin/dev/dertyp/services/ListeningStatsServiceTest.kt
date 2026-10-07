@@ -13,7 +13,6 @@ import dev.dertyp.testing.*
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -46,32 +45,30 @@ class ListeningStatsServiceTest : KoinTest {
                 single { mockk<ListenBrainzService>(relaxed = true) }
             })
         }
-        database = TestDatabase.connect(dialect, "listening_stats_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                AlbumTable,
-                ArtistTable,
-                ArtistAliasTable,
-                SongTable, SongVariantTable,
-                SongArtistTable,
-                MBArtistTable,
-                MBRecordingTable,
-                MBRecordingArtistCreditTable,
-                MBReleaseGroupTable,
-                MBReleaseGroupCoverTable,
-                MBReleaseTable,
-                MBRecordingIsrcTable,
-                SongMusicBrainzTable,
-                AlbumMusicBrainzTable,
-                ArtistMusicBrainzTable,
-                ListenBrainzUserTable,
-                UserListenBrainzLinkTable,
-                ListenTable,
-                ListenLinkTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "listening_stats_test",
+            UserTable,
+            ImageTable,
+            AlbumTable,
+            ArtistTable,
+            ArtistAliasTable,
+            SongTable, SongVariantTable,
+            SongArtistTable,
+            MBArtistTable,
+            MBRecordingTable,
+            MBRecordingArtistCreditTable,
+            MBReleaseGroupTable,
+            MBReleaseGroupCoverTable,
+            MBReleaseTable,
+            MBRecordingIsrcTable,
+            SongMusicBrainzTable,
+            AlbumMusicBrainzTable,
+            ArtistMusicBrainzTable,
+            ListenBrainzUserTable,
+            UserListenBrainzLinkTable,
+            ListenTable,
+            ListenLinkTable,
+        )
         service = ListeningStatsService()
     }
 

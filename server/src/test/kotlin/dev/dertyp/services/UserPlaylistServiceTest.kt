@@ -12,7 +12,6 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -45,25 +44,23 @@ class UserPlaylistServiceTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "user_playlist_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                UserPlaylistTable,
-                UserPlaylistSongTable,
-                SongTable, SongVariantTable,
-                AlbumTable,
-                ArtistTable,
-                SongArtistTable,
-                AlbumArtistTable,
-                ImageTable,
-                ImageMetadataTable,
-                SongMusicBrainzTable,
-                MBRecordingTable,
-                MBReleaseTable,
-                *entityChangeTables,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "user_playlist_test",
+            UserTable,
+            UserPlaylistTable,
+            UserPlaylistSongTable,
+            SongTable, SongVariantTable,
+            AlbumTable,
+            ArtistTable,
+            SongArtistTable,
+            AlbumArtistTable,
+            ImageTable,
+            ImageMetadataTable,
+            SongMusicBrainzTable,
+            MBRecordingTable,
+            MBReleaseTable,
+            *entityChangeTables,
+        )
         service = UserPlaylistService()
     }
 

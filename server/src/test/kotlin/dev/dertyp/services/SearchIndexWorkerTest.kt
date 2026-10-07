@@ -19,7 +19,6 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.Query
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -40,10 +39,7 @@ class SearchIndexWorkerTest : KoinTest {
     private val job = SupervisorJob()
 
     private fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "search_index_worker")
-        transaction(database) {
-            SchemaUtils.create(SearchIndexQueueTable, ScheduledTaskLogTable)
-        }
+        database = TestDatabase.connect(dialect, "search_index_worker", SearchIndexQueueTable, ScheduledTaskLogTable)
         startKoin {
             modules(module {
                 single { mockk<RedisSearchService>(relaxed = true) }

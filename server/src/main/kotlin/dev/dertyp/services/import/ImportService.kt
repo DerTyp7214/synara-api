@@ -406,20 +406,6 @@ class ImportService(
         is FavouriteImportQueueEntry -> entry.favoriteType.name
     }
 
-    fun isActive(): Boolean = importJobsRaw().any { it.info.status == JobStatus.RUNNING }
-
-    suspend fun waitForInactive() {
-        queueChanges.onStart { emit(Unit) }.first { !isActive() }
-    }
-
-    suspend fun waitForActive() {
-        queueChanges.onStart { emit(Unit) }.first { isActive() }
-    }
-
-    fun isStopped(): Boolean {
-        return stopped.load()
-    }
-
     fun queueSize(): Int = pendingEntries().size
 
     fun logs(): Flow<LogLine> = flow {

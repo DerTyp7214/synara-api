@@ -10,5 +10,6 @@ val configModule = module {
     singleOf(ServerConfig::audio)
     singleOf(ServerConfig::cover)
     singleOf(ServerConfig::entityChanges)
+    singleOf(ServerConfig::versionGroups)
     singleOf(ServerConfig::toRedisCacheProviderConfig)
 }

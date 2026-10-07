@@ -21,9 +21,7 @@ class RedisSearchServiceTest {
 
     @BeforeEach
     fun setup() {
-        if (TestRedis.redisContainer == null) {
-            return
-        }
+        TestRedis.redisContainer
 
         config = RedisCacheProvider.Config().apply {
             host = TestRedis.host
@@ -55,11 +53,6 @@ class RedisSearchServiceTest {
 
     @Test
     fun `full search integration test with real redis`() {
-        if (TestRedis.redisContainer == null) {
-            println("Skipping Redis integration test because Docker is not available.")
-            return
-        }
-
         val songId = UUID.randomUUID()
 
         service.indexSong(
@@ -89,8 +82,6 @@ class RedisSearchServiceTest {
 
     @Test
     fun `search should handle multiple tokens and prefix matching`() {
-        if (TestRedis.redisContainer == null) return
-
         val id = UUID.randomUUID()
         service.indexSong(id, "Deeply Disturbed", "Infected Mushroom", "Converting Vegetarians", "")
 
@@ -105,8 +96,6 @@ class RedisSearchServiceTest {
 
     @Test
     fun `artist and album indexing integration`() {
-        if (TestRedis.redisContainer == null) return
-
         val artistId = UUID.randomUUID()
         val albumId = UUID.randomUUID()
 
@@ -124,8 +113,6 @@ class RedisSearchServiceTest {
 
     @Test
     fun `ranking integration test with real redis`() {
-        if (TestRedis.redisContainer == null) return
-
         val id1 = UUID.randomUUID()
         val id2 = UUID.randomUUID()
         val id3 = UUID.randomUUID()
@@ -146,8 +133,6 @@ class RedisSearchServiceTest {
 
     @Test
     fun `artist ranking integration test`() {
-        if (TestRedis.redisContainer == null) return
-
         val id1 = UUID.randomUUID()
         val id2 = UUID.randomUUID()
 
@@ -165,8 +150,6 @@ class RedisSearchServiceTest {
 
     @Test
     fun `search should respect offset and limit`() {
-        if (TestRedis.redisContainer == null) return
-
         (1..10).forEach {
             val id = UUID.randomUUID()
             service.indexSong(id, "Test Song $it", "", "", "")
@@ -186,8 +169,6 @@ class RedisSearchServiceTest {
 
     @Test
     fun `test getMemoryUsage reporting`() {
-        if (TestRedis.redisContainer == null) return
-
         service.indexSong(UUID.randomUUID(), "Song 1", "Artist 1", "Album 1", "meta")
         service.indexArtist(UUID.randomUUID(), "Artist 2", "Alias", "Group", "meta")
         service.indexAlbum(UUID.randomUUID(), "Album 2", "Artist", "Group")

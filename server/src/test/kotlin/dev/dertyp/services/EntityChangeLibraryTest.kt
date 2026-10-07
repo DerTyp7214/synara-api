@@ -18,7 +18,6 @@ import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -76,32 +75,32 @@ abstract class EntityChangeLibraryTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "entity_change_library")
+        database = TestDatabase.connect(
+            dialect, "entity_change_library",
+            *entityChangeTables,
+            SongTitleTagTable,
+            AlbumTitleTagTable,
+            SongAudioDataTable,
+            SongAcoustIdTable,
+            SyncedLyricsTable,
+            TranscodedSongTable,
+            TimecodeTagTable,
+            UserSongTable,
+            UserCapabilityTable,
+            FollowedArtistTable,
+            ImageMetadataTable,
+            ProviderEnrichmentCheckTable,
+            MBReleaseGroupCoverTable,
+            RecentReleaseTable,
+            ProviderReleaseTable,
+            HiddenReleaseTable,
+            ArtistSourceRuleTable,
+            ReleaseArtistTable,
+            RadioChannelTable,
+            PodcastShowTable,
+            PodcastEpisodeTable,
+        )
         transaction(database) {
-            SchemaUtils.create(
-                *entityChangeTables,
-                SongTitleTagTable,
-                AlbumTitleTagTable,
-                SongAudioDataTable,
-                SongAcoustIdTable,
-                SyncedLyricsTable,
-                TranscodedSongTable,
-                TimecodeTagTable,
-                UserSongTable,
-                UserCapabilityTable,
-                FollowedArtistTable,
-                ImageMetadataTable,
-                ProviderEnrichmentCheckTable,
-                MBReleaseGroupCoverTable,
-                RecentReleaseTable,
-                ProviderReleaseTable,
-                HiddenReleaseTable,
-                ArtistSourceRuleTable,
-                ReleaseArtistTable,
-                RadioChannelTable,
-                PodcastShowTable,
-                PodcastEpisodeTable,
-            )
             owner = UserTable.insertAndGetId {
                 it[username] = "owner"
                 it[passwordHash] = "hash"

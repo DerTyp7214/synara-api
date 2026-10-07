@@ -452,7 +452,7 @@ object SearchBenchmark {
 
                 val redisConfig = RedisCacheProvider.Config().apply {
                     host = if (backend == Backend.Redis) TestRedis.host else "none"
-                    port = TestRedis.port
+                    if (backend == Backend.Redis) port = TestRedis.port
                     useRedisSearch = (backend == Backend.Redis)
                     indexPrefix = "bench_${UUID.randomUUID().toString().take(8)}"
                 }
@@ -484,11 +484,10 @@ object SearchBenchmark {
 
     private fun setupDatabase(backend: Backend) {
         val dialect = if (backend == Backend.SQLite) DbDialect.SQLITE else DbDialect.POSTGRES
-        database = TestDatabase.connect(dialect, "bench")
+        database = TestDatabase.connect(dialect, "bench", *allTables)
         TransactionManager.defaultDatabase = database
 
         transaction(database) {
-            SchemaUtils.create(*allTables)
             UserTable.insert { row ->
                 row[UserTable.id] = userId
                 row[UserTable.username] = "benchuser"

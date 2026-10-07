@@ -17,7 +17,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -37,10 +36,7 @@ import kotlin.time.Duration.Companion.seconds
 class LyricsSyncWorkerTest : KoinTest {
 
     private fun setup(dialect: DbDialect) {
-        TestDatabase.connect(dialect, "lyrics_sync_test")
-        transaction {
-            SchemaUtils.create(SongTable, SongVariantTable, AlbumTable, ImageTable, SyncedLyricsTable)
-        }
+        TestDatabase.connect(dialect, "lyrics_sync_test", SongTable, SongVariantTable, AlbumTable, ImageTable, SyncedLyricsTable)
     }
 
     @AfterEach

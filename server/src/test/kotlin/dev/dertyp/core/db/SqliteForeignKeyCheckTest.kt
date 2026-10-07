@@ -15,7 +15,6 @@ import dev.dertyp.db.UserTable
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -47,16 +46,13 @@ class SqliteForeignKeyCheckTest {
         TestDatabase.cleanUp()
     }
 
-    private fun createSchema() = transaction(database) {
-        SchemaUtils.create(UserTable, ImageTable, AlbumTable, SongTable, UserPlaylistTable)
-    }
+    private val tables = arrayOf(UserTable, ImageTable, AlbumTable, SongTable, UserPlaylistTable)
 
     private fun warnings() = appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
 
     @Test
     fun `violations are counted per table and logged as a warning`() = runBlocking {
-        database = TestDatabase.connect(DbDialect.SQLITE, "fk_check_test", foreignKeys = false)
-        createSchema()
+        database = TestDatabase.connect(DbDialect.SQLITE, "fk_check_test", *tables, foreignKeys = false)
         transaction(database) {
             val albumId = AlbumTable.insertAndGetId { it[AlbumTable.name] = "Album" }
             SongTable.insert {
@@ -87,8 +83,7 @@ class SqliteForeignKeyCheckTest {
 
     @Test
     fun `a consistent database logs no warning`() = runBlocking {
-        database = TestDatabase.connect(DbDialect.SQLITE, "fk_check_test")
-        createSchema()
+        database = TestDatabase.connect(DbDialect.SQLITE, "fk_check_test", *tables)
         transaction(database) {
             AlbumTable.insert { it[AlbumTable.name] = "Album" }
         }
@@ -103,8 +98,7 @@ class SqliteForeignKeyCheckTest {
     @ParameterizedTest
     @EnumSource(value = DbDialect::class, names = ["POSTGRES"])
     fun `other dialects are not checked`(dialect: DbDialect) = runBlocking {
-        database = TestDatabase.connect(dialect, "fk_check_test")
-        createSchema()
+        database = TestDatabase.connect(dialect, "fk_check_test", *tables)
 
         assertEquals(emptyMap<String, Int>(), SqliteForeignKeyCheck().run())
         assertTrue(appender.list.isEmpty())

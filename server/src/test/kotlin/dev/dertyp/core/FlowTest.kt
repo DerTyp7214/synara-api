@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
@@ -45,10 +44,7 @@ class FlowTest {
     )
 
     fun setup(dialect: DbDialect) {
-        database = TestDatabase.connect(dialect, "flow_test")
-        transaction(database) {
-            SchemaUtils.create(*allTables)
-        }
+        database = TestDatabase.connect(dialect, "flow_test", *allTables)
 
         startKoin {
             modules(module {

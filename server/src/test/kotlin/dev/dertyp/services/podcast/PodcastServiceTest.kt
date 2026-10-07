@@ -33,7 +33,6 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -57,18 +56,16 @@ class PodcastServiceTest {
     private lateinit var service: PodcastService
 
     private fun setup(dialect: DbDialect, handler: MockRequestHandler? = null) {
-        database = TestDatabase.connect(dialect, "podcast_service_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                PodcastShowTable,
-                PodcastEpisodeTable,
-                PodcastTranscriptTable,
-                PodcastSubscriptionTable,
-                PodcastEpisodeProgressTable,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "podcast_service_test",
+            UserTable,
+            ImageTable,
+            PodcastShowTable,
+            PodcastEpisodeTable,
+            PodcastTranscriptTable,
+            PodcastSubscriptionTable,
+            PodcastEpisodeProgressTable,
+        )
         val http = spyk(PodcastHttp())
         if (handler != null) {
             every { http.feedClient } returns HttpClient(MockEngine(handler))
@@ -206,7 +203,7 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `subscribeToShow is idempotent and tracks subscribed and subscriberCount per user, unknown show throws`(dialect: DbDialect) =
+    fun `subscribeToShow is idempotent and tracks subscribed and subscriberCount per user, unknown show throws`(dialect: DbDialect): Unit =
         runBlocking {
             setup(dialect)
             val userA = transaction(database) { insertUser() }
@@ -604,7 +601,7 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `searchEpisodes matches episode title description and show title, blank throws`(dialect: DbDialect) =
+    fun `searchEpisodes matches episode title description and show title, blank throws`(dialect: DbDialect): Unit =
         runBlocking {
             setup(dialect)
             val userId = transaction(database) { insertUser() }

@@ -2946,7 +2946,18 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     .toList()
             }
 
-            songs.forEach { row ->
+            val (prefixed, others) = songs.partition { it[SongTable.filePath].startsWith(oldPath) }
+            val suffixStart = intLiteral(oldPath.codePointCount(0, oldPath.length) + 1)
+            prefixed.map { it[SongTable.id].value }.chunked(20000).forEach { ids ->
+                SongTable.update({ SongTable.id inList ids }) {
+                    it[filePath] = concat(
+                        stringParam(newPath),
+                        Substring(filePath, suffixStart, CustomFunction("length", IntegerColumnType(), filePath))
+                    )
+                }
+            }
+
+            others.forEach { row ->
                 val id = row[SongTable.id].value
                 val currentPath = row[SongTable.filePath]
                 val newFilePath = currentPath.replaceFirst(oldPath, newPath)

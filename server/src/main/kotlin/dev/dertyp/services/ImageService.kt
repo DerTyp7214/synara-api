@@ -26,14 +26,20 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import net.coobird.thumbnailator.Thumbnails
+import org.jetbrains.exposed.v1.core.CustomFunction
+import org.jetbrains.exposed.v1.core.IntegerColumnType
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.Substring
+import org.jetbrains.exposed.v1.core.concat
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.intLiteral
 import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.like
 import org.jetbrains.exposed.v1.core.or
+import org.jetbrains.exposed.v1.core.stringParam
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 import org.jaudiotagger.audio.AudioFileIO
@@ -449,7 +455,15 @@ class ImageService(
             .where { ImageTable.path like "$oldPath%" }
             .toList()
 
-        affectedImages.forEach { row ->
+        val (prefixed, others) = affectedImages.partition { it[ImageTable.path].startsWith(oldPath) }
+        val suffixStart = intLiteral(oldPath.codePointCount(0, oldPath.length) + 1)
+        prefixed.map { it[ImageTable.id].value }.chunked(20000).forEach { ids ->
+            ImageTable.update({ ImageTable.id inList ids }) {
+                it[path] = concat(stringParam(newPath), Substring(path, suffixStart, CustomFunction("length", IntegerColumnType(), path)))
+            }
+        }
+
+        others.forEach { row ->
             val id = row[ImageTable.id].value
             val currentPath = row[ImageTable.path]
             val newImagePath = currentPath.replaceFirst(oldPath, newPath)

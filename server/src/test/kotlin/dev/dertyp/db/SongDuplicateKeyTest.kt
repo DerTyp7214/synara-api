@@ -6,7 +6,6 @@ import dev.dertyp.core.date.getDateFromISO
 import dev.dertyp.core.date.getISOFromDate
 import dev.dertyp.core.date.isoDateKey
 import org.jetbrains.exposed.v1.core.Table
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -76,7 +75,7 @@ class SongDuplicateKeyTest {
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `the sql duplicate keys match the kotlin title and release date normalization`(dialect: DbDialect) {
-        val database = TestDatabase.connect(dialect, "duplicate_key")
+        val database = TestDatabase.connect(dialect, "duplicate_key", ProbeTable)
         val titles = titles()
         val dates = dates()
         val rows = (0 until maxOf(titles.size, dates.size)).map { index ->
@@ -86,7 +85,6 @@ class SongDuplicateKeyTest {
         val dateKey = isoDateKey(ProbeTable.date)
 
         val actual = transaction(database) {
-            SchemaUtils.create(ProbeTable)
             ProbeTable.batchInsert(rows) { (position, title, date) ->
                 this[ProbeTable.position] = position
                 this[ProbeTable.title] = title

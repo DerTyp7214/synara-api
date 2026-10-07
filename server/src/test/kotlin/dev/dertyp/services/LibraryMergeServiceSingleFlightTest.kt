@@ -52,36 +52,34 @@ class LibraryMergeServiceSingleFlightTest : KoinTest {
             })
         }
 
-        database = TestDatabase.connect(dialect, "merge_single_flight_test")
-        transaction(database) {
-            SchemaUtils.create(
-                *entityChangeTables,
-                ArtistTable,
-                AlbumTable,
-                SongTable,
-                SongVariantTable,
-                ImageTable,
-                PlaylistTable,
-                UserTable,
-                UserPlaylistTable,
-                UserPlaylistSongTable,
-                PlaylistSongTable,
-                SongArtistTable,
-                AlbumArtistTable,
-                AlbumMusicBrainzTable,
-                SongMusicBrainzTable,
-                TranscodedSongTable,
-                UserSongTable,
-                SongProviderTable,
-                AlbumProviderTable,
-                CollectionTable,
-                CollectionSongTable,
-                CollectionAlbumTable,
-                CollectionArtistTable,
-                CollectionPlaylistTable,
-                *allMusicBrainzTables
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "merge_single_flight_test",
+            *entityChangeTables,
+            ArtistTable,
+            AlbumTable,
+            SongTable,
+            SongVariantTable,
+            ImageTable,
+            PlaylistTable,
+            UserTable,
+            UserPlaylistTable,
+            UserPlaylistSongTable,
+            PlaylistSongTable,
+            SongArtistTable,
+            AlbumArtistTable,
+            AlbumMusicBrainzTable,
+            SongMusicBrainzTable,
+            TranscodedSongTable,
+            UserSongTable,
+            SongProviderTable,
+            AlbumProviderTable,
+            CollectionTable,
+            CollectionSongTable,
+            CollectionAlbumTable,
+            CollectionArtistTable,
+            CollectionPlaylistTable,
+            *allMusicBrainzTables
+        )
         service = LibraryMergeService()
     }
 

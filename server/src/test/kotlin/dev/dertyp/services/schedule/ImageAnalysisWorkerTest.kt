@@ -5,7 +5,6 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.config.ServerConfig
 import dev.dertyp.db.ImageMetadataTable
 import dev.dertyp.db.ImageTable
-import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.ImageService
 import io.ktor.server.config.ApplicationConfig
 import io.ktor.server.config.MapApplicationConfig
@@ -13,7 +12,6 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
@@ -26,10 +24,7 @@ import java.util.UUID
 class ImageAnalysisWorkerTest : KoinTest {
 
     private fun setup(dialect: DbDialect) = runBlocking {
-        TestDatabase.connect(dialect, "image_analysis_worker_test")
-        dbQuery {
-            SchemaUtils.create(ImageTable, ImageMetadataTable)
-        }
+        TestDatabase.connect(dialect, "image_analysis_worker_test", ImageTable, ImageMetadataTable)
     }
 
     @AfterEach

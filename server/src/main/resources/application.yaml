@@ -111,6 +111,9 @@ workers:
   threadMultiplier: ${WORKER_THREAD_MULTIPLIER:1.0}
 entityChanges:
   retentionDays: ${ENTITY_CHANGE_RETENTION_DAYS:30}
+versionGroups:
+  rebuildQuietSeconds: ${VERSION_GROUP_REBUILD_QUIET_SECONDS:1}
+  rebuildMaxWaitSeconds: ${VERSION_GROUP_REBUILD_MAX_WAIT_SECONDS:5}
 metrics:
   enabled: ${METRICS_ENABLED:true}
   flushIntervalSeconds: ${METRICS_FLUSH_INTERVAL_SECONDS:60}

@@ -23,7 +23,6 @@ import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.batchInsert
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -54,26 +53,24 @@ class CollectionServiceTest : KoinTest {
                 includes(entityEventsModule())
             })
         }
-        database = TestDatabase.connect(dialect, "collection_test")
-        transaction(database) {
-            SchemaUtils.create(
-                UserTable,
-                ImageTable,
-                AlbumTable,
-                ArtistTable,
-                SongTable, SongVariantTable,
-                SongArtistTable,
-                AlbumArtistTable,
-                UserPlaylistTable,
-                UserPlaylistSongTable,
-                CollectionTable,
-                CollectionSongTable,
-                CollectionAlbumTable,
-                CollectionArtistTable,
-                CollectionPlaylistTable,
-                *entityChangeTables,
-            )
-        }
+        database = TestDatabase.connect(
+            dialect, "collection_test",
+            UserTable,
+            ImageTable,
+            AlbumTable,
+            ArtistTable,
+            SongTable, SongVariantTable,
+            SongArtistTable,
+            AlbumArtistTable,
+            UserPlaylistTable,
+            UserPlaylistSongTable,
+            CollectionTable,
+            CollectionSongTable,
+            CollectionAlbumTable,
+            CollectionArtistTable,
+            CollectionPlaylistTable,
+            *entityChangeTables,
+        )
         service = CollectionService()
     }
 
@@ -553,8 +550,7 @@ class CollectionServiceTest : KoinTest {
                 single { UserPlaylistService() }
             })
         }
-        database = TestDatabase.connect(dialect, "collection_search_test")
-        transaction(database) { SchemaUtils.create(*searchTables) }
+        database = TestDatabase.connect(dialect, "collection_search_test", *searchTables)
         service = CollectionService()
     }
 

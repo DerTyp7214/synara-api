@@ -137,23 +137,27 @@ class RemoteMirrorService : Service() {
     }
 
     private val _activeProgress = MutableStateFlow<MirrorProgress?>(null)
+    @Volatile
     var isMirroring = false
+
+    @Volatile
     private var mirrorJob: Job? = null
 
     suspend fun getRemoteStats(config: RemoteServerConfig): ServerStats {
         return getManager(config).getServerStatsService().getStats()
     }
 
+    @Synchronized
     fun startMirror(config: RemoteServerConfig) {
         if (isMirroring) {
             logger.warn("Mirror already in progress, ignoring start request")
             return
         }
 
+        isMirroring = true
         logger.info("Starting mirror from remote server: ${config.host}:${config.port} (Quality: ${config.quality})")
-        mirrorJob = scope.launch {
+        val job = scope.launch {
             try {
-                isMirroring = true
                 performMirror(config)
                 logger.info("Mirror operation from ${config.host} completed successfully")
             } catch (_: CancellationException) {
@@ -175,7 +179,11 @@ class RemoteMirrorService : Service() {
                     isFinished = true,
                     error = e.message,
                 )
-            } finally {
+            }
+        }
+        mirrorJob = job
+        job.invokeOnCompletion {
+            synchronized(this) {
                 isMirroring = false
                 mirrorJob = null
             }
