@@ -8,6 +8,7 @@ import dev.dertyp.db.SongAudioTimelineTable
 import dev.dertyp.services.DatabaseManager
 import io.ktor.server.config.MapApplicationConfig
 import org.jetbrains.exposed.v1.core.AutoIncColumnType
+import org.jetbrains.exposed.v1.core.Index
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.exists
@@ -95,11 +96,27 @@ object SchemaDrift {
     fun inspect(database: MigrationDatabase, additionalTables: List<Table> = emptyList()): SchemaState =
         inspectEach(database, listOf(additionalTables)).single()
 
-    fun inspectEach(database: MigrationDatabase, additions: List<List<Table>>): List<SchemaState> =
+    fun inspectEach(
+        database: MigrationDatabase,
+        additions: List<List<Table>>,
+        indicesOnlyInDatabase: List<Index> = emptyList(),
+    ): List<SchemaState> =
         manager(database).use { manager ->
             manager.init()
-            manager.tempConnection { additions.map { state(database.dialect, tables(database.dialect) + it) } }
+            manager.tempConnection {
+                additions.map { state(database.dialect, tables(database.dialect) + it) } +
+                    indicesOnlyInDatabase.map { stateWith(it, database.dialect) }
+            }
         }
+
+    private fun JdbcTransaction.stateWith(index: Index, dialect: Dialect): SchemaState {
+        index.createStatement().forEach { exec(it) }
+        connection.metadata { cleanCache() }
+        val state = state(dialect, tables(dialect))
+        index.dropStatement().forEach { exec(it) }
+        connection.metadata { cleanCache() }
+        return state
+    }
 
     private fun JdbcTransaction.state(dialect: Dialect, tables: List<Table>): SchemaState {
         val required = MigrationUtils

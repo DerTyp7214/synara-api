@@ -5,20 +5,23 @@ import dev.dertyp.data.InsertableAlbum
 import dev.dertyp.plugins.IServerStorageService
 import dev.dertyp.plugins.PluginContext
 import dev.dertyp.services.metadata.IMetadataService
+import io.mockk.clearStaticMockk
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
-import io.mockk.unmockkAll
+import io.mockk.unmockkStatic
 import kotlinx.coroutines.runBlocking
 import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.Tag
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -29,6 +32,26 @@ import java.util.UUID
 import kotlin.time.Duration.Companion.minutes
 
 class GamdlIndexerTest {
+    private companion object {
+        val statics = arrayOf(
+            AudioFileIO::class,
+            Class.forName("dev.dertyp.core.UtilsKt").kotlin,
+            Class.forName("dev.dertyp.core.Sha256Kt").kotlin,
+        )
+
+        @BeforeAll
+        @JvmStatic
+        fun mockGlobals() {
+            mockkStatic(*statics)
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun unmockGlobals() {
+            unmockkStatic(*statics)
+        }
+    }
+
     private val context = mockk<PluginContext>(relaxed = true)
     private val storage = mockk<IServerStorageService>(relaxed = true)
     private lateinit var indexer: GamdlIndexer
@@ -38,9 +61,6 @@ class GamdlIndexerTest {
 
     @BeforeEach
     fun setup() {
-        mockkStatic(AudioFileIO::class)
-        mockkStatic("dev.dertyp.core.UtilsKt")
-        mockkStatic("dev.dertyp.core.Sha256Kt")
         every { context.storageService.forImporter(any()) } returns storage
         every { storage.tracksPath } returns tempDir.toString()
         indexer = GamdlIndexer(context)
@@ -48,7 +68,7 @@ class GamdlIndexerTest {
 
     @AfterEach
     fun tearDown() {
-        unmockkAll()
+        clearStaticMockk(*statics)
     }
 
     private fun flacAt(relative: String): Path {

@@ -20,17 +20,20 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationEnvironment
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
-import io.mockk.unmockkAll
+import io.mockk.unmockkObject
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
@@ -40,6 +43,19 @@ import org.koin.test.KoinTest
 import java.time.LocalDate
 
 class AppleMusicServiceTest : KoinTest {
+    companion object {
+        @BeforeAll
+        @JvmStatic
+        fun mockApiClient() {
+            mockkObject(ApiClient)
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun unmockApiClient() {
+            unmockkObject(ApiClient)
+        }
+    }
 
     private lateinit var environment: ApplicationEnvironment
     private lateinit var appleMusicService: AppleMusicService
@@ -139,7 +155,6 @@ class AppleMusicServiceTest : KoinTest {
             }
         }
 
-        mockkObject(ApiClient)
         every { ApiClient.instance } returns mockHttpClient
 
         appleMusicService = AppleMusicService(environment)
@@ -150,7 +165,7 @@ class AppleMusicServiceTest : KoinTest {
         runBlocking { queueService?.stopService() }
         queueService = null
         stopKoin()
-        unmockkAll()
+        clearMocks(ApiClient)
     }
 
     private fun enableCatalog(storefront: String? = null) {
@@ -676,7 +691,6 @@ class AppleMusicServiceTest : KoinTest {
             )
         }
 
-        mockkObject(ApiClient)
         every { ApiClient.instance } returns HttpClient(mockEngine) {
             install(ContentNegotiation) { json(ApplicationScope.json) }
         }

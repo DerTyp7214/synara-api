@@ -24,8 +24,10 @@ import io.mockk.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -39,6 +41,24 @@ import java.util.*
 import kotlin.time.Duration.Companion.minutes
 
 class GamdlServiceTest : KoinTest {
+    private companion object {
+        val commands = Class.forName("dev.dertyp.core.process.CommandKt").kotlin
+
+        @BeforeAll
+        @JvmStatic
+        fun mockGlobals() {
+            mockkStatic(commands)
+            mockkObject(MetadataService.Companion)
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun unmockGlobals() {
+            unmockkStatic(commands)
+            unmockkObject(MetadataService.Companion)
+        }
+    }
+
     private val indexer = mockk<IPluginIndexer>(relaxed = true)
     private val storageService = mockk<IServerStorageService>(relaxed = true)
     private val songService = mockk<SongService>(relaxed = true)
@@ -80,7 +100,6 @@ class GamdlServiceTest : KoinTest {
             })
         }
 
-        mockkStatic("dev.dertyp.core.process.CommandKt")
         every { findInPath("gamdl") } returns "/usr/bin/gamdl"
         every { findInPath("ffmpeg") } returns "/usr/bin/ffmpeg"
 
@@ -94,7 +113,8 @@ class GamdlServiceTest : KoinTest {
     @AfterEach
     fun tearDown() {
         stopKoin()
-        unmockkAll()
+        clearStaticMockk(commands)
+        clearMocks(MetadataService.Companion)
     }
 
     private fun track(id: String) =
@@ -269,7 +289,6 @@ class GamdlServiceTest : KoinTest {
 
     @Test
     fun `importIds for an album expands its tracks (metadata flow) into per-track urls`() = runBlocking {
-        mockkObject(MetadataService)
         val meta = mockk<MetadataService>(relaxed = true)
         every { MetadataService.getMetadataService(any(), any()) } returns meta
         every { meta.getAlbumTracks(any(), any()) } returns flowOf(track("1"), track("2"))

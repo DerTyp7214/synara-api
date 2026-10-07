@@ -46,6 +46,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.TextContent
 import io.ktor.http.headersOf
 import io.ktor.server.config.MapApplicationConfig
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -53,12 +54,14 @@ import io.mockk.unmockkObject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
@@ -169,11 +172,10 @@ class CredentialServerContributionsTest {
 
     @AfterEach
     fun tearDown() {
-        unmockkObject(Clock.System)
+        clearMocks(Clock.System)
     }
 
     init {
-        mockkObject(Clock.System)
         every { Clock.System.now() } answers { Instant.fromEpochMilliseconds(virtualMillis) }
         translations.forSource(CREDENTIAL_SERVER_UI_SOURCE)
             .registerBundlesFromResources(javaClass.classLoader, "i18n/credentialserver", listOf("en", "de"))
@@ -1651,5 +1653,17 @@ class CredentialServerContributionsTest {
         private const val ROTATED_SECRET = "rotated-client-secret"
         private const val CONSUMER_ID = "synara-consumer"
         private const val CONSUMER_SECRET = "consumer-secret"
+
+        @BeforeAll
+        @JvmStatic
+        fun mockClock() {
+            mockkObject(Clock.System)
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun unmockClock() {
+            unmockkObject(Clock.System)
+        }
     }
 }

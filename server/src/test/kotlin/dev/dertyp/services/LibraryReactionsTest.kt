@@ -58,7 +58,7 @@ import kotlin.time.measureTime
 
 class LibraryReactionsTest : KoinTest {
     private lateinit var database: Database
-    private val quietPeriod = 300.milliseconds
+    private val quietPeriod = 200.milliseconds
     private val maxWait = quietPeriod * 5
     private val events =
         RecordedEntityEvents(versionGroups = VersionGroupConfig(quietPeriod, maxWait)).subscribeLibraryReactions()
@@ -245,7 +245,7 @@ class LibraryReactionsTest : KoinTest {
 
         release.complete(Unit)
         repeat(2) { finished.next() }
-        rebuilds.assertNothingMore()
+        rebuilds.assertNothingMore(quietPeriod * 1.5)
     }
 
     @ParameterizedTest
@@ -325,7 +325,7 @@ class LibraryReactionsTest : KoinTest {
         )
         removals.assertNothingMore()
         rebuilds.next()
-        rebuilds.assertNothingMore()
+        rebuilds.assertNothingMore(quietPeriod * 1.5)
     }
 
     @ParameterizedTest

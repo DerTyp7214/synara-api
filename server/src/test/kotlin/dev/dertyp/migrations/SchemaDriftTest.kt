@@ -61,7 +61,13 @@ class SchemaDriftTest {
             CustomMigrationWithRenamedColumn,
             CustomMigrationWithRequiredColumn,
         )
-        val inspections = HashMap<DbDialect, IdentityHashMap<Table?, SchemaState>>()
+        val undeclaredIndex =
+            Index(listOf(CustomMigrationTable.executedAt), unique = false, customName = "drift_probe_idx")
+        val copiedIndex = HueBridgeTable.indices.single().let { declared ->
+            Index(declared.columns, unique = declared.unique, customName = "drift_probe_copy")
+        }
+        val indicesOnlyInDatabase = listOf(undeclaredIndex, copiedIndex)
+        val inspections = HashMap<DbDialect, IdentityHashMap<Any?, SchemaState>>()
     }
 
     private val files = mutableListOf<File>()
@@ -134,31 +140,20 @@ class SchemaDriftTest {
     @EnumSource(DbDialect::class)
     fun `an ordinary index no table declares is drift`(dialect: DbDialect) {
         val database = database(dialect)
-        val undeclared = Index(listOf(CustomMigrationTable.executedAt), unique = false, customName = "drift_probe_idx")
-        SchemaDrift.manager(database).use { manager ->
-            manager.init()
-            manager.tempConnection { undeclared.createStatement().forEach { exec(it) } }
-        }
 
-        val state = SchemaDrift.inspect(database)
+        val state = inspection(dialect, undeclaredIndex)
 
-        assertEquals(statements(database) { undeclared.dropStatement() }, state.pending)
+        assertEquals(statements(database) { undeclaredIndex.dropStatement() }, state.pending)
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
     fun `a second index over the columns of a declared one is drift`(dialect: DbDialect) {
         val database = database(dialect)
-        val declared = HueBridgeTable.indices.single()
-        val copy = Index(declared.columns, unique = declared.unique, customName = "drift_probe_copy")
-        SchemaDrift.manager(database).use { manager ->
-            manager.init()
-            manager.tempConnection { copy.createStatement().forEach { exec(it) } }
-        }
 
-        val state = SchemaDrift.inspect(database)
+        val state = inspection(dialect, copiedIndex)
 
-        assertEquals(statements(database) { copy.dropStatement() }, state.pending)
+        assertEquals(statements(database) { copiedIndex.dropStatement() }, state.pending)
     }
 
     @ParameterizedTest
@@ -192,11 +187,17 @@ class SchemaDriftTest {
         assertEquals(listOf(CustomMigrationWithRequiredColumn.required.name), warning.added)
     }
 
-    private fun inspection(dialect: DbDialect, additionalTable: Table? = null): SchemaState =
+    private fun inspection(dialect: DbDialect, addition: Any? = null): SchemaState =
         inspections.getOrPut(dialect) {
-            val states = SchemaDrift.inspectEach(database(dialect), additions.map { listOfNotNull(it) })
-            IdentityHashMap<Table?, SchemaState>().apply { additions.zip(states).forEach { (table, state) -> put(table, state) } }
-        }.getValue(additionalTable)
+            val states = SchemaDrift.inspectEach(
+                database(dialect),
+                additions.map { listOfNotNull(it) },
+                indicesOnlyInDatabase,
+            )
+            IdentityHashMap<Any?, SchemaState>().apply {
+                (additions + indicesOnlyInDatabase).zip(states).forEach { (addition, state) -> put(addition, state) }
+            }
+        }.getValue(addition)
 
     private fun statements(database: MigrationDatabase, block: JdbcTransaction.() -> List<String>): List<String> =
         SchemaDrift.manager(database).use { it.tempConnection(block) }

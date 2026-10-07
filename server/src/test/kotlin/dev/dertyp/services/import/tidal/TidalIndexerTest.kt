@@ -9,9 +9,11 @@ import org.jaudiotagger.audio.AudioFile
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.Tag
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -23,6 +25,26 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 class TidalIndexerTest {
+    private companion object {
+        val statics = arrayOf(
+            AudioFileIO::class,
+            Class.forName("dev.dertyp.core.UtilsKt").kotlin,
+            Class.forName("dev.dertyp.core.Sha256Kt").kotlin,
+        )
+
+        @BeforeAll
+        @JvmStatic
+        fun mockGlobals() {
+            mockkStatic(*statics)
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun unmockGlobals() {
+            unmockkStatic(*statics)
+        }
+    }
+
     private val context = mockk<PluginContext>(relaxed = true)
     private lateinit var indexer: TidalIndexer
 
@@ -31,16 +53,12 @@ class TidalIndexerTest {
 
     @BeforeEach
     fun setup() {
-        mockkStatic(AudioFileIO::class)
-        mockkStatic("dev.dertyp.core.UtilsKt")
-        mockkStatic("dev.dertyp.core.Sha256Kt")
-
         indexer = TidalIndexer(context)
     }
 
     @AfterEach
     fun tearDown() {
-        unmockkAll()
+        clearStaticMockk(*statics)
     }
 
     @Test

@@ -29,7 +29,9 @@ import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.Tag
 import org.jaudiotagger.tag.images.Artwork
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -118,15 +120,10 @@ class TidalMetadataEnrichmentTest : KoinTest {
             })
         }
 
-        mockkObject(MetadataService)
-        mockkObject(ApiClient)
-
         val mockResponse = mockk<HttpResponse>(relaxed = true)
         every { mockResponse.status } returns HttpStatusCode.OK
         coEvery { mockResponse.body<ByteArray>() } returns ByteArray(0)
         coEvery { ApiClient.queueInstance.enqueue(any(), any(), any()) } returns mockResponse
-
-        mockkStatic(AudioFileIO::class)
 
         every { storageService.forImporter(any()) } returns mockk(relaxed = true) {
             every { tracksPath } returns tempDir.toString()
@@ -140,7 +137,8 @@ class TidalMetadataEnrichmentTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
-        unmockkAll()
+        clearMocks(MetadataService.Companion, ApiClient)
+        clearStaticMockk(AudioFileIO::class)
         stopKoin()
     }
 
@@ -613,5 +611,19 @@ class TidalMetadataEnrichmentTest : KoinTest {
 
     private companion object {
         val JpegBytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0x00)
+
+        @BeforeAll
+        @JvmStatic
+        fun mockGlobals() {
+            mockkObject(MetadataService.Companion, ApiClient)
+            mockkStatic(AudioFileIO::class)
+        }
+
+        @AfterAll
+        @JvmStatic
+        fun unmockGlobals() {
+            unmockkObject(MetadataService.Companion, ApiClient)
+            unmockkStatic(AudioFileIO::class)
+        }
     }
 }
