@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synara</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fafbfc; --ink: #14171c; --ink2: #4a515c; --muted: #6b727d;
+  --line: #e7eaee; --wash: rgba(20,23,28,.05); --accent: #1d5bd0;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #14161a; --ink: #f3f5f7; --ink2: #b9c0ca; --muted: #8b929d;
+    --line: #262a31; --wash: rgba(255,255,255,.07); --accent: #73a5ff;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 680px; padding: 56px 16px 40px; }
+@media (min-width: 720px) { main { padding: 88px 16px 56px 64px; } }
+h1 { margin: 0; font-size: 34px; line-height: 1.1; font-weight: 680; letter-spacing: -0.02em; }
+.lede { margin: 10px 0 0; color: var(--ink2); font-size: 16px; }
+.lede code, .file, .build { font-family: var(--mono); }
+.lede code { font-size: 14px; }
+ul { list-style: none; margin: 36px -16px 0; padding: 0; border-top: 1px solid var(--line); }
+li {
+  position: relative; padding: 18px 16px 20px;
+  border-bottom: 1px solid var(--line); transition: background-color .12s ease;
+}
+li:hover { background: var(--wash); }
+h2 { margin: 0; font-size: 18px; line-height: 1.3; font-weight: 620; }
+h2 a { color: var(--accent); text-decoration: none; }
+h2 a::after { content: ""; position: absolute; inset: 0; }
+li:hover h2 a { text-decoration: underline; text-underline-offset: 3px; }
+h2 a:focus-visible { outline: none; }
+h2 a:focus-visible::after { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+li p { margin: 6px 0 0; color: var(--ink2); max-width: 60ch; }
+.file { display: block; margin-top: 8px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.build { margin: 28px 0 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { li { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Synara</h1>
+  <p class="lede">Generated views of the <code>synara-api</code> repository.</p>
+  <ul>
+    <li>
+      <h2><a href="RELATION_MAP.html">Relation map</a></h2>
+      <p>The system topology with every runtime flow. Further views cover credentials, the API surface, pipelines, workers, events, startup, the build, packages, classes and the database schema.</p>
+      <span class="file">RELATION_MAP.html</span>
+    </li>
+    <li>
+      <h2><a href="STATS.html">Commit statistics</a></h2>
+      <p>The commit history and the line counts of the repository over time.</p>
+      <span class="file">STATS.html</span>
+    </li>
+  </ul>
+  <p class="build" id="build" data-build="__BUILD__"></p>
+</main>
+<script>
+(function () {
+  var line = document.getElementById("build");
+  var value = line.getAttribute("data-build");
+  if (/^__[A-Z]+__$/.test(value)) { line.hidden = true; return; }
+  line.textContent = "Built from commit " + value;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+name: Generated Pages
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  publish-pages:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Graphviz
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends graphviz
+
+      - name: Generate relation map
+        run: python3 scripts/relation-map/generate.py
+
+      - name: Generate commit statistics
+        run: python3 scripts/commit-stats.py
+
+      - name: Assemble site
+        run: |
+          set -euo pipefail
+          SITE="$RUNNER_TEMP/site"
+          BUILD="$(git rev-parse --short HEAD) on $(TZ=UTC git log -1 --format=%cd --date=format-local:'%Y-%m-%d %H:%M UTC')"
+          mkdir -p "$SITE"
+          sed "s/__BUILD__/$BUILD/" docs/index.html > "$SITE/index.html"
+          cp docs/RELATION_MAP.html docs/STATS.html "$SITE/"
+          touch "$SITE/.nojekyll"
+          if grep -q '__BUILD__' "$SITE/index.html"; then
+            echo "Error: build token was not replaced in index.html."
+            exit 1
+          fi
+
+      - name: Publish to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/site"
+          git init --quiet --initial-branch=gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit --quiet -m "Pages built from $GITHUB_SHA"
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
