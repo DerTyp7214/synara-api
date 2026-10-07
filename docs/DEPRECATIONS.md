@@ -23,7 +23,7 @@ The UI schema version is `UiSchemaVersion.CURRENT` ([UiSchemaVersion.kt](../comm
 
 ## Plugin API version
 
-The plugin API version is `ISynaraPlugin.apiVersion` ([ISynaraPlugin.kt](../plugin-api/src/main/kotlin/dev/dertyp/plugins/ISynaraPlugin.kt), default 1). The server accepts plugins up to `PluginManager.CURRENT_API_VERSION` (currently 3) and the history is in [PLUGINS.md](PLUGINS.md). Nothing in `plugin-api` is annotated `@Deprecated` today.
+The plugin API version is `ISynaraPlugin.apiVersion` ([ISynaraPlugin.kt](../plugin-api/src/main/kotlin/dev/dertyp/plugins/ISynaraPlugin.kt), default 1). The server accepts plugins up to `PluginManager.CURRENT_API_VERSION` (currently 4) and the history is in [PLUGINS.md](PLUGINS.md). Nothing in `plugin-api` is annotated `@Deprecated` today.
 
 ### No target version yet
 

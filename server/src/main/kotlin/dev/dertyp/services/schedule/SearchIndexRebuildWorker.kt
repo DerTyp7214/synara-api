@@ -6,6 +6,7 @@ import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.db.SearchIndexQueueTable
 import dev.dertyp.db.SearchIndexEntityType
+import dev.dertyp.core.db.Dialect
 import dev.dertyp.core.db.dbQuery
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
@@ -13,6 +14,11 @@ import org.jetbrains.exposed.v1.jdbc.insertIgnore
 @WorkerTask(TaskKeys.SEARCH_INDEX_REBUILD_WORKER, "Search Index Rebuild Worker")
 class SearchIndexRebuildWorker : Worker("SearchIndexRebuildWorker") {
     override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
+        if (dbQuery { Dialect.current() } != Dialect.POSTGRES) {
+            onProgress(100.0, "This database has no search index.")
+            return mapOf("queuedSongs" to 0, "queuedAlbums" to 0, "queuedArtists" to 0)
+        }
+
         onProgress(0.0, "Fetching existing songs, albums, and artists...")
 
         val (songs, albums, artists) = dbQuery {

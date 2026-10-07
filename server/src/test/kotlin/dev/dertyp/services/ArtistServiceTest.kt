@@ -14,6 +14,7 @@ import dev.dertyp.services.release.ReleaseArtistService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -47,7 +48,7 @@ class ArtistServiceTest : KoinTest {
     fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
                 single { musicBrainzService }
                 single { metadataFetchingService }
                 single { MusicBrainzCacheService() }
@@ -516,6 +517,92 @@ class ArtistServiceTest : KoinTest {
         assertEquals(3, result.data.size)
         assertEquals(5, result.total)
         assertEquals(true, result.hasNextPage)
+    }
+
+    private fun numbered(number: Int): UUID = UUID(0L, number.toLong())
+
+    private val artistsInInsertionOrder = listOf(
+        "Zed" to numbered(8),
+        "Gamma" to numbered(5),
+        "beta" to numbered(6),
+        "ALPHA" to numbered(3),
+        "10cc" to numbered(7),
+        "Gamma" to numbered(4),
+        "Alpha" to numbered(2),
+        "alpha" to numbered(1),
+    )
+
+    private val artistsInListOrder = listOf(
+        "10cc" to numbered(7),
+        "alpha" to numbered(1),
+        "Alpha" to numbered(2),
+        "ALPHA" to numbered(3),
+        "beta" to numbered(6),
+        "Gamma" to numbered(4),
+        "Gamma" to numbered(5),
+        "Zed" to numbered(8),
+    )
+
+    private fun insertArtistsInInsertionOrder() = transaction(database) {
+        artistsInInsertionOrder.forEach { (artistName, artistId) ->
+            ArtistTable.insert {
+                it[id] = artistId
+                it[name] = artistName
+            }
+        }
+        listOf("First alias", "Second alias").forEach { aliasName ->
+            ArtistAliasTable.insert {
+                it[artistId] = numbered(3)
+                it[name] = aliasName
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allArtists orders by name without regard to case and then by id`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        insertArtistsInInsertionOrder()
+
+        val whole = service.allArtists(0, 50)
+
+        assertEquals(artistsInListOrder, whole.data.map { it.name to it.id })
+        assertEquals(8, whole.total)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allArtists pages follow the order of the whole list`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        insertArtistsInInsertionOrder()
+
+        val pages = (0..3).map { service.allArtists(it, 3) }
+
+        assertEquals(listOf(3, 3, 2, 0), pages.map { it.data.size })
+        assertEquals(listOf(8, 8, 8, 8), pages.map { it.total })
+        assertEquals(artistsInListOrder, pages.flatMap { page -> page.data.map { it.name to it.id } })
+        assertEquals(pages[1].data, service.allArtists(1, 3).data)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byGroup orders the members like the list of all artists across pages`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        insertArtistsInInsertionOrder()
+        val band = numbered(9)
+        transaction(database) {
+            ArtistTable.insert {
+                it[id] = band
+                it[name] = "Band"
+                it[isGroup] = true
+            }
+        }
+        service.setGroup(band, artistsInInsertionOrder.map { it.second })
+
+        val pages = (0..2).map { service.byGroup(it, 3, band) }
+
+        assertEquals(artistsInListOrder, pages.flatMap { page -> page.data.map { it.name to it.id } })
+        assertEquals(artistsInListOrder, service.byGroup(0, 50, band).data.map { it.name to it.id })
     }
 
     @ParameterizedTest

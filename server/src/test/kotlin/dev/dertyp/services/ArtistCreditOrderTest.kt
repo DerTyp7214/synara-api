@@ -2,14 +2,16 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.core.applyCachedAlbumCreditOrder
+import dev.dertyp.core.applyCachedSongCreditOrder
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.migrations.custom.BackfillArtistCreditOrder
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import dev.dertyp.testing.relaxedTaskLogService
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
@@ -65,7 +67,7 @@ class ArtistCreditOrderTest : KoinTest {
         val logService = relaxedTaskLogService()
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { cachedMusicBrainzService }
@@ -210,7 +212,10 @@ class ArtistCreditOrderTest : KoinTest {
             AlbumArtistTable.insert { it[this.albumId] = albumId; it[artistId] = highId }
         }
 
-        BackfillArtistCreditOrder().migrate()
+        transaction(database) {
+            applyCachedSongCreditOrder(listOf(songId))
+            applyCachedAlbumCreditOrder(listOf(albumId))
+        }
 
         val song = SongService().byId(songId)!!
         assertEquals(listOf(highId, lowId), song.artists.map { it.id })
@@ -254,7 +259,7 @@ class ArtistCreditOrderTest : KoinTest {
             SongArtistTable.insert { it[this.songId] = songId; it[artistId] = highId }
         }
 
-        BackfillArtistCreditOrder().migrate()
+        transaction(database) { applyCachedSongCreditOrder(listOf(songId)) }
 
         val song = SongService().byId(songId)!!
         assertEquals(listOf(highId, unmatchedId, secondUnmatchedId), song.artists.map { it.id })

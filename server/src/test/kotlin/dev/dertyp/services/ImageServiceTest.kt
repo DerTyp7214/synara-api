@@ -6,6 +6,7 @@ import dev.dertyp.core.isImage
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import dev.dertyp.utils.ColorUtils
 import io.mockk.every
 import io.mockk.justRun
@@ -53,7 +54,7 @@ class ImageServiceTest {
 
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
                 single { storageService }
                 single { redisConfig }
             })
@@ -603,131 +604,5 @@ class ImageServiceTest {
         val thumbnail = service.getImageData(id, 2)
         assertNotNull(thumbnail)
         assertTrue(thumbnail!!.isImage())
-    }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `purgeNonImageFiles removes non-image files with matching origins and unlinks references`(dialect: DbDialect) =
-        runBlocking {
-            setup(dialect)
-
-            val bogusId = service.createImage(
-                "<!doctype html><html>not found</html>".toByteArray(),
-                "https://coverartarchive.org/release-group/x/front"
-            )
-            val goodId = service.createImage(redPngBytes(), "https://coverartarchive.org/release-group/y/front")
-            val profileId = service.createImage("<html>profile error</html>".toByteArray(), "profile")
-
-            val bogusFile = File(service.byId(bogusId)!!.path)
-            val goodFile = File(service.byId(goodId)!!.path)
-            val profileFile = File(service.byId(profileId)!!.path)
-
-            val bogusGroupId = UUID.randomUUID()
-            val goodGroupId = UUID.randomUUID()
-
-            transaction(database) {
-                val albumId = AlbumTable.insertAndGetId {
-                    it[name] = "Album"
-                    it[cover] = EntityID(bogusId, ImageTable)
-                }
-                val artistId = ArtistTable.insertAndGetId {
-                    it[name] = "Artist"
-                    it[image] = EntityID(bogusId, ImageTable)
-                }
-                SongTable.insert {
-                    it[title] = "Song"
-                    it[SongTable.albumId] = albumId
-                    it[cover] = EntityID(bogusId, ImageTable)
-                }
-
-                MBReleaseGroupTable.insert { it[id] = bogusGroupId; it[title] = "Bogus" }
-                RecentReleaseTable.insert {
-                    it[releaseId] = bogusGroupId
-                    it[RecentReleaseTable.artistId] = artistId
-                    it[title] = "Bogus"
-                    it[imageId] = EntityID(bogusId, ImageTable)
-                    it[lastImageFetch] = 1000L
-                }
-                MBReleaseGroupCoverTable.insert {
-                    it[releaseGroupId] = bogusGroupId
-                    it[imageId] = EntityID(bogusId, ImageTable)
-                    it[lastFetch] = 1000L
-                }
-
-                MBReleaseGroupTable.insert { it[id] = goodGroupId; it[title] = "Good" }
-                RecentReleaseTable.insert {
-                    it[releaseId] = goodGroupId
-                    it[RecentReleaseTable.artistId] = artistId
-                    it[title] = "Good"
-                    it[imageId] = EntityID(goodId, ImageTable)
-                }
-            }
-
-            val result = service.purgeNonImageFiles(listOf("https://coverartarchive.org/"))
-
-            assertNull(service.byId(bogusId))
-            assertFalse(bogusFile.exists())
-            assertNotNull(service.byId(goodId))
-            assertTrue(goodFile.exists())
-            assertNotNull(service.byId(profileId))
-            assertTrue(profileFile.exists())
-
-            transaction(database) {
-                val bogusRelease = RecentReleaseTable.selectAll()
-                    .where { RecentReleaseTable.releaseId eq bogusGroupId }
-                    .single()
-                assertNull(bogusRelease[RecentReleaseTable.imageId])
-                assertNull(bogusRelease[RecentReleaseTable.lastImageFetch])
-
-                val cover = MBReleaseGroupCoverTable.selectAll()
-                    .where { MBReleaseGroupCoverTable.releaseGroupId eq bogusGroupId }
-                    .single()
-                assertNull(cover[MBReleaseGroupCoverTable.imageId])
-                assertEquals(0L, cover[MBReleaseGroupCoverTable.lastFetch])
-
-                assertNull(AlbumTable.selectAll().single()[AlbumTable.cover])
-                assertNull(ArtistTable.selectAll().single()[ArtistTable.image])
-                assertNull(SongTable.selectAll().single()[SongTable.cover])
-
-                val goodRelease = RecentReleaseTable.selectAll()
-                    .where { RecentReleaseTable.releaseId eq goodGroupId }
-                    .single()
-                assertEquals(goodId, goodRelease[RecentReleaseTable.imageId]?.value)
-            }
-
-            assertEquals(2, result.scanned)
-            assertEquals(1, result.bogus)
-            assertEquals(1, result.deleted)
-            assertTrue(result.unlinked >= 5, "Expected at least 5 unlinked references, got ${result.unlinked}")
-        }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `purgeNonImageFiles is a no-op on rerun and skips missing files`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-
-        val bogusId = service.createImage(
-            "<!doctype html><html>not found</html>".toByteArray(),
-            "https://coverartarchive.org/release-group/x/front"
-        )
-        val missingId = service.createImage(
-            "<html>gone</html>".toByteArray(),
-            "https://coverartarchive.org/release-group/y/front"
-        )
-        assertTrue(File(service.byId(missingId)!!.path).delete())
-
-        val first = service.purgeNonImageFiles(listOf("https://coverartarchive.org/"))
-        assertEquals(2, first.scanned)
-        assertEquals(1, first.bogus)
-        assertEquals(1, first.deleted)
-        assertNull(service.byId(bogusId))
-        assertNotNull(service.byId(missingId))
-
-        val second = service.purgeNonImageFiles(listOf("https://coverartarchive.org/"))
-        assertEquals(1, second.scanned)
-        assertEquals(0, second.bogus)
-        assertEquals(0, second.unlinked)
-        assertEquals(0, second.deleted)
-        assertNotNull(service.byId(missingId))
     }
 }

@@ -29,7 +29,7 @@ import java.util.UUID
 class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
     private val imageService by inject<ImageService>()
     private val redisSearchService by inject<RedisSearchService>()
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     companion object {
         fun mapPlaylist(resultRow: ResultRow): Playlist {
@@ -118,7 +118,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
 
     override suspend fun delete(id: UUID): Boolean = dbQuery {
         if (PlaylistTable.select(PlaylistTable.id).where { PlaylistTable.id eq id }.empty()) return@dbQuery false
-        entityChangeRecorder.deleting(EntityType.PLAYLIST, listOf(id))
+        entityEvents.deleting(EntityType.PLAYLIST, listOf(id))
         PlaylistTable.deleteWhere { PlaylistTable.id eq id } == 1
     }
 
@@ -273,7 +273,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
             }.distinctBy { listOf(it.first, it.second) }
 
             if (duplicates.isNotEmpty()) {
-                entityChangeRecorder.deleting(EntityType.PLAYLIST, duplicates)
+                entityEvents.deleting(EntityType.PLAYLIST, duplicates)
                 PlaylistTable.deleteWhere { PlaylistTable.id inList duplicates }
             }
 
@@ -293,7 +293,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
                 this[PlaylistSongTable.songId] = songId
                 this[PlaylistSongTable.position] = position
             }
-            entityChangeRecorder.recordChanges(before)
+            entityEvents.recordChanges(before)
 
             playlistIds
         }
@@ -315,7 +315,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
             PlaylistTable.insertAndGetId {
                 it[name] = playlist.name
                 it[imageId] = image
-            }.value.also { entityChangeRecorder.created(EntityType.PLAYLIST, listOf(it)) }
+            }.value.also { entityEvents.created(EntityType.PLAYLIST, listOf(it)) }
         }
     }
 
@@ -331,7 +331,7 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
             this[PlaylistSongTable.songId] = songId
             this[PlaylistSongTable.position] = currentPosition++
         }
-        if (songIds.isNotEmpty()) entityChangeRecorder.membersChanged(EntityType.PLAYLIST, listOf(id))
+        if (songIds.isNotEmpty()) entityEvents.membersChanged(EntityType.PLAYLIST, listOf(id))
     }
 
     suspend fun upsertPlaylist(playlist: Playlist) = dbQuery {
@@ -349,6 +349,6 @@ class PlaylistService : PlaylistLibrary, IPlaylistService, Service() {
             this[PlaylistSongTable.songId] = songId
             this[PlaylistSongTable.position] = position++
         }
-        entityChangeRecorder.recordChanges(before)
+        entityEvents.recordChanges(before)
     }
 }

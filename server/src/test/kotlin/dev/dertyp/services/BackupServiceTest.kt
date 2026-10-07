@@ -5,6 +5,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.config.ServerConfig
 import dev.dertyp.db.*
+import dev.dertyp.db.BackupSchemaException.Reason
 import dev.dertyp.plugins.IImporter
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.import.ImportBackend
@@ -26,10 +27,13 @@ import org.junit.jupiter.params.provider.EnumSource
 import java.io.*
 import java.nio.file.Files
 import java.util.UUID
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 class BackupServiceTest {
     private val dbManagementService = mockk<DbManagementService>()
+    private val databaseManager = mockk<DatabaseManager> { every { schemaVersion() } returns "1.109" }
     private val storageService = mockk<StorageService>(relaxed = true)
     private val pluginManager = mockk<PluginManager>(relaxed = true)
     private val environment = mockk<ApplicationEnvironment>()
@@ -91,6 +95,7 @@ class BackupServiceTest {
     @AfterEach
     fun tearDown() {
         TestDatabase.cleanUp()
+        if (::tempDir.isInitialized) tempDir.deleteRecursively()
     }
 
     @OptIn(ExperimentalSerializationApi::class)
@@ -99,7 +104,7 @@ class BackupServiceTest {
     fun `createBackup should create a zip file with expected entries and blobs`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val service =
-            BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
+            BackupService(dbManagementService, databaseManager, storageService, pluginManager, ServerConfig(environment.config))
         val dummyDbData = byteArrayOf(1, 2, 3)
         coEvery { dbManagementService.exportData(any<OutputStream>()) } answers {
             firstArg<OutputStream>().write(
@@ -221,7 +226,7 @@ class BackupServiceTest {
     fun `loadBackup should restore database and images`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val service =
-            BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
+            BackupService(dbManagementService, databaseManager, storageService, pluginManager, ServerConfig(environment.config))
         val dummyDbData = byteArrayOf(1, 2, 3)
         var capturedDbData: ByteArray? = null
         coEvery { dbManagementService.exportData(any<OutputStream>()) } answers {
@@ -259,7 +264,7 @@ class BackupServiceTest {
     fun `loadBackup should restore database and images from File`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val service =
-            BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
+            BackupService(dbManagementService, databaseManager, storageService, pluginManager, ServerConfig(environment.config))
         val dummyDbData = byteArrayOf(1, 2, 3)
         var capturedDbData: ByteArray? = null
         coEvery { dbManagementService.exportData(any<OutputStream>()) } answers {
@@ -298,7 +303,7 @@ class BackupServiceTest {
     fun `createBackup should remove the partial zip when the export fails`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val service =
-            BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
+            BackupService(dbManagementService, databaseManager, storageService, pluginManager, ServerConfig(environment.config))
         coEvery { dbManagementService.exportData(any<OutputStream>()) } throws IllegalStateException("export failed")
 
         var thrown: Throwable? = null
@@ -320,7 +325,7 @@ class BackupServiceTest {
     fun `rotateBackups should delete old backups and unreferenced blobs`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val service =
-            BackupService(dbManagementService, storageService, pluginManager, ServerConfig(environment.config))
+            BackupService(dbManagementService, databaseManager, storageService, pluginManager, ServerConfig(environment.config))
         coEvery { dbManagementService.exportData(any<OutputStream>()) } answers {
             firstArg<OutputStream>().write(
                 byteArrayOf(0)
@@ -358,4 +363,92 @@ class BackupServiceTest {
             "Oldest blob $firstBlobHash should have been cleaned up as it is no longer referenced by any existing backup"
         )
     }
+
+    private fun backupService() =
+        BackupService(dbManagementService, databaseManager, storageService, pluginManager, ServerConfig(environment.config))
+
+    private fun zipBackup(version: String?): File {
+        val file = backupDir.resolve("handmade-${UUID.randomUUID()}.zip")
+        ZipOutputStream(file.outputStream()).use { zip ->
+            if (version != null) {
+                zip.putNextEntry(ZipEntry("schema.version"))
+                zip.write(version.toByteArray())
+                zip.closeEntry()
+            }
+            zip.putNextEntry(ZipEntry("database.cbor.zst"))
+            zip.write(byteArrayOf(1, 2, 3))
+            zip.closeEntry()
+        }
+        return file
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `createBackup should write the schema version as the first entry`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        coEvery { dbManagementService.exportData(any<OutputStream>()) } answers {
+            firstArg<OutputStream>().write(byteArrayOf(1))
+        }
+
+        val result = backupService().createBackup()
+
+        ZipFile(backupDir.resolve(result.fileName)).use { zip ->
+            val names = zip.entries().toList().map { it.name }
+            assertEquals("schema.version", names.first())
+            assertEquals("1.109", zip.getInputStream(zip.getEntry("schema.version")).use { it.readBytes().decodeToString() })
+            assertTrue("database.cbor.zst" in names)
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `loadBackup accepts a backup of the current and of a lower schema version and one without a version`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        coEvery { dbManagementService.importData(any<InputStream>()) } returns Unit
+        val service = backupService()
+
+        service.loadBackup(zipBackup("1.109"))
+        every { databaseManager.schemaVersion() } returns "1.111"
+        service.loadBackup(zipBackup("1.110"))
+        service.loadBackup(zipBackup(null))
+
+        coVerify(exactly = 3) { dbManagementService.importData(any<InputStream>()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `loadBackup refuses a backup older than the migration base before it imports anything`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val service = backupService()
+            val file = zipBackup("1.108")
+
+            val refusal = assertThrows(BackupSchemaException::class.java) {
+                runBlocking { service.loadBackup(file) }
+            }
+
+            assertEquals(Reason.BELOW_BASE, refusal.reason)
+            assertEquals("1.108", refusal.backupVersion)
+            coVerify(exactly = 0) { dbManagementService.importData(any<InputStream>()) }
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `loadBackup refuses a backup from a newer server before it imports anything`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val service = backupService()
+            val file = zipBackup("1.110")
+
+            val refusal = assertThrows(BackupSchemaException::class.java) {
+                runBlocking { service.loadBackup(file.name) }
+            }
+
+            assertEquals(Reason.NEWER_THAN_SERVER, refusal.reason)
+            assertEquals("1.110", refusal.backupVersion)
+            assertEquals("1.109", refusal.serverVersion)
+            coVerify(exactly = 0) { dbManagementService.importData(any<InputStream>()) }
+        }
 }

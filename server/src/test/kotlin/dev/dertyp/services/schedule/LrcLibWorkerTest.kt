@@ -9,11 +9,11 @@ import dev.dertyp.db.ImageTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.SyncedLyricsTable
-import dev.dertyp.services.EntityChangeRecorder
 import dev.dertyp.services.LrcLibResponse
 import dev.dertyp.services.LrcLibService
 import dev.dertyp.services.SongService
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -101,7 +101,7 @@ class LrcLibWorkerTest : KoinTest {
 
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
                 single { lrcLibService }
                 single { songService }
             })
@@ -144,7 +144,7 @@ class LrcLibWorkerTest : KoinTest {
 
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
                 single { lrcLibService }
                 single { songService }
             })

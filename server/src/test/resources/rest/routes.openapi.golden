@@ -30,14 +30,14 @@ POST /apiKey/revokeApiKey/{id} IApiKeyService.revokeApiKey | Revoke an API key b
 DELETE /artist/alias/{artistId} IArtistService.removeAlias | Remove an alias from an artist. | artist | UserAuth | artistId:path,name:query | body:no
 POST /artist/alias/{artistId} IArtistService.addAlias | Add an alias to an artist. | artist | UserAuth | artistId:path,name:query | body:no
 GET /artist/aliases/{id} IArtistService.aliases | List aliases for an artist. | artist | UserAuth | id:path | body:no
-GET /artist/allArtists IArtistService.allArtists | Get all artists in the library. | artist | UserAuth | page:query,pageSize:query | body:no
+GET /artist/allArtists IArtistService.allArtists | Get all artists in the library, ordered by name without regard to case, artists with the same name by ID. | artist | UserAuth | page:query,pageSize:query | body:no
 POST /artist/artist IArtistService.createArtist | Manually create an artist record. | artist | UserAuth | name:query,isGroup:query,about:query,musicBrainzId:query | body:no
 GET /artist/artistIdsWithoutMusicBrainzId IArtistService.artistIdsWithoutMusicBrainzId | Stream IDs of all artists that are missing a MusicBrainz ID. | artist | UserAuth | - | body:no
 PUT /artist/artistImageByUrl/{id} IArtistService.setArtistImageByUrl | Set an artist's image from a direct URL. | artist | UserAuth | id:path,url:query | body:no
 GET /artist/artistOnMusicBrainz IArtistService.searchArtistOnMusicBrainz | Search for an artist directly on MusicBrainz. | artist | UserAuth | query:query,page:query,pageSize:query | body:no
 GET /artist/artistsWithoutMusicBrainzId IArtistService.artistsWithoutMusicBrainzId | Stream all artists that are missing a MusicBrainz ID. | artist | UserAuth | - | body:no
 GET /artist/byColor IArtistService.byColor | Search for artists by color. | artist | UserAuth | page:query,pageSize:query,color:query,range:query | body:no
-GET /artist/byGroup/{groupId} IArtistService.byGroup | List artists in a group. | artist | UserAuth | page:query,pageSize:query,groupId:path | body:no
+GET /artist/byGroup/{groupId} IArtistService.byGroup | List artists in a group, ordered by name without regard to case, artists with the same name by ID. | artist | UserAuth | page:query,pageSize:query,groupId:path | body:no
 GET /artist/byId/{id} IArtistService.byId | Get artist by ID. | artist | UserAuth | id:path | body:no
 GET /artist/byIds IArtistService.byIds | Get multiple artists by their IDs. | artist | UserAuth | ids:query | body:no
 GET /artist/byMusicBrainzId/{mbId} IArtistService.byMusicBrainzId | Get artist by MusicBrainz ID. | artist | UserAuth | mbId:path | body:no

@@ -8,6 +8,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ImageTable
+import dev.dertyp.db.MigrationBase
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.UserPlaylistTable
 import dev.dertyp.db.UserTable
@@ -96,7 +97,7 @@ class SqliteForeignKeyCheckTest {
 
         assertEquals(emptyMap<String, Int>(), violations)
         assertEquals(emptyList<String>(), warnings())
-        assertTrue(appender.list.any { it.level == Level.INFO && "V1_100" in it.formattedMessage })
+        assertTrue(appender.list.any { it.level == Level.INFO && MigrationBase.VERSION in it.formattedMessage })
     }
 
     @ParameterizedTest

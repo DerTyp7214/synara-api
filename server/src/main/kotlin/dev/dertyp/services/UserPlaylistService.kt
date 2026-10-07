@@ -34,7 +34,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     private val cachedMusicBrainzService by inject<CachedMusicBrainzService>()
     private val hooks by inject<HookBus>()
     private val redisSearchService by inject<RedisSearchService>()
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     companion object {
         fun mapPlaylist(resultRow: ResultRow): UserPlaylist {
@@ -161,7 +161,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         if (UserPlaylistTable.select(UserPlaylistTable.id).where { UserPlaylistTable.id eq id }.empty()) {
             return@dbQuery false
         }
-        entityChangeRecorder.deleting(EntityType.USER_PLAYLIST, listOf(id))
+        entityEvents.deleting(EntityType.USER_PLAYLIST, listOf(id))
         UserPlaylistTable.deleteWhere { UserPlaylistTable.id eq id } == 1
     }
 
@@ -182,7 +182,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 this[UserPlaylistTable.imageSource] = coverImageId?.let { ImageSource.USER }
                 this[UserPlaylistTable.origin] = playlist.origin
             }.first()[UserPlaylistTable.id].value.also {
-                entityChangeRecorder.created(EntityType.USER_PLAYLIST, listOf(it))
+                entityEvents.created(EntityType.USER_PLAYLIST, listOf(it))
             }
         }
         if (coverImageId == null) hooks.emit(HookEvent.PlaylistChanged(id))
@@ -202,7 +202,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 this[UserPlaylistSongTable.songId] = songId
                 this[UserPlaylistSongTable.addedAt] = addedAt
             }
-            if (added.isNotEmpty()) entityChangeRecorder.membersChanged(EntityType.USER_PLAYLIST, listOf(id))
+            if (added.isNotEmpty()) entityEvents.membersChanged(EntityType.USER_PLAYLIST, listOf(id))
         }
         hooks.emit(HookEvent.PlaylistChanged(id))
     }
@@ -232,7 +232,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             UserPlaylistSongTable.deleteWhere {
                 (UserPlaylistSongTable.playlistId eq id) and (UserPlaylistSongTable.songId inList songIds)
             }.also {
-                if (it > 0) entityChangeRecorder.membersChanged(EntityType.USER_PLAYLIST, listOf(id))
+                if (it > 0) entityEvents.membersChanged(EntityType.USER_PLAYLIST, listOf(id))
             }
         }
         hooks.emit(HookEvent.PlaylistChanged(id))
@@ -250,7 +250,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                     it[coverSeed] = null
                 }
             } == 1
-            entityChangeRecorder.recordChanges(before)
+            entityEvents.recordChanges(before)
             updated
         }
         if (updated && imageId == null) hooks.emit(HookEvent.PlaylistChanged(id))
@@ -535,6 +535,6 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 this[UserPlaylistSongTable.addedAt] = now + index
             }
         }
-        entityChangeRecorder.recordChanges(before)
+        entityEvents.recordChanges(before)
     }
 }

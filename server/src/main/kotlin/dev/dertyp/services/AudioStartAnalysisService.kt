@@ -17,7 +17,7 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 class AudioStartAnalysisService : Service() {
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     companion object {
         const val AUDIBLE_THRESHOLD_DBFS = -50.0
@@ -53,7 +53,7 @@ class AudioStartAnalysisService : Service() {
             SongTable.update({ SongTable.id eq songId }) {
                 it[SongTable.audioStartMs] = audioStartMs
             }
-            entityChangeRecorder.recordChanges(before)
+            entityEvents.recordChanges(before)
         }
 
         return audioStartMs

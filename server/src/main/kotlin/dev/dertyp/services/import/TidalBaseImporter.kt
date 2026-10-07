@@ -121,7 +121,7 @@ abstract class TidalBaseImporter(
     private val userPlaylistService by inject<UserPlaylistService>()
     private val imageService by inject<ImageService>()
     private val animatedImageService by inject<AnimatedImageService>()
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
     private val importService by inject<ImportService>()
     private val lrcLibService by inject<ILrcLibService>()
     private val musicBrainzService by inject<IMusicBrainzService>()
@@ -490,7 +490,7 @@ abstract class TidalBaseImporter(
                             it[SongTable.animatedCover] = EntityID(animId, AnimatedImageTable)
                         }
                     }
-                    entityChangeRecorder.recordChanges(songsBefore)
+                    entityEvents.recordChanges(songsBefore)
 
                     val animatedByAlbum = trackMetadataMap.values
                         .filter { it.animatedCoverUrl != null && it.tidalAlbumId != null }
@@ -513,7 +513,7 @@ abstract class TidalBaseImporter(
                                 it[AlbumTable.animatedCover] = EntityID(animId, AnimatedImageTable)
                             }
                         }
-                        entityChangeRecorder.recordChanges(albumsBefore)
+                        entityEvents.recordChanges(albumsBefore)
                     }
                 }
             } catch (e: CancellationException) {
@@ -604,7 +604,7 @@ abstract class TidalBaseImporter(
                     AlbumTable.update({ AlbumTable.id eq albumId }) {
                         it[AlbumTable.songCount] = tidalAlbum.trackCount
                     }
-                    entityChangeRecorder.recordChanges(before)
+                    entityEvents.recordChanges(before)
                     tidalAlbum.releaseDate?.let { albumService.fillUnknownReleaseDatesTx(mapOf(albumId to it)) }
                 }
                 true

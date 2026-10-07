@@ -1,5 +1,6 @@
 package dev.dertyp.core.db
 
+import dev.dertyp.db.MigrationBase
 import io.ktor.util.logging.KtorSimpleLogger
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 
@@ -9,7 +10,10 @@ class SqliteForeignKeyCheck {
     suspend fun run(): Map<String, Int> = dbQuery {
         if (Dialect.current() != Dialect.SQLITE) return@dbQuery emptyMap()
 
-        logger.info("SQLite databases created before V1_100 and V1_102 keep their previous foreign key rules on disk")
+        logger.info(
+            "SQLite databases that were not created from the migration base ${MigrationBase.VERSION} " +
+                "keep their previous foreign key rules on disk"
+        )
 
         val violations = sortedMapOf<String, Int>()
         TransactionManager.current().exec(FOREIGN_KEY_CHECK) { rs ->

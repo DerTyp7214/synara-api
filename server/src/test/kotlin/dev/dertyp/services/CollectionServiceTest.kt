@@ -13,6 +13,7 @@ import dev.dertyp.testing.insertAlbum
 import dev.dertyp.testing.insertArtist
 import dev.dertyp.testing.linkSongArtist
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.every
 import io.mockk.mockk
@@ -50,8 +51,7 @@ class CollectionServiceTest : KoinTest {
     private fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
-                single<dev.dertyp.plugins.HookBus> { HookService() }
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
             })
         }
         database = TestDatabase.connect(dialect, "collection_test")
@@ -535,8 +535,7 @@ class CollectionServiceTest : KoinTest {
         every { storageService.albumsPath } returns null
         startKoin {
             modules(module {
-                single<dev.dertyp.plugins.HookBus> { HookService() }
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { mockk<CachedMusicBrainzService>(relaxed = true) }

@@ -183,39 +183,6 @@ class LibraryMergeEntityChangeTest : EntityChangeLibraryTest() {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `splitting wrongly merged songs into a new album records the album and the moved song`(dialect: DbDialect) =
-        runBlocking {
-            setup(dialect)
-            val albumCover = image("album-cover")
-            val otherCover = image("other-cover")
-            val album = album("Album", tracks = 2)
-            val stays = song(album, "Stays")
-            val moves = song(album, "Moves", track = 2)
-            db {
-                AlbumTable.update({ AlbumTable.id eq album }) { it[cover] = EntityID(albumCover, ImageTable) }
-                SongTable.update({ SongTable.id eq stays }) { it[cover] = EntityID(albumCover, ImageTable) }
-                SongTable.update({ SongTable.id eq moves }) { it[cover] = EntityID(otherCover, ImageTable) }
-            }
-
-            assertEquals(1, libraryMergeService.fixIncorrectMerges())
-
-            val split = db { SongTable.selectAll().where { SongTable.id eq moves }.single()[SongTable.albumId].value }
-            assertTrue(split != album)
-            assertEquals(
-                setOf(
-                    created(EntityType.ALBUM, split),
-                    members(EntityType.ALBUM, split),
-                    members(EntityType.ALBUM, album),
-                    updated(EntityType.ALBUM, album),
-                    updated(EntityType.SONG, moves),
-                ),
-                recordedChanges(database)
-            )
-            assertEquals(setOf(EntityType.ALBUM to split), recordedScopes(database, EntityType.SONG, moves))
-        }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
     fun `merging duplicate images records the entities whose cover is repointed`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val keptImage = image("same-hash")

@@ -8,7 +8,9 @@ import dev.dertyp.db.*
 import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.metadata.*
 import dev.dertyp.testing.FakeCredentialProvider
+import dev.dertyp.testing.RecordedEntityEvents
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -44,6 +46,7 @@ class SongServiceDeletionTest : KoinTest {
     private val storageService = mockk<StorageService>(relaxed = true)
     private val fingerprintService = mockk<AcoustIdFingerprintService>()
     private val redisSearchService = mockk<RedisSearchService>(relaxed = true)
+    private val events = RecordedEntityEvents().subscribeLibraryReactions()
 
     @TempDir
     lateinit var tempDir: File
@@ -51,7 +54,7 @@ class SongServiceDeletionTest : KoinTest {
     fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule(events))
                 single { environment }
                 single { musicBrainzService }
                 single { MusicBrainzCacheService() }
@@ -124,6 +127,7 @@ class SongServiceDeletionTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        runBlocking { events.stop() }
         runBlocking { songService.stopService() }
         stopKoin()
         TestDatabase.cleanUp()
@@ -183,8 +187,8 @@ class SongServiceDeletionTest : KoinTest {
                 assertEquals(0, AlbumTable.selectAll().where { AlbumTable.id eq albumId }.count())
             }
             verify { storageService.invalidate(StorageCategory.TOTAL) }
-            verify { redisSearchService.remove(SearchIndexEntityType.SONG, listOf(songId)) }
-            verify { redisSearchService.remove(SearchIndexEntityType.ALBUM, match { albumId in it }) }
+            verify(timeout = 5000) { redisSearchService.remove(SearchIndexEntityType.SONG, listOf(songId)) }
+            verify(timeout = 5000) { redisSearchService.remove(SearchIndexEntityType.ALBUM, match { albumId in it }) }
         }
 
     @ParameterizedTest
@@ -249,6 +253,7 @@ class SongServiceDeletionTest : KoinTest {
         transaction(database) {
             assertEquals(0, SongTable.selectAll().where { SongTable.id eq songId }.count())
         }
+        verify(timeout = 5000) { redisSearchService.remove(SearchIndexEntityType.SONG, listOf(songId)) }
     }
 
     @ParameterizedTest

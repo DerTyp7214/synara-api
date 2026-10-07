@@ -14,7 +14,7 @@ import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserPlaylistTable
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.plugins.JobStatus
-import dev.dertyp.services.EntityChangeRecorder
+import dev.dertyp.services.EntityEventPublisher
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.Service
 import dev.dertyp.services.cover.render.CoverRenderSpec
@@ -43,7 +43,7 @@ class CoverGenerationService(
     private val collector: CoverSourceCollector,
     private val jobService: JobService,
     private val config: CoverConfig,
-    private val entityChangeRecorder: EntityChangeRecorder,
+    private val entityEvents: EntityEventPublisher,
 ) : Service() {
     data class RenderedBytes(val bytes: ByteArray, val style: CoverStyle, val seed: Long)
 
@@ -175,7 +175,7 @@ class CoverGenerationService(
                     it[coverStyle] = params.style
                     it[coverSeed] = params.seed
                 }
-            }.also { if (it > 0) entityChangeRecorder.updated(entityTypeOf(target), listOf(target.id)) }
+            }.also { if (it > 0) entityEvents.updated(entityTypeOf(target), listOf(target.id)) }
         }
         return imageId
     }
@@ -205,7 +205,7 @@ class CoverGenerationService(
                     it[coverStyle] = null
                     it[coverSeed] = null
                 }
-            }.also { if (it > 0) entityChangeRecorder.updated(entityTypeOf(target), listOf(target.id)) }
+            }.also { if (it > 0) entityEvents.updated(entityTypeOf(target), listOf(target.id)) }
         }
         enqueueAuto(target, row.name, row.creator)
         return true

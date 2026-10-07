@@ -15,8 +15,8 @@ import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.UserAlbumTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.core.db.dbQuery
-import dev.dertyp.services.EntityChangeRecorder
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -25,7 +25,6 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import org.koin.dsl.module
 import java.util.UUID
 import kotlin.test.assertEquals
 
@@ -36,7 +35,7 @@ class SubsonicQueryServiceTest {
     private val newAlbum = UUID.randomUUID()
 
     private fun setup(dialect: DbDialect) = runBlocking {
-        startKoin { modules(module { single { EntityChangeRecorder() } }) }
+        startKoin { modules(entityEventsModule()) }
         TestDatabase.connect(dialect, "subsonic_query_test")
         dbQuery {
             SchemaUtils.create(

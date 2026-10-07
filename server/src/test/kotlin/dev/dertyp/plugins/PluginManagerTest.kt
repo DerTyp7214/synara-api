@@ -2,6 +2,19 @@ package dev.dertyp.plugins
 
 import dev.dertyp.Indexer
 import dev.dertyp.services.ApiKeyScopeRegistry
+import dev.dertyp.services.HookService
+import dev.dertyp.services.RecommendationService
+import dev.dertyp.services.recommendation.RecommendationPlugin
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.UUID
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import dev.dertyp.services.ILrcLibService
 import dev.dertyp.services.StorageService
 import dev.dertyp.services.credentials.PluginCredentialsFactory
@@ -33,12 +46,16 @@ class PluginManagerTest : KoinTest {
     private lateinit var indexer: Indexer
     private lateinit var pluginManager: PluginManager
     private lateinit var credentialsFactory: PluginCredentialsFactory
+    private lateinit var hookService: HookService
+    private lateinit var recommendationService: RecommendationService
 
     @BeforeEach
     fun setup() {
         storageService = mockk(relaxed = true)
         indexer = mockk(relaxed = true)
         credentialsFactory = mockk(relaxed = true)
+        hookService = HookService()
+        recommendationService = mockk(relaxed = true)
 
         startKoin {
             modules(module {
@@ -61,6 +78,8 @@ class PluginManagerTest : KoinTest {
                 single { IntakeService(get()) }
                 single { JobService() }
                 single { credentialsFactory }
+                single { hookService }
+                single { recommendationService }
             })
         }
 
@@ -69,6 +88,7 @@ class PluginManagerTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        runBlocking { hookService.stopService() }
         stopKoin()
     }
 
@@ -217,5 +237,182 @@ class PluginManagerTest : KoinTest {
         loadPluginMethod.invoke(pluginManager, contentSourcePlugin)
 
         assertEquals(listOf("fake"), pluginManager.getPodcastIndexes().map { it.id })
+    }
+
+    @Test
+    fun `supports api version 4`() {
+        assertEquals(4, PluginManager.CURRENT_API_VERSION)
+    }
+
+    @Test
+    fun `hands a plugin hooks scoped to its declared groups`() = runBlocking {
+        val received = CompletableDeferred<HookEvent.PlaylistChanged>()
+        var rejected: Exception? = null
+
+        val plugin = object : ISynaraPlugin {
+            override val id: String = "hooked"
+            override val name: String = "Hooked"
+            override val apiVersion: Int = 4
+            override val hookGroups: Set<HookGroup> = setOf(HookGroup.PLAYLISTS)
+
+            override fun init(context: PluginContext) {
+                context.hooks.on<HookEvent.PlaylistChanged> { received.complete(it) }
+                rejected = runCatching { context.hooks.on<HookEvent.LikesChanged> { } }.exceptionOrNull() as Exception?
+            }
+        }
+
+        val loadPluginMethod = pluginManager.javaClass.getDeclaredMethod("loadPlugin", ISynaraPlugin::class.java)
+        loadPluginMethod.isAccessible = true
+        loadPluginMethod.invoke(pluginManager, plugin)
+        val event = HookEvent.PlaylistChanged(UUID.randomUUID())
+        hookService.emit(event)
+
+        assertEquals(event, withTimeout(2.seconds) { received.await() })
+        assertTrue(rejected is IllegalArgumentException)
+        assertEquals(listOf(HookEvent.PlaylistChanged::class), hookService.pluginRegistrations("hooked"))
+    }
+
+    @Test
+    fun `a plugin that declares no hook groups and subscribes is not loaded and keeps no registration`() = runBlocking {
+        val received = CompletableDeferred<HookEvent.PlaylistChanged>()
+        var initCompleted = false
+
+        val plugin = object : ISynaraPlugin {
+            override val id: String = "undeclared"
+            override val name: String = "Undeclared"
+            override val apiVersion: Int = 4
+
+            override fun init(context: PluginContext) {
+                context.hooks.on<HookEvent.PlaylistChanged> { received.complete(it) }
+                initCompleted = true
+            }
+        }
+
+        val loadPluginMethod = pluginManager.javaClass.getDeclaredMethod("loadPlugin", ISynaraPlugin::class.java)
+        loadPluginMethod.isAccessible = true
+        loadPluginMethod.invoke(pluginManager, plugin)
+        hookService.emit(HookEvent.PlaylistChanged(UUID.randomUUID()))
+
+        assertFalse(initCompleted)
+        assertNull(withTimeoutOrNull(200.milliseconds) { received.await() })
+        assertEquals(emptyList<Any>(), hookService.pluginRegistrations("undeclared"))
+    }
+
+    @Test
+    fun `a plugin built before hook groups keeps the events it could subscribe to and gets no others`() = runBlocking {
+        val playlists = CompletableDeferred<HookEvent.PlaylistChanged>()
+        val listens = CompletableDeferred<HookEvent.ListenIngested>()
+        val collections = CompletableDeferred<HookEvent.CollectionChanged>()
+        val nowPlaying = CompletableDeferred<HookEvent.NowPlayingChanged>()
+        val rejected = mutableListOf<Throwable?>()
+
+        val plugin = object : ISynaraPlugin {
+            override val id: String = "version3"
+            override val name: String = "Version 3"
+            override val apiVersion: Int = 3
+
+            override fun init(context: PluginContext) {
+                context.hooks.on<HookEvent.PlaylistChanged> { playlists.complete(it) }
+                context.hooks.on<HookEvent.ListenIngested> { listens.complete(it) }
+                context.hooks.on<HookEvent.CollectionChanged> { collections.complete(it) }
+                context.hooks.on<HookEvent.NowPlayingChanged> { nowPlaying.complete(it) }
+                rejected += runCatching { context.hooks.on<HookEvent.LikesChanged> { } }.exceptionOrNull()
+                rejected += runCatching { context.hooks.on<HookEvent.TimecodesChanged> { } }.exceptionOrNull()
+                rejected += runCatching { context.hooks.on<HookEvent.LibraryIndexed> { } }.exceptionOrNull()
+                rejected += runCatching {
+                    runBlocking { context.hooks.emit(HookEvent.PlaylistChanged(UUID.randomUUID())) }
+                }.exceptionOrNull()
+            }
+        }
+
+        val loadPluginMethod = pluginManager.javaClass.getDeclaredMethod("loadPlugin", ISynaraPlugin::class.java)
+        loadPluginMethod.isAccessible = true
+        loadPluginMethod.invoke(pluginManager, plugin)
+        val playlist = HookEvent.PlaylistChanged(UUID.randomUUID())
+        val listen = HookEvent.ListenIngested(UUID.randomUUID(), 2)
+        val collection = HookEvent.CollectionChanged(UUID.randomUUID())
+        val playing = HookEvent.NowPlayingChanged(UUID.randomUUID(), null, 1, 2)
+        hookService.emit(playlist)
+        hookService.emit(listen)
+        hookService.emit(collection)
+        hookService.emit(playing)
+
+        assertEquals(playlist, withTimeout(2.seconds) { playlists.await() })
+        assertEquals(listen, withTimeout(2.seconds) { listens.await() })
+        assertEquals(collection, withTimeout(2.seconds) { collections.await() })
+        assertEquals(playing, withTimeout(2.seconds) { nowPlaying.await() })
+        assertEquals(
+            listOf(
+                IllegalArgumentException::class,
+                IllegalArgumentException::class,
+                IllegalArgumentException::class,
+                UnsupportedOperationException::class,
+            ),
+            rejected.map { it?.let { failure -> failure::class } }
+        )
+        assertEquals(
+            listOf(
+                HookEvent.PlaylistChanged::class,
+                HookEvent.ListenIngested::class,
+                HookEvent.CollectionChanged::class,
+                HookEvent.NowPlayingChanged::class,
+            ),
+            hookService.pluginRegistrations("version3")
+        )
+    }
+
+    @Test
+    fun `the groups granted without a declaration are those of the events older plugins know`() {
+        assertEquals(4, PluginManager.HOOK_GROUPS_API_VERSION)
+        assertEquals<Set<HookGroup?>>(
+            listOf(
+                HookEvent.PlaylistChanged(UUID.randomUUID()),
+                HookEvent.CollectionChanged(UUID.randomUUID()),
+                HookEvent.NowPlayingChanged(UUID.randomUUID(), null, 1, 2),
+                HookEvent.ListenIngested(UUID.randomUUID(), 1),
+            ).mapTo(mutableSetOf()) { it.hookGroup() },
+            PluginManager.HOOK_GROUPS_BEFORE_DECLARATION
+        )
+    }
+
+    @Test
+    fun `registrations made before a failing init are removed`() = runBlocking {
+        val received = CompletableDeferred<HookEvent.PlaylistChanged>()
+
+        val plugin = object : ISynaraPlugin {
+            override val id: String = "broken"
+            override val name: String = "Broken"
+            override val hookGroups: Set<HookGroup> = setOf(HookGroup.PLAYLISTS)
+
+            override fun init(context: PluginContext) {
+                context.hooks.on<HookEvent.PlaylistChanged> { received.complete(it) }
+                throw IllegalStateException("init fails")
+            }
+        }
+
+        val loadPluginMethod = pluginManager.javaClass.getDeclaredMethod("loadPlugin", ISynaraPlugin::class.java)
+        loadPluginMethod.isAccessible = true
+        loadPluginMethod.invoke(pluginManager, plugin)
+        hookService.emit(HookEvent.PlaylistChanged(UUID.randomUUID()))
+
+        assertNull(withTimeoutOrNull(200.milliseconds) { received.await() })
+        assertEquals(emptyList<Any>(), hookService.pluginRegistrations("broken"))
+    }
+
+    @Test
+    fun `the recommendation plugin loads with its declared groups and reacts to listens and playlists`() {
+        val loadPluginMethod = pluginManager.javaClass.getDeclaredMethod("loadPlugin", ISynaraPlugin::class.java)
+        loadPluginMethod.isAccessible = true
+        loadPluginMethod.invoke(pluginManager, RecommendationPlugin())
+
+        assertEquals(
+            listOf(HookEvent.ListenIngested::class, HookEvent.PlaylistChanged::class),
+            hookService.pluginRegistrations("recommendation")
+        )
+
+        runBlocking { hookService.emit(HookEvent.ListenIngested(UUID.randomUUID(), 1)) }
+        verify(timeout = 2000, exactly = 1) { recommendationService.markDirty() }
+        runBlocking { hookService.emit(HookEvent.PlaylistChanged(UUID.randomUUID())) }
+        verify(timeout = 2000, exactly = 2) { recommendationService.markDirty() }
     }
 }

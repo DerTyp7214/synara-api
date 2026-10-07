@@ -125,7 +125,7 @@ fun entityStates(type: EntityType, ids: Collection<UUID>): EntityStates {
     return EntityStates(type, entities, readStates(type, entities))
 }
 
-fun EntityChangeRecorder.recordChanges(before: EntityStates) {
+fun EntityEventPublisher.recordChanges(before: EntityStates) {
     val after = readStates(before.type, before.ids)
     val changed = after.filter { (id, state) ->
         before.states[id]?.let {

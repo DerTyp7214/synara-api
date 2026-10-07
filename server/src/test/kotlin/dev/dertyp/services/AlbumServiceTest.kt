@@ -9,7 +9,9 @@ import dev.dertyp.services.import.Type
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.testing.RecordedEntityEvents
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -24,6 +26,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.koin.core.context.loadKoinModules
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
@@ -39,6 +42,7 @@ class AlbumServiceTest : KoinTest {
     private val musicBrainzService = mockk<MusicBrainzService>(relaxed = true)
     private val storageService = mockk<StorageService>(relaxed = true)
     private val libraryMergeService = mockk<LibraryMergeService>(relaxed = true)
+    private val events = RecordedEntityEvents().subscribeLibraryReactions()
 
     private val user = User(
         id = UUID.randomUUID(),
@@ -49,7 +53,8 @@ class AlbumServiceTest : KoinTest {
     fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule(events))
+                single { service }
                 single { musicBrainzService }
                 single { MusicBrainzCacheService() }
                 single { storageService }
@@ -103,6 +108,7 @@ class AlbumServiceTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        runBlocking { events.stop() }
         if (::service.isInitialized) runBlocking { service.stopService() }
         stopKoin()
         TestDatabase.cleanUp()
@@ -2422,6 +2428,7 @@ class AlbumServiceTest : KoinTest {
         setup(dialect)
         val spied = spyk(service)
         coEvery { spied.rebuildVersionGroups() } returns 0
+        loadKoinModules(module { single<AlbumService> { spied } })
 
         val created = spied.getOrBulkCreateWithResult(
             listOf(
@@ -2456,6 +2463,7 @@ class AlbumServiceTest : KoinTest {
         setup(dialect)
         val spied = spyk(service)
         coEvery { spied.rebuildVersionGroups() } returns 0
+        loadKoinModules(module { single<AlbumService> { spied } })
 
         val created = spied.getOrBulkCreateWithResult(
             listOf(
@@ -2558,6 +2566,7 @@ class AlbumServiceTest : KoinTest {
         setup(dialect)
         val spied = spyk(service)
         coEvery { spied.rebuildVersionGroups() } returns 0
+        loadKoinModules(module { single<AlbumService> { spied } })
         val mbId = UUID.randomUUID()
         coEvery { musicBrainzService.fetchReleaseById(mbId, any()) } returns MusicBrainzRelease(
             id = mbId,

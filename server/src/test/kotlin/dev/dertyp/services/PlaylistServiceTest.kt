@@ -6,6 +6,7 @@ import dev.dertyp.data.InsertablePlaylist
 import dev.dertyp.data.Playlist
 import dev.dertyp.db.*
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.mockk.mockk
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -34,7 +35,7 @@ class PlaylistServiceTest : KoinTest {
         startKoin {
             modules(module {
                 single { mockk<ImageService>(relaxed = true) }
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
             })
         }
 

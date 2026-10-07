@@ -6,7 +6,7 @@ import dev.dertyp.data.EntityType
 import dev.dertyp.data.TaskKeys
 import dev.dertyp.db.SongTable
 import dev.dertyp.core.db.dbQuery
-import dev.dertyp.services.EntityChangeRecorder
+import dev.dertyp.services.EntityEventPublisher
 import dev.dertyp.services.LrcLibService
 import dev.dertyp.services.SongService
 import dev.dertyp.services.entityStates
@@ -25,7 +25,7 @@ import kotlin.time.Duration.Companion.days
 class LrcLibWorker : Worker("LrcLibWorker") {
     private val lrcLibService by inject<LrcLibService>()
     private val songService by inject<SongService>()
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     override suspend fun execute(onProgress: suspend (Double, String) -> Unit): Map<String, Any?> {
         var synced = 0
@@ -73,7 +73,7 @@ class LrcLibWorker : Worker("LrcLibWorker") {
                                 it[SongTable.lyrics] = lyricsContent
                                 it[SongTable.lastLyricsFetchAttempt] = now.toEpochMilliseconds()
                             }
-                            entityChangeRecorder.recordChanges(before)
+                            entityEvents.recordChanges(before)
                         }
                         synced++
                         logger.info("Synced lyrics for song $songId from LrcLib.")

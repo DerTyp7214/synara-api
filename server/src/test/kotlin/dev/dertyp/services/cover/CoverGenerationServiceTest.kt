@@ -10,10 +10,10 @@ import dev.dertyp.data.EntityType
 import dev.dertyp.data.ImageSource
 import dev.dertyp.db.*
 import dev.dertyp.plugins.RedisCacheProvider
-import dev.dertyp.services.EntityChangeRecorder
 import dev.dertyp.services.ImageService
 import dev.dertyp.services.StorageService
 import dev.dertyp.services.jobs.JobService
+import dev.dertyp.testing.RecordedEntityEvents
 import dev.dertyp.testing.clearRecordedChanges
 import dev.dertyp.testing.entityChangeTables
 import dev.dertyp.testing.recordedChanges
@@ -126,7 +126,7 @@ class CoverGenerationServiceTest {
             CoverSourceCollector(),
             jobService,
             config,
-            EntityChangeRecorder()
+            RecordedEntityEvents().publisher
         )
     }
 

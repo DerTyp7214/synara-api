@@ -79,11 +79,34 @@ If a KSP task reports up-to-date but you know its output should change, touch on
 ## Conventions
 
 - Foreign keys are always Exposed `reference()` columns, never a hand-rolled `uuid`/`varchar` id column mirroring another table's id.
-- Schema changes are Flyway migrations (`db/migrations/V1_x__Name.kt`); data backfills and one-off fixes are custom migrations (`migrations/custom/`, `@Migration("3.x")`) — see [ARCHITECTURE.md](ARCHITECTURE.md#migrations).
+- Schema changes are a pair of generated SQL files, see [Schema changes](#schema-changes); data backfills and one-off fixes are custom migrations (`migrations/custom/`, `@Migration("3.33")` onward) — see [ARCHITECTURE.md](ARCHITECTURE.md#migrations).
 - Recurring/periodic work is a `@WorkerTask` worker (`services/schedule/`), never an ad hoc `while`/`delay` loop.
-- Every write to a table behind a tracked entity (songs, albums, artists, playlists, collections and the per-user likes, follows and timecode tags) is recorded through `EntityChangeRecorder` in the same transaction, or classified as bookkeeping in `server/src/test/resources/entity-change/write-sites.txt`. `EntityChangeCoverageTest` enforces this and fails for a write that is neither.
-- A custom migration that changes data clients can read records the changed entities through `EntityChangeRecorder` in the same transaction, like a service does. `restartTracking()` is only for the cases that cannot name what they changed, such as a database restore.
+- Every write to a table behind a tracked entity (songs, albums, artists, playlists, collections and the per-user likes, follows and timecode tags) is announced through `EntityEventPublisher` in the same transaction as the write, or classified as bookkeeping in `server/src/test/resources/entity-change/write-sites.txt`. `EntityChangeRecorder` subscribes to these announcements and records the change in that transaction. `EntityChangeCoverageTest` enforces this and fails for a write that is neither.
+- A custom migration that changes data clients can read announces the changed entities through `EntityEventPublisher` in the same transaction, like a service does. `EntityChangeRecorder.restartTracking()` is only for the cases that cannot name what they changed, such as a database restore.
+- A reaction to an entity event is a subscriber, not a call a service places after its write. The class implements `HookSubscriber`, is bound in Koin with `bind<HookSubscriber>()` and subscribes in `subscribe(hooks)`. `configureHooks()` (`Hooks.kt`) calls every bound subscriber before the database is ready, so `subscribe` and `init` only register and never read data. `HookSubscriberBindingTest` fails for a subscriber class that no production module binds as `HookSubscriber`. Services announce through `EntityEventPublisher` and do not know who listens.
+- A subscriber runs in one of two phases. `HookService.inTransaction` registers an `EntityWriteSubscriber` that is called synchronously inside the transaction of the write, and is only for data that must commit or roll back with that write, as `EntityChangeRecorder` does. Everything else subscribes with `HookService.on` and runs asynchronously after the commit, with one event per kind and entity type for the whole transaction. Plugins get the after-commit phase only, through `HookService.forPlugin`, limited to the hook groups they declare (see [PLUGINS.md](PLUGINS.md#hooks)).
+- A new `HookEvent` gets its hook group in `HookEvent.hookGroup()`, or null when only the server reacts to it, as for `AlbumsLinkedToMusicBrainz`, and a sample in `PluginHooks`, and a line in [PLUGINS.md](PLUGINS.md#events). `PluginHooksTest` fails for an event without a sample.
+- `VersionGroupTrigger` rebuilds the album version groups after album events: one second after the last event, and at the latest five seconds after the first one that is waiting. All commits of one operation therefore lead to one rebuild on complete data. Code that changes what the grouping reads without an album event, such as `AlbumService.setMusicBrainzId` filling in the cached release group, calls `VersionGroupTrigger.requestRebuild()`, which joins the same wait. A caller that needs the groups rebuilt before it continues awaits `AlbumService.rebuildVersionGroups()` itself. A rebuild that is still waiting when the server stops is not run.
 - REST routes are generated, not hand-written; control them through the `common-rpc` doc annotations, not by editing `routing/rest/`.
+
+## Schema changes
+
+The schema starts from a frozen base per database type, and a schema change is a pair of SQL files, one for PostgreSQL and one for SQLite, generated from the table objects.
+
+1. Change the table object in `server/src/main/kotlin/dev/dertyp/db/`.
+2. Run `./gradlew :server:generateMigration -Pname=AddSomething`. It needs Docker, or an existing PostgreSQL given with `-PpostgresUrl`, `-PpostgresUser` and `-PpostgresPassword`.
+3. Review both new files in `server/src/main/resources/db/migrations/postgres/` and `.../sqlite/`. Append by hand what Exposed cannot generate, such as search triggers, functions, GIN or expression indexes. Commit both files, even if one of them is empty.
+4. A released migration and the base (`B1_109__Base.sql`) are never edited. A correction is a new migration.
+
+The generator writes what Exposed proposes, and three kinds of change need a correction by hand before the files are committed:
+
+- A renamed column is generated as `ADD` of the new column and `DROP COLUMN` of the old one, which deletes its data. Replace both statements by `ALTER TABLE ... RENAME COLUMN ... TO ...` in both files. The generator prints a warning for a table that gains and loses columns in the same run.
+- A new `NOT NULL` column without a database default (`default(...)`, not `clientDefault`) fails on PostgreSQL once the table has rows and always on SQLite. The generator prints a warning for it.
+- On SQLite, a changed type, default or nullability of an existing column and a new foreign key on an existing table produce no statement, so the SQLite file stays without them and `SchemaDriftTest` cannot see the difference on SQLite. The table rebuild (new table, copy, drop, rename) is written by hand.
+
+`SchemaDriftTest` fails for a table change without a migration, and `MigrationFilesTest` for a file that exists for only one database type or for a Flyway Kotlin class. Data changes stay custom migrations in the package `dev.dertyp.migrations.custom`, which is created again with the next one.
+
+At startup `MigrationBaseCheck` refuses a database that is not at the base (see [ARCHITECTURE.md](ARCHITECTURE.md#migrations)), and the message names the `0.0.1-dev` image to start first, see [Updating from 0.0.1](../README.md#updating-from-001). Backups carry the schema version they were made at, and a restore applies the same rule before it changes anything, so a new migration needs no change to the backup code.
 
 ## Dependency updates
 

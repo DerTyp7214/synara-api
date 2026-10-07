@@ -5,6 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -43,7 +44,7 @@ class LibraryMergeServiceSingleFlightTest : KoinTest {
 
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
                 single { albumService }
                 single { pluginManager }
                 single { LibraryFileDeleter() }

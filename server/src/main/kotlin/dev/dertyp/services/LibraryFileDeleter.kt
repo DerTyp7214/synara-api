@@ -17,8 +17,7 @@ import kotlin.io.path.isSymbolicLink
 import kotlin.io.path.readSymbolicLink
 
 class LibraryFileDeleter : Service() {
-    private val redisSearchService by inject<RedisSearchService>()
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     data class SongRowDeletion(
         val deletedSongs: Int,
@@ -46,7 +45,7 @@ class LibraryFileDeleter : Service() {
 
         logger.info("Found ${paths.size} files to delete.")
 
-        entityChangeRecorder.deleting(EntityType.SONG, songRows.map { it.first })
+        entityEvents.deleting(EntityType.SONG, songRows.map { it.first })
 
         val deletedSongs = chunks.sumOf { chunk ->
             SongTable.deleteWhere { SongTable.id inList chunk }
@@ -65,7 +64,7 @@ class LibraryFileDeleter : Service() {
             }
             .map { it[AlbumTable.id].value }
 
-        entityChangeRecorder.deleting(EntityType.ALBUM, orphanAlbumIds)
+        entityEvents.deleting(EntityType.ALBUM, orphanAlbumIds)
 
         orphanAlbumIds.chunked(5000).forEach { chunk ->
             AlbumTable.deleteWhere { AlbumTable.id inList chunk }
@@ -76,18 +75,8 @@ class LibraryFileDeleter : Service() {
         afterCommit {
             deleteFiles(paths)
         }
-        removeFromSearchIndex(SearchIndexEntityType.SONG, deletedSongIds)
-        removeFromSearchIndex(SearchIndexEntityType.ALBUM, orphanAlbumIds)
 
         return SongRowDeletion(deletedSongs, deletedSongIds, orphanAlbumIds, paths)
-    }
-
-    fun removeFromSearchIndex(type: SearchIndexEntityType, ids: Collection<UUID>) {
-        if (ids.isEmpty()) return
-        val removed = ids.toList()
-        afterCommit {
-            if (redisSearchService.isEnabled()) redisSearchService.remove(type, removed)
-        }
     }
 
     fun deleteFiles(paths: List<String>) {

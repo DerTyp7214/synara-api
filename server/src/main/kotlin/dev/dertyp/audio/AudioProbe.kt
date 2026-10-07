@@ -28,6 +28,4 @@ object AudioProbe {
             }
         }.getOrNull()
     }
-
-    fun probeChannels(file: File): Int = probe(file)?.channels ?: 0
 }

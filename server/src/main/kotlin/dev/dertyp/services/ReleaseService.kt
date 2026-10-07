@@ -46,7 +46,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val appleMusicReleaseService by inject<AppleMusicReleaseService>()
     private val providerLinkService by inject<ProviderLinkService>()
     private val releaseArtistService by inject<ReleaseArtistService>()
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     private val RELEASE_REFRESH_WINDOW = 14.days
     private val REFRESH_COOLDOWN = 20.hours
@@ -75,7 +75,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 it[FollowedArtistTable.userId] = userId
                 it[FollowedArtistTable.artistId] = artistId
             }.insertedCount > 0
-            if (!alreadyFollowed) entityChangeRecorder.likesChanged(userId, EntityType.ARTIST, listOf(artistId))
+            if (!alreadyFollowed) entityEvents.likesChanged(userId, EntityType.ARTIST, listOf(artistId))
             followed
         }
         scope.launch {
@@ -112,7 +112,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
         val unfollowed = FollowedArtistTable.deleteWhere {
             (FollowedArtistTable.userId eq userId) and (FollowedArtistTable.artistId eq artistId)
         } > 0
-        if (unfollowed) entityChangeRecorder.likesChanged(userId, EntityType.ARTIST, listOf(artistId))
+        if (unfollowed) entityEvents.likesChanged(userId, EntityType.ARTIST, listOf(artistId))
         unfollowed
     }
 
@@ -131,7 +131,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 .select(ArtistMusicBrainzTable.artistId)
                 .where { ArtistMusicBrainzTable.musicBrainzId eq musicBrainzId })
         } > 0
-        if (unfollowed) entityChangeRecorder.likesChanged(userId, EntityType.ARTIST, unfollowedArtists)
+        if (unfollowed) entityEvents.likesChanged(userId, EntityType.ARTIST, unfollowedArtists)
         unfollowed
     }
 

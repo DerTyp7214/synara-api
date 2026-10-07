@@ -324,7 +324,7 @@ class ArtistEntityChangeTest : EntityChangeLibraryTest() {
         setup(dialect)
         val group = artist("Group")
         val member = artist("Member")
-        val recorder = getKoin().get<EntityChangeRecorder>()
+        val entityEvents = getKoin().get<EntityEventPublisher>()
 
         db {
             val groupBefore = entityStates(EntityType.ARTIST, listOf(group))
@@ -333,8 +333,8 @@ class ArtistEntityChangeTest : EntityChangeLibraryTest() {
                 it[groupId] = group
                 it[artistId] = member
             }
-            recorder.recordChanges(memberBefore)
-            recorder.recordChanges(groupBefore)
+            entityEvents.recordChanges(memberBefore)
+            entityEvents.recordChanges(groupBefore)
         }
         assertEquals(setOf(updated(EntityType.ARTIST, group)), recordedChanges(database))
         clearRecordedChanges(database)
@@ -343,8 +343,8 @@ class ArtistEntityChangeTest : EntityChangeLibraryTest() {
             val groupBefore = entityStates(EntityType.ARTIST, listOf(group))
             val memberBefore = entityStates(EntityType.ARTIST, listOf(member))
             ArtistMemberTable.deleteWhere { ArtistMemberTable.groupId eq group }
-            recorder.recordChanges(memberBefore)
-            recorder.recordChanges(groupBefore)
+            entityEvents.recordChanges(memberBefore)
+            entityEvents.recordChanges(groupBefore)
         }
         assertEquals(setOf(updated(EntityType.ARTIST, group)), recordedChanges(database))
     }

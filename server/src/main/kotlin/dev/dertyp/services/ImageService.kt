@@ -5,7 +5,6 @@ import dev.dertyp.ApiClient
 import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.isImage
 import dev.dertyp.core.isURL
-import dev.dertyp.core.likeAny
 import dev.dertyp.core.paging
 import dev.dertyp.core.safeQueuedGet
 import dev.dertyp.core.sha256
@@ -46,7 +45,6 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.IOException
 import java.nio.file.Path
 import java.util.*
 import javax.imageio.IIOImage
@@ -111,8 +109,6 @@ private class ChunkedImageOutputStream(
     }
 }
 
-data class NonImagePurgeResult(val scanned: Int, val bogus: Int, val unlinked: Int, val deleted: Int)
-
 class ImageRpcService(private val user: User?, private val imageService: ImageService) : IImageService {
     override suspend fun byId(id: UUID): Image? = imageService.byId(id)
     override suspend fun byHash(hash: String): Image? = imageService.byHash(hash)
@@ -152,7 +148,7 @@ class ImageService(
     }
 
     private val ANALYSIS_RETRY_INTERVAL = 7.days.inWholeMilliseconds
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     companion object {
         const val GENERATED_ORIGIN_PREFIX = "generated:"
@@ -426,116 +422,6 @@ class ImageService(
         return deleteImagesByIds(unreferencedImages, onProgress)
     }
 
-    suspend fun purgeNonImageFiles(
-        originPrefixes: Collection<String>,
-        onProgress: suspend (Double, String) -> Unit = { _, _ -> }
-    ): NonImagePurgeResult {
-        if (originPrefixes.isEmpty()) return NonImagePurgeResult(0, 0, 0, 0)
-
-        val candidates = dbQuery {
-            ImageTable
-                .select(ImageTable.id, ImageTable.path)
-                .where { ImageTable.origin likeAny originPrefixes.map { "$it%" } }
-                .map { it[ImageTable.id].value to it[ImageTable.path] }
-        }
-
-        onProgress(0.0, "Checking ${candidates.size} images for non-image content")
-        if (candidates.isEmpty()) return NonImagePurgeResult(0, 0, 0, 0)
-
-        val bogusIds = withContext(Dispatchers.IO) {
-            candidates.mapIndexedNotNull { index, (id, relativePath) ->
-                if (index % 1000 == 0) {
-                    onProgress(
-                        index.toDouble() / candidates.size * 40.0,
-                        "Checked $index/${candidates.size} images"
-                    )
-                }
-
-                val path = Path(storageService.imagesPath, relativePath)
-                if (!path.exists()) return@mapIndexedNotNull null
-
-                val header = try {
-                    path.inputStream().use { it.readNBytes(16) }
-                } catch (_: IOException) {
-                    return@mapIndexedNotNull null
-                }
-
-                if (header.isImage()) null else id
-            }
-        }
-
-        onProgress(40.0, "Found ${bogusIds.size} non-image files")
-        if (bogusIds.isEmpty()) {
-            onProgress(100.0, "No non-image files found")
-            return NonImagePurgeResult(candidates.size, 0, 0, 0)
-        }
-
-        val unlinked = dbQuery {
-            var total = 0
-            val uncovered = mutableMapOf<EntityType, MutableSet<UUID>>()
-            bogusIds.chunked(10000).forEach { chunk ->
-                uncovered.getOrPut(EntityType.ALBUM) { mutableSetOf() } += AlbumTable
-                    .select(AlbumTable.id)
-                    .where { AlbumTable.cover inList chunk }
-                    .map { it[AlbumTable.id].value }
-                uncovered.getOrPut(EntityType.ARTIST) { mutableSetOf() } += ArtistTable
-                    .select(ArtistTable.id)
-                    .where { ArtistTable.image inList chunk }
-                    .map { it[ArtistTable.id].value }
-                uncovered.getOrPut(EntityType.SONG) { mutableSetOf() } += SongTable
-                    .select(SongTable.id)
-                    .where { SongTable.cover inList chunk }
-                    .map { it[SongTable.id].value }
-                uncovered.getOrPut(EntityType.PLAYLIST) { mutableSetOf() } += PlaylistTable
-                    .select(PlaylistTable.id)
-                    .where { PlaylistTable.imageId inList chunk }
-                    .map { it[PlaylistTable.id].value }
-                uncovered.getOrPut(EntityType.USER_PLAYLIST) { mutableSetOf() } += UserPlaylistTable
-                    .select(UserPlaylistTable.id)
-                    .where { UserPlaylistTable.imageId inList chunk }
-                    .map { it[UserPlaylistTable.id].value }
-                uncovered.getOrPut(EntityType.COLLECTION) { mutableSetOf() } += CollectionTable
-                    .select(CollectionTable.id)
-                    .where { CollectionTable.imageId inList chunk }
-                    .map { it[CollectionTable.id].value }
-                total += RecentReleaseTable.update({ RecentReleaseTable.imageId inList chunk }) {
-                    it[imageId] = null
-                    it[lastImageFetch] = null
-                }
-                total += ProviderReleaseTable.update({ ProviderReleaseTable.imageId inList chunk }) {
-                    it[imageId] = null
-                    it[lastImageFetch] = null
-                }
-                total += MBReleaseGroupCoverTable.update({ MBReleaseGroupCoverTable.imageId inList chunk }) {
-                    it[imageId] = null
-                    it[lastFetch] = 0L
-                }
-                total += AlbumTable.update({ AlbumTable.cover inList chunk }) { it[cover] = null }
-                total += ArtistTable.update({ ArtistTable.image inList chunk }) { it[image] = null }
-                total += SongTable.update({ SongTable.cover inList chunk }) { it[cover] = null }
-                total += PlaylistTable.update({ PlaylistTable.imageId inList chunk }) { it[imageId] = null }
-                total += UserPlaylistTable.update({ UserPlaylistTable.imageId inList chunk }) { it[imageId] = null }
-                total += CollectionTable.update({ CollectionTable.imageId inList chunk }) { it[imageId] = null }
-            }
-            uncovered.forEach { (type, ids) -> entityChangeRecorder.updated(type, ids) }
-            total
-        }
-
-        onProgress(60.0, "Unlinked $unlinked references")
-
-        val deletable = bogusIds - collectReferencedImageIds()
-        if (deletable.size < bogusIds.size) {
-            logger.warn("${bogusIds.size - deletable.size} non-image files are still referenced and are kept")
-        }
-
-        val deleted = deleteImagesByIds(deletable) { progress, message -> onProgress(60.0 + progress * 0.4, message) }
-
-        logger.info(
-            "Purged non-image files: scanned ${candidates.size}, bogus ${bogusIds.size}, unlinked $unlinked, deleted $deleted"
-        )
-        return NonImagePurgeResult(candidates.size, bogusIds.size, unlinked, deleted)
-    }
-
     fun getCachedBytes(key: String): ByteArray? = jedis?.get(key.toByteArray())
 
     fun setCachedBytes(key: String, bytes: ByteArray, ttl: Duration? = null) {
@@ -695,7 +581,7 @@ class ImageService(
             .select(AnimatedImageTable.id)
             .where { AnimatedImageTable.imageId eq imageId }
             .map { it[AnimatedImageTable.id].value }
-        entityChangeRecorder.updated(
+        entityEvents.updated(
             EntityType.SONG,
             SongTable
                 .select(SongTable.id)
@@ -703,7 +589,7 @@ class ImageService(
                 .orWhere { SongTable.animatedCover inList animatedIds }
                 .map { it[SongTable.id].value }
         )
-        entityChangeRecorder.updated(
+        entityEvents.updated(
             EntityType.ALBUM,
             AlbumTable
                 .select(AlbumTable.id)
@@ -711,25 +597,25 @@ class ImageService(
                 .orWhere { AlbumTable.animatedCover inList animatedIds }
                 .map { it[AlbumTable.id].value }
         )
-        entityChangeRecorder.updated(
+        entityEvents.updated(
             EntityType.ARTIST,
             ArtistTable.select(ArtistTable.id).where { ArtistTable.image eq imageId }.map { it[ArtistTable.id].value }
         )
-        entityChangeRecorder.updated(
+        entityEvents.updated(
             EntityType.PLAYLIST,
             PlaylistTable
                 .select(PlaylistTable.id)
                 .where { PlaylistTable.imageId eq imageId }
                 .map { it[PlaylistTable.id].value }
         )
-        entityChangeRecorder.updated(
+        entityEvents.updated(
             EntityType.USER_PLAYLIST,
             UserPlaylistTable
                 .select(UserPlaylistTable.id)
                 .where { UserPlaylistTable.imageId eq imageId }
                 .map { it[UserPlaylistTable.id].value }
         )
-        entityChangeRecorder.updated(
+        entityEvents.updated(
             EntityType.COLLECTION,
             CollectionTable
                 .select(CollectionTable.id)

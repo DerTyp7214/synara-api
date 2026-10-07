@@ -68,7 +68,7 @@ class TimecodeTagService : Service() {
     }
 
     private val locks = KeyedMutex<UUID>()
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     suspend fun createTag(
         userId: UUID,
@@ -92,7 +92,7 @@ class TimecodeTagService : Service() {
 
                 val now = Instant.now().toEpochMilli()
                 val id = insertTag(userId, songId, type, text, timestampMs, endMs, action, fade, now)
-                entityChangeRecorder.timecodesChanged(userId, listOf(songId))
+                entityEvents.timecodesChanged(userId, listOf(songId))
 
                 TimecodeTag(
                     id = id,
@@ -151,7 +151,7 @@ class TimecodeTagService : Service() {
                 Instant.now().toEpochMilli()
             )
             require(updated == 1) { "Timecode tag $tagId not found" }
-            entityChangeRecorder.timecodesChanged(userId, listOf(stored[TimecodeTagTable.songId].value))
+            entityEvents.timecodesChanged(userId, listOf(stored[TimecodeTagTable.songId].value))
 
             TimecodeTagTable
                 .selectAll()
@@ -168,7 +168,7 @@ class TimecodeTagService : Service() {
             .andWhere { TimecodeTagTable.userId eq userId }
             .map { it[TimecodeTagTable.songId].value }
         val removed = removeTag(userId, tagId) > 0
-        if (removed) entityChangeRecorder.timecodesChanged(userId, tagged)
+        if (removed) entityEvents.timecodesChanged(userId, tagged)
         removed
     }
 
@@ -197,7 +197,7 @@ class TimecodeTagService : Service() {
                     this[TimecodeTagTable.createdAt] = now
                     this[TimecodeTagTable.updatedAt] = now
                 }
-                if (cleared > 0 || tags.isNotEmpty()) entityChangeRecorder.timecodesChanged(userId, listOf(songId))
+                if (cleared > 0 || tags.isNotEmpty()) entityEvents.timecodesChanged(userId, listOf(songId))
 
                 orderedTags(userId, songId)
             }

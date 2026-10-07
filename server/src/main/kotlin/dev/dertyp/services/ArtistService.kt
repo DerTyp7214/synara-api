@@ -101,8 +101,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
     private val genreService by inject<GenreService>()
     private val imageService by inject<ImageService>()
     private val releaseArtistService by inject<ReleaseArtistService>()
-    private val libraryFileDeleter by inject<LibraryFileDeleter>()
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
     private val redisSearchService by inject<RedisSearchService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
@@ -248,7 +247,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                         this[ArtistGenreTable.artistId] = id
                         this[ArtistGenreTable.genreId] = genreId
                     }
-                    entityChangeRecorder.recordChanges(before)
+                    entityEvents.recordChanges(before)
                 }
             }
         }
@@ -293,7 +292,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 it[ArtistMusicBrainzTable.musicBrainzId] = musicBrainzId
                 it[lastCheck] = Clock.System.now().toEpochMilliseconds()
             }
-            entityChangeRecorder.recordChanges(before)
+            entityEvents.recordChanges(before)
         }
 
         if ((musicBrainzId != null) && (musicBrainzId != oldMbId)) {
@@ -306,7 +305,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                         it[lastImageCheck] = 0L
                         it[lastMetadataCheck] = 0L
                     }
-                    entityChangeRecorder.recordChanges(before)
+                    entityEvents.recordChanges(before)
                 }
             }
 
@@ -430,7 +429,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         queryArtists(page, pageSize, userId = userId, columnSet = {
             innerJoin(ArtistMemberTable, onColumn = { ArtistTable.id }, otherColumn = { ArtistMemberTable.artistId })
         }) {
-            where { ArtistMemberTable.groupId eq groupId }
+            where { ArtistMemberTable.groupId eq groupId }.orderByName()
         }
 
     suspend fun setGroup(id: UUID, artistIds: List<UUID>?, userId: UUID? = null): Artist? {
@@ -448,7 +447,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                     this[ArtistMemberTable.artistId] = memberId
                 }
             }
-            entityChangeRecorder.recordChanges(before)
+            entityEvents.recordChanges(before)
         }
         return byId(id, userId)
     }
@@ -613,7 +612,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             this[FollowedArtistTable.userId] = userId
             this[FollowedArtistTable.artistId] = newArtist
         }
-        followerIds.forEach { entityChangeRecorder.likesChanged(it, EntityType.ARTIST, listOf(newArtist)) }
+        followerIds.forEach { entityEvents.likesChanged(it, EntityType.ARTIST, listOf(newArtist)) }
 
         RecentReleaseTable.update({ RecentReleaseTable.artistId inList currentArtistIds }) {
             it[RecentReleaseTable.artistId] = newArtist
@@ -697,9 +696,9 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             }
         }
 
-        entityChangeRecorder.created(EntityType.ARTIST, listOf(newArtist))
-        entityChangeRecorder.merging(EntityType.ARTIST, newArtist, currentArtistIds)
-        entityChangeRecorder.updated(
+        entityEvents.created(EntityType.ARTIST, listOf(newArtist))
+        entityEvents.merging(EntityType.ARTIST, newArtist, currentArtistIds)
+        entityEvents.updated(
             EntityType.ARTIST,
             remappedMemberships.filter { it.first == newArtist }.map { it.second }
         )
@@ -714,8 +713,6 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList currentArtistIds }
         ArtistMusicBrainzTable.deleteWhere { ArtistMusicBrainzTable.artistId inList currentArtistIds }
         ArtistGenreTable.deleteWhere { ArtistGenreTable.artistId inList currentArtistIds }
-
-        libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.ARTIST, currentArtistIds)
 
         logger.info("Merged artists $mergeArtists into $newArtist")
 
@@ -801,8 +798,8 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             val splitSongIds = songCredits.map { it.ownerId }
             val splitAlbumIds = albumCredits.map { it.ownerId }
             val targetsBefore = entityStates(EntityType.ARTIST, finalTargetIds)
-            entityChangeRecorder.leavingContainers(EntityType.SONG, splitSongIds)
-            entityChangeRecorder.leavingContainers(EntityType.ALBUM, splitAlbumIds)
+            entityEvents.leavingContainers(EntityType.SONG, splitSongIds)
+            entityEvents.leavingContainers(EntityType.ALBUM, splitAlbumIds)
 
             val songLinks = songCredits.splitInto(finalTargetIds, existingSongLinks, keepsOriginal)
             if (songLinks.isNotEmpty()) {
@@ -843,17 +840,16 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                         .where { ArtistMemberTable.artistId eq originalArtistId }
                         .map { it[ArtistMemberTable.groupId].value }
                 )
-                entityChangeRecorder.deleting(EntityType.ARTIST, listOf(originalArtistId))
+                entityEvents.deleting(EntityType.ARTIST, listOf(originalArtistId))
                 SongArtistTable.deleteWhere { SongArtistTable.artistId eq originalArtistId }
                 AlbumArtistTable.deleteWhere { AlbumArtistTable.artistId eq originalArtistId }
                 ArtistTable.deleteWhere { ArtistTable.id eq originalArtistId }
                 ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId eq originalArtistId }
-                libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.ARTIST, listOf(originalArtistId))
-                entityChangeRecorder.recordChanges(groupsBefore)
+                entityEvents.recordChanges(groupsBefore)
             }
-            entityChangeRecorder.updated(EntityType.SONG, splitSongIds, containersChanged = true)
-            entityChangeRecorder.updated(EntityType.ALBUM, splitAlbumIds, containersChanged = true)
-            entityChangeRecorder.recordChanges(targetsBefore)
+            entityEvents.updated(EntityType.SONG, splitSongIds, containersChanged = true)
+            entityEvents.updated(EntityType.ALBUM, splitAlbumIds, containersChanged = true)
+            entityEvents.recordChanges(targetsBefore)
 
             logger.info("Split artist $originalArtistId into $finalTargetIds")
         }
@@ -862,7 +858,11 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
     }
 
     suspend fun allArtists(page: Int, pageSize: Int, userId: UUID? = null): PaginatedResponse<Artist> =
-        queryArtists(page, pageSize, userId = userId)
+        queryArtists(page, pageSize, userId = userId) { orderByName() }
+
+    private fun Query.orderByName(): Query =
+        orderBy(utf8SortKey(ArtistTable.name.lowerCase()), SortOrder.ASC)
+            .orderBy(ArtistTable.id, SortOrder.ASC)
 
     suspend fun byColor(
         page: Int,
@@ -905,7 +905,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 it[lastCheck] = Clock.System.now().toEpochMilliseconds()
             }
         }
-        entityChangeRecorder.created(EntityType.ARTIST, listOf(newId))
+        entityEvents.created(EntityType.ARTIST, listOf(newId))
 
         byId(newId, userId)!!
     }
@@ -978,7 +978,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 it[image] = EntityID(imageId, ImageTable)
                 it[lastImageCheck] = System.currentTimeMillis()
             }
-            entityChangeRecorder.recordChanges(before)
+            entityEvents.recordChanges(before)
         }
 
         return byId(id, userId)
@@ -1009,7 +1009,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             it[this.artistId] = artistId
             it[this.name] = name
         }
-        entityChangeRecorder.updated(EntityType.ARTIST, listOf(artistId))
+        entityEvents.updated(EntityType.ARTIST, listOf(artistId))
         true
     }
 
@@ -1031,9 +1031,9 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             (ArtistAliasTable.artistId eq artistId) and (ArtistAliasTable.name eq name)
         } > 0
         if (removed) {
-            entityChangeRecorder.updated(EntityType.ARTIST, listOf(artistId))
-            entityChangeRecorder.updated(EntityType.SONG, creditedSongs)
-            entityChangeRecorder.updated(EntityType.ALBUM, creditedAlbums)
+            entityEvents.updated(EntityType.ARTIST, listOf(artistId))
+            entityEvents.updated(EntityType.SONG, creditedSongs)
+            entityEvents.updated(EntityType.ALBUM, creditedAlbums)
         }
         removed
     }
@@ -1244,7 +1244,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                         this[ArtistAliasTable.name] = name
                         this[ArtistAliasTable.artistId] = artistId
                     }
-                    entityChangeRecorder.created(EntityType.ARTIST, rows.map { it[ArtistTable.id].value })
+                    entityEvents.created(EntityType.ARTIST, rows.map { it[ArtistTable.id].value })
                 }
             }
         } else {
@@ -1271,7 +1271,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
         val unreferencedArtists = allArtists.filter { it !in referencedArtists }
         onProgress(0.0, "Found ${unreferencedArtists.size} unreferenced artists")
 
-        entityChangeRecorder.deleting(EntityType.ARTIST, unreferencedArtists)
+        entityEvents.deleting(EntityType.ARTIST, unreferencedArtists)
 
         val chunks = unreferencedArtists.chunked(5000)
         chunks.forEachIndexed { index, batch ->
@@ -1281,8 +1281,6 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             ArtistTable.deleteWhere { ArtistTable.id inList batch }
             ArtistAliasTable.deleteWhere { ArtistAliasTable.artistId inList batch }
         }
-
-        libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.ARTIST, unreferencedArtists)
 
         onProgress(100.0, "Deleted ${unreferencedArtists.size} artists")
         logger.info("Deleted ${unreferencedArtists.size} unreferenced artists")
@@ -1321,7 +1319,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 it[groupId] = artist.id
             }
         }
-        entityChangeRecorder.recordChanges(before)
+        entityEvents.recordChanges(before)
     }
 
     suspend fun upsertArtistAlias(alias: ArtistAlias) = dbQuery {
@@ -1334,7 +1332,7 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
                 it[artistId] = alias.artistId
                 it[name] = alias.name
             }
-            entityChangeRecorder.updated(EntityType.ARTIST, listOf(alias.artistId))
+            entityEvents.updated(EntityType.ARTIST, listOf(alias.artistId))
         }
     }
 
@@ -1344,6 +1342,6 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             it[artistId] = alias.artistId
             it[name] = alias.name
         }
-        entityChangeRecorder.recordChanges(before)
+        entityEvents.recordChanges(before)
     }
 }

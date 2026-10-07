@@ -8,6 +8,7 @@ import dev.dertyp.db.*
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.metadata.TidalService
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -33,7 +34,7 @@ class LibraryMergeImageReferencesTest : KoinTest {
     private fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
                 single { mockk<ApplicationEnvironment>() }
                 single { mockk<SongService>() }
                 single { mockk<AlbumService>() }

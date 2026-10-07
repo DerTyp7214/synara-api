@@ -1,6 +1,8 @@
 package dev.dertyp
 
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.core.db.Dialect
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.SearchIndexWorker
@@ -17,6 +19,7 @@ import io.ktor.server.application.Application
 import org.koin.ktor.ext.inject
 
 fun Application.configureServices() {
+    val config by inject<ServerConfig>()
     val pluginManager by inject<PluginManager>()
     val importService by inject<ImportService>()
     val searchIndexWorker by inject<SearchIndexWorker>()
@@ -34,10 +37,12 @@ fun Application.configureServices() {
     ServiceLifecycle.start(pluginManager)
     ServiceLifecycle.start(importerState)
     ServiceLifecycle.start(importService)
-    searchIndexWorker.startService(ApplicationScope.scope)
     ServiceLifecycle.start(storageService)
     ServiceLifecycle.start(coverAssetPackService)
     ServiceLifecycle.start(coverGenerationService)
     ServiceLifecycle.start(coverAutoTrigger)
     ServiceLifecycle.start(hueService)
+    if (Dialect.ofDriver(config.database.driverClassName) == Dialect.POSTGRES) {
+        searchIndexWorker.startService(ApplicationScope.scope)
+    }
 }

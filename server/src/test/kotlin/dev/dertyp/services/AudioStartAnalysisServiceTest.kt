@@ -5,6 +5,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import kotlinx.coroutines.runBlocking
 import org.bytedeco.ffmpeg.global.avcodec
 import org.bytedeco.ffmpeg.global.avutil
@@ -80,7 +81,7 @@ class AudioStartAnalysisServiceTest {
     fun `analyze persists the detected offset and unanalyzed query excludes it`(@TempDir tempDir: Path) = runBlocking {
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
             })
         }
         val db = TestDatabase.connect(DbDialect.SQLITE, "audio_start_test")

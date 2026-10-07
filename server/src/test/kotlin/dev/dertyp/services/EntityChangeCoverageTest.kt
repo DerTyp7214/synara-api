@@ -116,9 +116,9 @@ class EntityChangeCoverageTest {
             A write on a table whose rows clients read through the entity change API is not classified, or a classified one is gone.
             For a new or moved write: decide whether it can change something a client can read (a field of a song, album, artist,
             playlist or collection, its members, a like, a follow, an album star or a timecode tag).
-            If it can, record it through EntityChangeRecorder inside the transaction of the write and mark the line RECORDED.
+            If it can, announce it through EntityEventPublisher inside the transaction of the write and mark the line RECORDED. The change recorder subscribes to it.
             If it cannot, mark the line "BOOKKEEPING: <the columns it writes and why no client reads them>".
-            A custom migration records like a service. MIGRATION is only for a migration that ran before tracking began or that restarts tracking.
+            A custom migration announces like a service. MIGRATION is only for a migration that ran before tracking began or that restarts tracking.
             Then put the line into server/src/test/resources/entity-change/write-sites.txt (sorted, one line per site and verdict).
             """.trimIndent()
         )
@@ -137,7 +137,7 @@ class EntityChangeCoverageTest {
             A write through a variable (table.deleteWhere, columns.table.update) or raw SQL (exec) is not listed, or a listed one is gone.
             The scanner cannot tell which table such a statement writes, so every one of them is listed by hand.
             Find out which tables it can reach. If one of them is a tracked table and the write can change something a client can read,
-            record it through EntityChangeRecorder and mark the line RECORDED, otherwise "BOOKKEEPING: <reason>",
+            announce it through EntityEventPublisher and mark the line RECORDED, otherwise "BOOKKEEPING: <reason>",
             or MIGRATION for a migration that ran before tracking began or that restarts tracking.
             Then put the line into server/src/test/resources/entity-change/indirect-write-sites.txt (sorted).
             """.trimIndent()

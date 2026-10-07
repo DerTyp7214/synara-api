@@ -49,7 +49,6 @@ class AudioProbeTest {
             assertEquals("flac", lossless.codec)
             assertEquals(6, lossless.channels)
             assertEquals(24, lossless.bitsPerSample)
-            assertEquals(6, AudioProbe.probeChannels(flac.toFile()))
         } finally {
             tempDir.toFile().deleteRecursively()
         }
@@ -62,7 +61,6 @@ class AudioProbeTest {
             assertNull(AudioProbe.probe(tempDir.resolve("missing.flac").toFile()))
             val garbage = tempDir.resolve("garbage.m4a").apply { writeBytes(ByteArray(64) { 1 }) }
             assertNull(AudioProbe.probe(garbage.toFile()))
-            assertEquals(0, AudioProbe.probeChannels(garbage.toFile()))
         } finally {
             tempDir.toFile().deleteRecursively()
         }

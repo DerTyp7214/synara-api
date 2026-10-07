@@ -4,8 +4,11 @@ import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
 import dev.dertyp.core.db.SchemaTables
 import dev.dertyp.core.db.dbQuery
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
+import dev.dertyp.db.BackupSchemaCheck
+import dev.dertyp.db.BackupSchemaInfo
+import dev.dertyp.db.CustomMigrationTable
+import dev.dertyp.db.SearchIndexQueueTable
+import dev.dertyp.db.TsVectorColumnType
 import kotlinx.serialization.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
@@ -14,6 +17,7 @@ import kotlinx.serialization.cbor.Cbor
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import java.io.*
 import java.util.UUID
 import kotlin.sequences.Sequence
@@ -68,13 +72,20 @@ data class TableData(
     val rows: List<Map<String, DbValue>>
 )
 
-class DbManagementService(private val entityChangeRecorder: EntityChangeRecorder) : IDbManagementService {
+class DbManagementService(
+    private val entityChangeRecorder: EntityChangeRecorder,
+    private val databaseManager: DatabaseManager
+) : IDbManagementService {
     private val rowSerializer = MapSerializer(String.serializer(), DbValue.serializer())
 
     private val tables: List<Table> by lazy {
-        val discovered = SchemaTables.all
+        val discovered = SchemaTables.all - SearchIndexQueueTable
         val known = discovered.toSet()
         SchemaUtils.sortTablesByReferences(discovered).filter { it in known }
+    }
+
+    private val columns: Map<Table, List<Column<*>>> by lazy {
+        tables.associateWith { table -> table.columns.filterNot { it.columnType is TsVectorColumnType } }
     }
 
     private val parents: Map<Table, Set<Table>> by lazy {
@@ -98,16 +109,26 @@ class DbManagementService(private val entityChangeRecorder: EntityChangeRecorder
 
     @OptIn(ExperimentalSerializationApi::class)
     suspend fun exportData(output: OutputStream) {
+        val schemaVersion = databaseManager.schemaVersion()
         ZstdOutputStream(ShieldedOutputStream(output)).use { zstd ->
             DataOutputStream(zstd).use { dos ->
                 dbQuery {
                     dos.writeInt(FORMAT_V2_MARKER)
-                    dos.writeInt(tables.size)
+                    dos.writeInt(tables.size + 1)
+                    dos.writeUTF(SCHEMA_VERSION_SECTION)
+                    val versionRow = Cbor.encodeToByteArray(
+                        rowSerializer,
+                        mapOf("version" to DbValue.DbString(schemaVersion))
+                    )
+                    dos.writeInt(versionRow.size)
+                    dos.write(versionRow)
+                    dos.writeInt(ROW_TERMINATOR)
                     tables.forEach { table ->
                         dos.writeUTF(table.tableName)
-                        table.selectAll().fetchSize(FETCH_SIZE).forEach { row ->
+                        val exported = columns.getValue(table)
+                        table.select(exported).fetchSize(FETCH_SIZE).forEach { row ->
                             val map = mutableMapOf<String, DbValue>()
-                            table.columns.forEach { column ->
+                            exported.forEach { column ->
                                 map[column.name] = convertToDbValue(row[column])
                             }
                             val bytes = Cbor.encodeToByteArray(rowSerializer, map)
@@ -122,53 +143,91 @@ class DbManagementService(private val entityChangeRecorder: EntityChangeRecorder
     }
 
     suspend fun importData(input: InputStream) {
-        val restore = Restore()
-        val failure = runCatching {
-            ZstdInputStream(ShieldedInputStream(input)).use { zstd ->
-                DataInputStream(zstd).use { dis ->
-                    val header = dis.readInt()
-                    if (header < 0) {
-                        importV2(dis, restore)
-                    } else {
-                        importV1(dis, header, restore)
+        val spool = File.createTempFile("synara-restore", ".dump")
+        try {
+            spool.outputStream().use { input.copyTo(it) }
+            BackupSchemaCheck.refusal(readSchemaInfo(spool), databaseManager.schemaVersion())?.let { throw it }
+            dbQuery {
+                TransactionManager.current().maxAttempts = 1
+                val restore = Restore()
+                ZstdInputStream(BufferedInputStream(FileInputStream(spool))).use { zstd ->
+                    DataInputStream(zstd).use { dis ->
+                        val header = dis.readInt()
+                        if (header < 0) {
+                            importV2(dis, restore)
+                        } else {
+                            importV1(dis, header, restore)
+                        }
                     }
                 }
+                entityChangeRecorder.restartTracking()
             }
-        }.exceptionOrNull()
-        if (failure == null || restore.started) {
-            val restart = runCatching {
-                withContext(NonCancellable) { dbQuery { entityChangeRecorder.restartTracking() } }
-            }
-            if (failure == null) restart.getOrThrow() else restart.exceptionOrNull()?.let(failure::addSuppressed)
+        } finally {
+            spool.delete()
         }
-        if (failure != null) throw failure
+    }
+
+    private fun readSchemaInfo(file: File): BackupSchemaInfo =
+        ZstdInputStream(BufferedInputStream(FileInputStream(file))).use { zstd ->
+            DataInputStream(zstd).use { dis ->
+                val header = dis.readInt()
+                if (header < 0) scanV2(dis) else scanV1(dis, header)
+            }
+        }
+
+    private fun scanV2(dis: DataInputStream): BackupSchemaInfo {
+        var version: String? = null
+        val customMigrations = mutableSetOf<String>()
+        repeat(dis.readInt()) {
+            when (dis.readUTF()) {
+                SCHEMA_VERSION_SECTION -> version = readRows(dis).toList()
+                    .firstNotNullOfOrNull { (it["version"] as? DbValue.DbString)?.value }
+
+                CustomMigrationTable.tableName ->
+                    customMigrations += readRows(dis).mapNotNull { (it["id"] as? DbValue.DbString)?.value }
+
+                else -> skipRows(dis)
+            }
+        }
+        return BackupSchemaInfo(version, customMigrations)
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    private fun scanV1(dis: DataInputStream, tableCount: Int): BackupSchemaInfo {
+        val customMigrations = mutableSetOf<String>()
+        repeat(tableCount) {
+            val tableName = dis.readUTF()
+            val cborBytes = ByteArray(dis.readInt())
+            dis.readFully(cborBytes)
+            if (tableName == CustomMigrationTable.tableName) {
+                customMigrations += Cbor.decodeFromByteArray<TableData>(cborBytes).rows
+                    .mapNotNull { (it["id"] as? DbValue.DbString)?.value }
+            }
+        }
+        return BackupSchemaInfo(null, customMigrations)
     }
 
     private inner class Restore {
         private val cleared = mutableSetOf<Table>()
         private val restored = mutableSetOf<Table>()
 
-        val started get() = cleared.isNotEmpty()
-
         fun isReady(table: Table) = parents.getValue(table).all { it in restored }
 
-        suspend fun restore(table: Table, rows: Sequence<Map<String, DbValue>>) {
+        fun restore(table: Table, rows: Sequence<Map<String, DbValue>>) {
             clear(table)
-            dbQuery {
-                val ordered = if (table.foreignKeys.any { it.targetTable == table }) {
-                    orderSelfReferences(table, rows.toList()).asSequence()
-                } else {
-                    rows
-                }
-                ordered.chunked(CHUNK_SIZE).forEach { insertChunk(table, it) }
+            val ordered = if (table.foreignKeys.any { it.targetTable == table }) {
+                orderSelfReferences(table, rows.toList()).asSequence()
+            } else {
+                rows
             }
+            ordered.chunked(CHUNK_SIZE).forEach { insertChunk(table, it) }
             restored += table
         }
 
-        private suspend fun clear(table: Table) {
+        private fun clear(table: Table) {
             if (!cleared.add(table)) return
             children.getValue(table).forEach { clear(it) }
-            dbQuery { table.deleteAll() }
+            table.deleteAll()
         }
     }
 
@@ -206,7 +265,7 @@ class DbManagementService(private val entityChangeRecorder: EntityChangeRecorder
         return file
     }
 
-    private suspend fun importV2(dis: DataInputStream, restore: Restore) {
+    private fun importV2(dis: DataInputStream, restore: Restore) {
         val deferred = mutableMapOf<Table, File>()
         try {
             val tableCount = dis.readInt()
@@ -230,9 +289,9 @@ class DbManagementService(private val entityChangeRecorder: EntityChangeRecorder
     }
 
     @OptIn(ExperimentalSerializationApi::class)
-    private suspend fun importV1(dis: DataInputStream, tableCount: Int, restore: Restore) {
+    private fun importV1(dis: DataInputStream, tableCount: Int, restore: Restore) {
         val deferred = mutableMapOf<Table, ByteArray>()
-        suspend fun restoreTable(table: Table, cborBytes: ByteArray) {
+        fun restoreTable(table: Table, cborBytes: ByteArray) {
             restore.restore(table, Cbor.decodeFromByteArray<TableData>(cborBytes).rows.asSequence())
         }
         for (i in 0 until tableCount) {
@@ -272,8 +331,9 @@ class DbManagementService(private val entityChangeRecorder: EntityChangeRecorder
     }
 
     private fun insertChunk(table: Table, rows: List<Map<String, DbValue>>) {
+        val restored = columns.getValue(table)
         table.batchInsert(rows) { rowMap ->
-            table.columns.forEach { column ->
+            restored.forEach { column ->
                 val dbValue = rowMap[column.name]
                 if (dbValue != null) {
                     val value = convertFromDbValue(dbValue)
@@ -282,6 +342,7 @@ class DbManagementService(private val entityChangeRecorder: EntityChangeRecorder
                 }
             }
         }
+        TransactionManager.current().closeExecutedStatements()
     }
 
     private class ShieldedOutputStream(output: OutputStream) : FilterOutputStream(output) {
@@ -326,6 +387,7 @@ class DbManagementService(private val entityChangeRecorder: EntityChangeRecorder
 
     companion object {
         const val FORMAT_V2_MARKER = -2
+        const val SCHEMA_VERSION_SECTION = "schema.version"
         private const val ROW_TERMINATOR = -1
         private const val FETCH_SIZE = 1000
         private const val CHUNK_SIZE = 500

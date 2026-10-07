@@ -61,7 +61,7 @@ import kotlin.time.Duration.Companion.days
 open class AudioAnalysisService : IAudioAnalysisService, Service() {
     private val essentiaExtractor = ExternalTool("essentia_streaming_extractor_music")
     protected open val essentiaExtractorPath: String? get() = essentiaExtractor.path
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     protected open val postProcessors: List<AudioAnalysisPostProcessor> = listOf(
         ValencePostProcessor()
@@ -181,7 +181,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
                 it.writeEnvelopes(envelopes)
                 it[analyzedAt] = System.currentTimeMillis()
             }
-            if (refreshed > 0) entityChangeRecorder.updated(EntityType.SONG, listOf(songId))
+            if (refreshed > 0) entityEvents.updated(EntityType.SONG, listOf(songId))
         }
     }
 
@@ -240,7 +240,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
                 it[loudnessRange] = essentia?.lowLevel?.loudnessEbu128?.loudnessRange
                 it[dynamicComplexity] = essentia?.lowLevel?.dynamicComplexity
             }
-            entityChangeRecorder.updated(EntityType.SONG, listOf(songId))
+            entityEvents.updated(EntityType.SONG, listOf(songId))
         }
     }
 
@@ -333,7 +333,7 @@ open class AudioAnalysisService : IAudioAnalysisService, Service() {
         saveCredits(songId, audioData.composer, SongComposerTable)
         saveCredits(songId, audioData.lyricist, SongLyricistTable)
         saveCredits(songId, audioData.producers, SongProducerTable)
-        entityChangeRecorder.updated(EntityType.SONG, listOf(songId))
+        entityEvents.updated(EntityType.SONG, listOf(songId))
     }
 
     private fun saveCredits(songId: PlatformUUID, names: List<String>?, table: Table) {

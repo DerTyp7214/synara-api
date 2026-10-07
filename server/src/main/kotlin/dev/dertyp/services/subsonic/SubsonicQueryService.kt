@@ -14,7 +14,7 @@ import dev.dertyp.db.SongTable
 import dev.dertyp.db.UserAlbumTable
 import dev.dertyp.db.UserPlaylistTable
 import dev.dertyp.core.db.dbQuery
-import dev.dertyp.services.EntityChangeRecorder
+import dev.dertyp.services.EntityEventPublisher
 import dev.dertyp.services.Service
 import dev.dertyp.services.entityStates
 import dev.dertyp.services.recordChanges
@@ -47,7 +47,7 @@ enum class AlbumListType(val key: String) {
 }
 
 class SubsonicQueryService : Service() {
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     suspend fun albumIds(
         type: AlbumListType,
@@ -214,7 +214,7 @@ class SubsonicQueryService : Service() {
                 it[UserAlbumTable.isFavourite] = starred
                 it[UserAlbumTable.updatedAt] = Instant.now().toEpochMilli()
             }
-            if (wasStarred != starred) entityChangeRecorder.likesChanged(userId, EntityType.ALBUM, listOf(albumId))
+            if (wasStarred != starred) entityEvents.likesChanged(userId, EntityType.ALBUM, listOf(albumId))
         }
     }
 
@@ -241,7 +241,7 @@ class SubsonicQueryService : Service() {
                     (FollowedArtistTable.userId eq userId) and (FollowedArtistTable.artistId eq artistId)
                 }
             }
-            if (wasStarred != starred) entityChangeRecorder.likesChanged(userId, EntityType.ARTIST, listOf(artistId))
+            if (wasStarred != starred) entityEvents.likesChanged(userId, EntityType.ARTIST, listOf(artistId))
         }
     }
 
@@ -265,7 +265,7 @@ class SubsonicQueryService : Service() {
             if (name != null) it[UserPlaylistTable.name] = name
             if (comment != null) it[UserPlaylistTable.description] = comment
         } > 0
-        entityChangeRecorder.recordChanges(before)
+        entityEvents.recordChanges(before)
         updated
     }
 

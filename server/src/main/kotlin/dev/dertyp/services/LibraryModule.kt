@@ -18,9 +18,13 @@ val libraryModule = module {
     singleOf(::FavSyncService)
     singleOf(::LibraryMergeService)
     singleOf(::LibraryFileDeleter)
+    singleOf(::VersionGroupTrigger) { bind<HookSubscriber>() }
+    singleOf(::DuplicateAlbumMergeTrigger) { bind<HookSubscriber>() }
+    singleOf(::SearchIndexRemover) { bind<HookSubscriber>() }
     singleOf(::CustomAudioService)
     singleOf(::TimecodeTagService)
-    singleOf(::EntityChangeRecorder)
+    singleOf(::EntityChangeRecorder) { bind<HookSubscriber>() }
+    singleOf(::EntityEventPublisher)
     singleOf(::EntityChangeService)
     singleOf(::ImageService) { bind<ImageLibrary>() }
     singleOf(::AnimatedImageService)

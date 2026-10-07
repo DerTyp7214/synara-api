@@ -8,10 +8,13 @@ import dev.dertyp.db.*
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.metadata.MetadataService
 import dev.dertyp.services.metadata.TidalService
+import dev.dertyp.testing.RecordedEntityEvents
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -37,6 +40,7 @@ class LibraryMergeServiceTest : KoinTest {
     private lateinit var albumService: AlbumService
     private lateinit var pluginManager: PluginManager
     private lateinit var tidalService: TidalService
+    private val events = RecordedEntityEvents().also { it.subscribe(it.versionGroupTrigger) }
 
     fun setup(dialect: DbDialect) {
         environment = mockk()
@@ -48,7 +52,7 @@ class LibraryMergeServiceTest : KoinTest {
 
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule(events))
                 single { environment }
                 single { songService }
                 single { albumService }
@@ -104,6 +108,7 @@ class LibraryMergeServiceTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        runBlocking { events.stop() }
         unmockkObject(MetadataService.Companion)
         stopKoin()
         TestDatabase.cleanUp()
@@ -823,4 +828,36 @@ class LibraryMergeServiceTest : KoinTest {
 
             coVerify(exactly = 0) { albumService.rebuildVersionGroups() }
         }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `calculateSimilarity should return 0 for different covers`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+
+        transaction(database) {
+            val cover1 = ImageTable.insert {
+                it[id] = UUID.randomUUID(); it[path] = "c1"; it[imageHash] = "h1"; it[origin] = "o"
+            }[ImageTable.id]
+            val cover2 = ImageTable.insert {
+                it[id] = UUID.randomUUID(); it[path] = "c2"; it[imageHash] = "h2"; it[origin] = "o"
+            }[ImageTable.id]
+
+            AlbumTable.insert { it[name] = "Album"; it[cover] = cover1 }
+            AlbumTable.insert { it[name] = "Album"; it[cover] = cover2 }
+
+            val albumRow1 = AlbumTable.selectAll().where { AlbumTable.cover eq cover1 }.single()
+            val albumRow2 = AlbumTable.selectAll().where { AlbumTable.cover eq cover2 }.single()
+
+            val similarity = service.javaClass.getDeclaredMethod(
+                "calculateSimilarity",
+                ResultRow::class.java,
+                ResultRow::class.java,
+                List::class.java,
+                List::class.java
+            ).apply { isAccessible = true }
+                .invoke(service, albumRow1, albumRow2, emptyList<UUID>(), emptyList<UUID>()) as Int
+
+            assertEquals(0, similarity)
+        }
+    }
 }

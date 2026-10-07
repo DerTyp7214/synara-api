@@ -6,6 +6,8 @@ import dev.dertyp.core.plus
 import dev.dertyp.data.TaskConfiguration
 import dev.dertyp.data.TriggerDefinition
 import dev.dertyp.plugins.*
+import dev.dertyp.services.HookService
+import dev.dertyp.services.HookSubscriber
 import dev.dertyp.services.Service
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -17,6 +19,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.time.withTimeoutOrNull
 import org.jetbrains.annotations.Range
 import org.koin.core.component.get
+import org.koin.core.component.inject
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -66,7 +69,8 @@ data class ScheduledTask(
 }
 
 @OptIn(ExperimentalAtomicApi::class, ExperimentalTime::class)
-class ScheduleService : IScheduleService, Service() {
+class ScheduleService : IScheduleService, HookSubscriber, Service() {
+    private val hooks by inject<HookService>()
     private val stopped: AtomicBoolean = AtomicBoolean(true)
     private val schedules: PriorityBlockingQueue<ScheduledTask> = PriorityBlockingQueue()
     private val eventRegistry = ConcurrentHashMap<String, MutableSet<CustomTrigger>>()
@@ -244,7 +248,13 @@ class ScheduleService : IScheduleService, Service() {
         return scheduledTask
     }
 
-    override fun schedulePostIndexTasks() {
+    override fun subscribe(hooks: HookService) {
+        hooks.on<HookEvent.LibraryIndexed> { schedulePostIndexWorkers() }
+    }
+
+    override fun schedulePostIndexTasks() = hooks.publish(HookEvent.LibraryIndexed)
+
+    private fun schedulePostIndexWorkers() {
         listOf<Worker>(
             get<MusicBrainzWorker>(),
             get<ImageAnalysisWorker>(),

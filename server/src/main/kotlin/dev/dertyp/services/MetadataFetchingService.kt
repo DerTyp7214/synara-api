@@ -32,7 +32,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
     private val imageService by inject<ImageService>()
     private val genreService by inject<GenreService>()
     private val musicBrainzService by inject<MusicBrainzService>()
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     private val artistImageProviders = listOf(
         IMetadataService.MetadataType.theAudioDB,
@@ -138,7 +138,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                     this[ArtistGenreTable.artistId] = id
                                     this[ArtistGenreTable.genreId] = genreId
                                 }
-                                entityChangeRecorder.recordChanges(before)
+                                entityEvents.recordChanges(before)
                             }
                             foundCount++
                         }
@@ -219,7 +219,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                     this[AlbumGenreTable.albumId] = id
                                     this[AlbumGenreTable.genreId] = genreId
                                 }
-                                entityChangeRecorder.recordChanges(before)
+                                entityEvents.recordChanges(before)
                             }
                             foundCount++
                         }
@@ -299,7 +299,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                     this[SongGenreTable.songId] = id
                                     this[SongGenreTable.genreId] = genreId
                                 }
-                                entityChangeRecorder.recordChanges(before)
+                                entityEvents.recordChanges(before)
                             }
                             foundCount++
                         }
@@ -517,7 +517,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                 ArtistTable.update({ ArtistTable.id eq id }) {
                                     it[ArtistTable.image] = EntityID(imageId, ImageTable)
                                     it[ArtistTable.lastImageCheck] = System.currentTimeMillis()
-                                }.also { entityChangeRecorder.recordChanges(before) }
+                                }.also { entityEvents.recordChanges(before) }
                             }
 
                             if (updates == 1) {
@@ -625,7 +625,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                     this[ArtistGenreTable.artistId] = id
                                     this[ArtistGenreTable.genreId] = genreId
                                 }
-                                entityChangeRecorder.recordChanges(before)
+                                entityEvents.recordChanges(before)
                             }
                         }
 
@@ -635,7 +635,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                 ArtistTable.update({ ArtistTable.id eq id }) {
                                     it[ArtistTable.about] = artist.biography!!
                                 }
-                                entityChangeRecorder.recordChanges(before)
+                                entityEvents.recordChanges(before)
                             }
                         }
 
@@ -660,7 +660,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                         ArtistTable.update({ ArtistTable.id eq id }) {
                                             it[ArtistTable.image] = EntityID(imageId, ImageTable)
                                         }
-                                        entityChangeRecorder.recordChanges(before)
+                                        entityEvents.recordChanges(before)
                                     }
                                 }
                             }
@@ -792,7 +792,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                 val before = entityStates(EntityType.ALBUM, listOf(id))
                                 AlbumTable.update({ AlbumTable.id eq id }) {
                                     it[AlbumTable.cover] = EntityID(imageId, ImageTable)
-                                }.also { entityChangeRecorder.recordChanges(before) }
+                                }.also { entityEvents.recordChanges(before) }
                             }
 
                             if (updates == 1) {
@@ -897,7 +897,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                     this[AlbumGenreTable.albumId] = id
                                     this[AlbumGenreTable.genreId] = genreId
                                 }
-                                entityChangeRecorder.recordChanges(before)
+                                entityEvents.recordChanges(before)
                             }
                         }
 
@@ -923,7 +923,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                         AlbumTable.update({ AlbumTable.id eq id }) {
                                             it[AlbumTable.cover] = EntityID(imageId, ImageTable)
                                         }
-                                        entityChangeRecorder.recordChanges(before)
+                                        entityEvents.recordChanges(before)
                                     }
                                 }
                             }
@@ -1021,7 +1021,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                                 this[SongGenreTable.songId] = id
                                 this[SongGenreTable.genreId] = genreId
                             }
-                            entityChangeRecorder.recordChanges(before)
+                            entityEvents.recordChanges(before)
                         }
 
                         updateLastMetadataCheckAlbum(id)
@@ -1111,7 +1111,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                     this[ArtistGenreTable.artistId] = id
                     this[ArtistGenreTable.genreId] = genreId
                 }
-                entityChangeRecorder.recordChanges(before)
+                entityEvents.recordChanges(before)
             }
         }
 
@@ -1121,7 +1121,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                 ArtistTable.update({ ArtistTable.id eq id }) {
                     it[ArtistTable.about] = artist.biography!!
                 }
-                entityChangeRecorder.recordChanges(before)
+                entityEvents.recordChanges(before)
             }
         }
 
@@ -1149,7 +1149,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                         ArtistTable.update({ ArtistTable.id eq id }) {
                             it[ArtistTable.image] = EntityID(imageId, ImageTable)
                         }
-                        entityChangeRecorder.recordChanges(before)
+                        entityEvents.recordChanges(before)
                     }
                 }
             }

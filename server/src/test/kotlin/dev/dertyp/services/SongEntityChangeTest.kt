@@ -423,7 +423,7 @@ class SongEntityChangeTest : EntityChangeLibraryTest() {
         val before = db { entityStates(EntityType.SONG, listOf(current.id)) }
         db {
             SongTable.update({ SongTable.id eq current.id }) { it[fileSize] = 2 }
-            getKoin().get<EntityChangeRecorder>().recordChanges(before)
+            getKoin().get<EntityEventPublisher>().recordChanges(before)
         }
         assertEquals(
             setOf(updated(EntityType.SONG, current.id), members(EntityType.ALBUM, album)),

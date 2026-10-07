@@ -4,10 +4,10 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.*
 import dev.dertyp.db.*
-import dev.dertyp.plugins.HookBus
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -41,8 +41,7 @@ class UserPlaylistServiceTest : KoinTest {
                 single<IMusicBrainzService> { mbService }
                 single { mbService }
                 single { songService }
-                single<HookBus> { HookService() }
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
             })
         }
 

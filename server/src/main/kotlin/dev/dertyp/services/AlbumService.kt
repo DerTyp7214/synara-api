@@ -107,7 +107,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
     private val libraryMergeService by inject<LibraryMergeService>()
     private val linkResolverService by inject<LinkResolverService>()
     private val libraryFileDeleter by inject<LibraryFileDeleter>()
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
+    private val versionGroupTrigger by inject<VersionGroupTrigger>()
     private val redisSearchService by inject<RedisSearchService>()
     val artistGroupAlias = ArtistTable.alias("artistGroup")
     val artistMemberAlias = ArtistTable.alias("artistMember")
@@ -321,8 +322,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                         this[AlbumArtistTable.joinPhrase] = credit.joinPhrase
                     }
                 }
-                entityChangeRecorder.recordChanges(artistsBefore)
-                entityChangeRecorder.recordChanges(before)
+                entityEvents.recordChanges(artistsBefore)
+                entityEvents.recordChanges(before)
             }
 
             syncSongsWithMusicBrainz(id, mbTracks)
@@ -338,7 +339,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                         this[AlbumGenreTable.albumId] = id
                         this[AlbumGenreTable.genreId] = genreId
                     }
-                    entityChangeRecorder.recordChanges(before)
+                    entityEvents.recordChanges(before)
                 }
             }
         }
@@ -362,7 +363,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 AlbumTable.update({ AlbumTable.id eq albumId }) {
                     it[barcode] = mbRelease.barcode?.take(32)
                 }
-                entityChangeRecorder.recordChanges(before)
+                entityEvents.recordChanges(before)
             }
         }
 
@@ -380,7 +381,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 AlbumTable.update({ AlbumTable.id eq albumId }) {
                     it[songCount] = trackCount
                 }
-                entityChangeRecorder.recordChanges(before)
+                entityEvents.recordChanges(before)
             }
         }
 
@@ -466,7 +467,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 }
             }
         }
-        entityChangeRecorder.recordChanges(before)
+        entityEvents.recordChanges(before)
     }
 
     suspend fun updateMusicBrainzLastCheck(id: UUID) = dbQuery {
@@ -513,21 +514,14 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     it[barcode] = mbRelease.barcode?.take(32)
                 }
             }
-            entityChangeRecorder.recordChanges(before)
+            entityEvents.recordChanges(before)
 
             val mbReleaseDate = parsePartialDate(mbRelease?.date)
             if (mbReleaseDate != null) fillUnknownReleaseDatesTx(mapOf(id to mbReleaseDate))
+            if (musicBrainzId != null && triggerMerge) entityEvents.albumsLinkedToMusicBrainz(listOf(id))
         }
 
-        if (musicBrainzId != null && triggerMerge) {
-            scope.launch {
-                libraryMergeService.mergeDuplicateAlbums()
-            }
-        }
-
-        scope.launch {
-            rebuildVersionGroups()
-        }
+        versionGroupTrigger.requestRebuild()
 
         return byId(id, userId)
     }
@@ -554,7 +548,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 }
             }
         }
-        entityChangeRecorder.recordChanges(before)
+        entityEvents.recordChanges(before)
     }
 
     fun fillUnknownReleaseDatesFromSongsTx(albumIds: Collection<UUID>) {
@@ -699,7 +693,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             it[AlbumProviderTable.type] = type
             it[AlbumProviderTable.rawUrl] = url
         }
-        if (!unchanged) entityChangeRecorder.updated(EntityType.ALBUM, listOf(albumId))
+        if (!unchanged) entityEvents.updated(EntityType.ALBUM, listOf(albumId))
     }
 
     suspend fun enrichProviders(id: UUID, priority: HttpClientPriority = HttpClientPriority.NORMAL) {
@@ -767,7 +761,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             AlbumTable.update({ AlbumTable.id eq id }) {
                 it[lastProviderEnrichment] = Clock.System.now().toEpochMilliseconds()
             }
-            entityChangeRecorder.recordChanges(before)
+            entityEvents.recordChanges(before)
         }
     }
 
@@ -1072,7 +1066,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 val groupIds = AlbumVersionGroupTable.batchInsert(chunk) { }.map { it[AlbumVersionGroupTable.id] }
                 chunk.zip(groupIds).forEach { (albumIds, groupId) -> moveToVersionGroup(albumIds, groupId) }
                 val albumIds = chunk.flatten()
-                entityChangeRecorder.updated(
+                entityEvents.updated(
                     EntityType.ALBUM,
                     albumIds + editionsOfGroups(albumIds.map { current[it] })
                 )
@@ -1085,7 +1079,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     moveToVersionGroup(albumIds, EntityID(groupId, AlbumVersionGroupTable))
                 }
                 val albumIds = chunk.flatMap { it.value }
-                entityChangeRecorder.updated(
+                entityEvents.updated(
                     EntityType.ALBUM,
                     albumIds + editionsOfGroups(chunk.map { it.key } + albumIds.map { current[it] })
                 )
@@ -1400,11 +1394,6 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     .map { it[SongTable.id].value }
             }
             libraryFileDeleter.deleteSongRows(songIds).deletedAlbumIds.count { it in requested }
-        }
-        if (deletedAlbums > 0) {
-            scope.launch {
-                rebuildVersionGroups()
-            }
         }
         return deletedAlbums == requested.size
     }
@@ -1812,7 +1801,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                         it[barcode] = inputBarcode
                     }
                 }
-                entityChangeRecorder.updated(EntityType.ALBUM, barcodesToFill.keys)
+                entityEvents.updated(EntityType.ALBUM, barcodesToFill.keys)
             }
         }
 
@@ -1897,7 +1886,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     this[AlbumTable.cover] = imageMap[album.coverHash]
                     this[AlbumTable.originalId] = album.originalId
                     this[AlbumTable.barcode] = album.barcode
-                }.also { rows -> entityChangeRecorder.created(EntityType.ALBUM, rows.map { it[AlbumTable.id].value }) }
+                }.also { rows -> entityEvents.created(EntityType.ALBUM, rows.map { it[AlbumTable.id].value }) }
             }
         } else {
             emptyList()
@@ -1910,7 +1899,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             if (taggedRows.isNotEmpty()) {
                 dbQuery {
                     syncAlbumTitleTags(taggedRows)
-                    entityChangeRecorder.updated(EntityType.ALBUM, taggedRows.map { it.first })
+                    entityEvents.updated(EntityType.ALBUM, taggedRows.map { it.first })
                 }
             }
 
@@ -1954,7 +1943,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                         this[AlbumProviderTable.type] = meta.third.second
                         this[AlbumProviderTable.rawUrl] = originalId
                     }
-                    entityChangeRecorder.updated(EntityType.ALBUM, providerEntries.map { it.first.first })
+                    entityEvents.updated(EntityType.ALBUM, providerEntries.map { it.first.first })
                 }
             }
         }
@@ -1989,7 +1978,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     this[AlbumArtistTable.position] = index
                 }
                 applyCachedAlbumCreditOrder(newAlbumArtistLinks.map { it.first })
-                entityChangeRecorder.updated(
+                entityEvents.updated(
                     EntityType.ALBUM,
                     newAlbumArtistLinks.map { it.first },
                     containersChanged = true
@@ -2014,12 +2003,6 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             val key = getIdentityKey(album.originalId, album.name, album.tags, album.artists, album.releaseDate)
             inputAlbum to finalCombinedIdMap[key]
         }.filterValueNotNull()
-
-        if (newRows.isNotEmpty()) {
-            scope.launch {
-                rebuildVersionGroups()
-            }
-        }
 
         val insertedAlbums = newAlbumsToInsert.toSet()
         val newlyCreated = inputAlbums.zip(albums).filter { it.second in insertedAlbums }.map { it.first }.toSet()
@@ -2048,7 +2031,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
 
             onProgress(0.0, "Found ${emptyAlbums.size} empty albums")
 
-            entityChangeRecorder.deleting(EntityType.ALBUM, emptyAlbums)
+            entityEvents.deleting(EntityType.ALBUM, emptyAlbums)
 
             val chunks = emptyAlbums.chunked(5000)
             chunks.forEachIndexed { index, batch ->
@@ -2062,16 +2045,9 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 AlbumArtistTable.deleteWhere { AlbumArtistTable.albumId inList batch }
             }
 
-            libraryFileDeleter.removeFromSearchIndex(SearchIndexEntityType.ALBUM, emptyAlbums)
-
             onProgress(100.0, "Deleted ${emptyAlbums.size} albums")
             logger.info("Deleted ${emptyAlbums.size} empty albums")
             emptyAlbums.size
-        }
-        if (deleted > 0) {
-            scope.launch {
-                rebuildVersionGroups()
-            }
         }
         return deleted
     }
@@ -2178,22 +2154,14 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 this[AlbumArtistTable.position] = index
                 this[AlbumArtistTable.joinPhrase] = artist.joinPhrase
             }
-            entityChangeRecorder.recordChanges(artistsBefore)
-            entityChangeRecorder.recordChanges(before)
+            entityEvents.recordChanges(artistsBefore)
+            entityEvents.recordChanges(before)
         }
 
         if (triggerSync && album.musicBrainzId != null && album.musicBrainzId != currentMbId) {
             syncAlbumSongsWithMusicBrainz(album.id, album.musicBrainzId!!)
 
-            if (triggerMerge) {
-                scope.launch {
-                    libraryMergeService.mergeDuplicateAlbums()
-                }
-            }
-        }
-
-        scope.launch {
-            rebuildVersionGroups()
+            if (triggerMerge) entityEvents.albumsLinkedToMusicBrainz(listOf(album.id))
         }
     }
 }

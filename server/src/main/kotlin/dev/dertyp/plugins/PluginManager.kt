@@ -41,6 +41,7 @@ class PluginManager(
     private val intakeService by inject<IntakeService>()
     private val jobService by inject<JobService>()
     private val credentialsFactory by inject<PluginCredentialsFactory>()
+    private val hookService by inject<HookService>()
     private val pluginsDir = File("plugins").apply { mkdirs() }
     private val loadedPlugins = mutableListOf<ISynaraPlugin>()
     private val importers = mutableMapOf<String, IImporter>()
@@ -50,7 +51,9 @@ class PluginManager(
     var defaultImporterId: String = "tiddl"
 
     companion object {
-        const val CURRENT_API_VERSION = 3
+        const val CURRENT_API_VERSION = 4
+        const val HOOK_GROUPS_API_VERSION = 4
+        val HOOK_GROUPS_BEFORE_DECLARATION = setOf(HookGroup.PLAYLISTS, HookGroup.PLAYBACK)
     }
 
     override suspend fun startService() {
@@ -88,6 +91,11 @@ class PluginManager(
                 return
             }
 
+            val hookGroups = if (plugin.apiVersion < HOOK_GROUPS_API_VERSION) {
+                plugin.hookGroups + HOOK_GROUPS_BEFORE_DECLARATION
+            } else {
+                plugin.hookGroups
+            }
             val pluginContext = object : PluginContext by baseContext {
                 override val storageService = baseContext.storageService.forImporter(ImportBackend(plugin.id))
                 override val apiKeyScopes = scopeRegistry.forPlugin(plugin.id)
@@ -97,6 +105,7 @@ class PluginManager(
                 override val intake = intakeService.forSource(plugin.id)
                 override val jobs = jobService.forSource(plugin.id)
                 override val credentials = credentialsFactory.forPlugin(plugin.id)
+                override val hooks = hookService.forPlugin(plugin.id, hookGroups)
             }
 
             plugin.init(pluginContext)
@@ -127,6 +136,7 @@ class PluginManager(
             }
             logger.info("Loaded plugin: ${plugin.name} (${plugin.id})")
         } catch (e: Exception) {
+            hookService.removePlugin(plugin.id)
             logger.error("Failed to load plugin: ${plugin.name}", e)
         }
     }
@@ -144,7 +154,7 @@ class PluginManager(
         override val metadataService: IMetadataService by inject()
         override val lrcLibService: ILrcLibService by inject()
         override val scheduleService: IScheduleService by inject()
-        override val hooks: HookBus by inject()
+        override val hooks: HookBus by lazy { hookService.forPlugin(UiRegistry.SERVER_SOURCE, emptySet()) }
         override val apiKeyScopes get() = scopeRegistry.forPlugin("plugin")
         override val ui get() = uiRegistry.forSource(UiRegistry.SERVER_SOURCE)
         override val settings get() = pluginSettingsService.forPlugin(UiRegistry.SERVER_SOURCE)

@@ -44,9 +44,10 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
-import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Instant
 import java.util.UUID
 
@@ -1399,13 +1400,12 @@ class PodcastServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getTranscript reads a sidecar file from disk`(dialect: DbDialect) = runBlocking {
+    fun `getTranscript reads a sidecar file from disk`(dialect: DbDialect, @TempDir dir: Path) = runBlocking {
         setup(dialect)
         val userId = transaction(database) { insertUser() }
         val showId = transaction(database) { insertFeedShow("https://feed.example/sidecar") }
         val episodeId = transaction(database) { insertEpisode(showId, "sc1", 1000L) }
 
-        val dir = Files.createTempDirectory("podcast-sidecar")
         val file = dir.resolve("sidecar.vtt").toFile()
         file.writeText("WEBVTT\n\n00:00.000 --> 00:01.000\nHello")
 

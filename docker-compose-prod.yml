@@ -43,6 +43,7 @@ services:
     environment:
       POSTGRES_DB: synara-api-db
       POSTGRES_HOST_AUTH_METHOD: trust
+    command: -N 1000
     ports:
       - "5432:5432"
     healthcheck:

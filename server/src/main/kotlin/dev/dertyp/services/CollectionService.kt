@@ -31,7 +31,7 @@ class CollectionService : Service() {
     private val albumService by inject<AlbumService>()
     private val userPlaylistService by inject<UserPlaylistService>()
     private val hooks by inject<HookBus>()
-    private val entityChangeRecorder by inject<EntityChangeRecorder>()
+    private val entityEvents by inject<EntityEventPublisher>()
 
     companion object {
         fun mapCollection(resultRow: ResultRow): MediaCollection = MediaCollection(
@@ -78,7 +78,7 @@ class CollectionService : Service() {
                 it[creator] = EntityID(userId, UserTable)
                 it[imageId] = collection.imageId?.let { img -> EntityID(img, ImageTable) }
                 it[imageSource] = collection.imageId?.let { ImageSource.USER }
-            }.value.also { entityChangeRecorder.created(EntityType.COLLECTION, listOf(it)) }
+            }.value.also { entityEvents.created(EntityType.COLLECTION, listOf(it)) }
         }
         if (collection.imageId == null) hooks.emit(HookEvent.CollectionChanged(id))
         return id
@@ -110,7 +110,7 @@ class CollectionService : Service() {
                     it[coverSeed] = null
                 }
             } == 1
-            entityChangeRecorder.recordChanges(before)
+            entityEvents.recordChanges(before)
             updated
         }
         if (updated && imageCleared) hooks.emit(HookEvent.CollectionChanged(id))
@@ -128,7 +128,7 @@ class CollectionService : Service() {
                     it[coverSeed] = null
                 }
             } == 1
-            entityChangeRecorder.recordChanges(before)
+            entityEvents.recordChanges(before)
             updated
         }
         if (updated && imageId == null) hooks.emit(HookEvent.CollectionChanged(id))
@@ -166,7 +166,7 @@ class CollectionService : Service() {
                 }.insertedCount > 0
             }
         }
-        if (added) entityChangeRecorder.membersChanged(EntityType.COLLECTION, listOf(id))
+        if (added) entityEvents.membersChanged(EntityType.COLLECTION, listOf(id))
         added
     }
 
@@ -185,7 +185,7 @@ class CollectionService : Service() {
                 CollectionItemType.PLAYLIST ->
                     CollectionPlaylistTable.deleteWhere { (collectionId eq id) and (playlistId eq itemId) } > 0
             }
-            if (removed) entityChangeRecorder.membersChanged(EntityType.COLLECTION, listOf(id))
+            if (removed) entityEvents.membersChanged(EntityType.COLLECTION, listOf(id))
             removed
         }
         if (removed) hooks.emit(HookEvent.CollectionChanged(id))
@@ -194,7 +194,7 @@ class CollectionService : Service() {
 
     suspend fun delete(id: UUID): Boolean = dbQuery {
         if (CollectionTable.select(CollectionTable.id).where { CollectionTable.id eq id }.empty()) return@dbQuery false
-        entityChangeRecorder.deleting(EntityType.COLLECTION, listOf(id))
+        entityEvents.deleting(EntityType.COLLECTION, listOf(id))
         CollectionTable.deleteWhere { CollectionTable.id eq id } == 1
     }
 

@@ -1,36 +1,12 @@
 # Every write statement on a table whose rows clients read through the entity change API (EntityChangeCoverageTest).
 # file | enclosing function | table | statement | number of such statements in the function | verdict
-# Verdicts: RECORDED (the change reaches EntityChangeRecorder in the same transaction), MIGRATION (a migration that ran
+# Verdicts: RECORDED (the change is announced through EntityEventPublisher in the same transaction), MIGRATION (a migration that ran
 # before tracking began or that restarts tracking), BOOKKEEPING: <the columns written and why no client reads them>.
 # Entries are sorted.
 server/src/main/kotlin/dev/dertyp/db/AlbumTitleTagTable.kt | syncAlbumTitleTags | AlbumTitleTagTable | batchInsert | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/db/AlbumTitleTagTable.kt | syncAlbumTitleTags | AlbumTitleTagTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/db/SongTitleTagTable.kt | syncSongTitleTags | SongTitleTagTable | batchInsert | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/db/SongTitleTagTable.kt | syncSongTitleTags | SongTitleTagTable | deleteWhere | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/migrations/custom/BackfillAlbumTitleTags.kt | migrate | AlbumTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/BackfillSongAudioInfo.kt | migrate | SongTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/BackfillSongAudioInfo.kt | migrate | SongVariantTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/BackfillSongFormat.kt | migrate | SongTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/BackfillSongTitleTags.kt | splitSongTitleTags | SongTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/FetchMissingRecordingIsrcs.kt | migrate | SongTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/FillAlbumBarcodes.kt | writeBarcodes | AlbumTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/FillAlbumReleaseDates.kt | migrate | AlbumTable | update | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/migrations/custom/FillIsrcAndBarcode.kt | migrate | AlbumTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/FillIsrcAndBarcode.kt | migrate | SongTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/FulfillUnknownProviders.kt | processAlbums | AlbumProviderTable | deleteWhere | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/FulfillUnknownProviders.kt | processAlbums | AlbumProviderTable | upsert | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/FulfillUnknownProviders.kt | processSongs | SongProviderTable | deleteWhere | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/FulfillUnknownProviders.kt | processSongs | SongProviderTable | upsert | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/ImportAlbumAnimatedCovers.kt | migrate | AlbumTable | update | 2 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/ImportAlbumAnimatedCovers.kt | migrate | SongTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/NormalizeVariantBitRate.kt | migrate | SongVariantTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/PopulateAlbumProviderTable.kt | migrate | AlbumProviderTable | upsert | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/PopulateCreditedArtistNames.kt | migrate | AlbumArtistTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/PopulateCreditedArtistNames.kt | migrate | SongArtistTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/PopulateSongProviderTable.kt | migrate | SongProviderTable | upsert | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/PrefixLegacyTidalIds.kt | migrate | AlbumTable | update | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/ResetAppleArtistLinks.kt | migrate | ArtistProviderTable | deleteWhere | 1 | MIGRATION
-server/src/main/kotlin/dev/dertyp/migrations/custom/UpdateAlbumSongCounts.kt | migrate | AlbumTable | update | 1 | MIGRATION
 server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | addProviderUrl | AlbumProviderTable | upsert | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | deleteEmptyAlbums | AlbumArtistTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/AlbumService.kt | deleteEmptyAlbums | AlbumTable | deleteWhere | 1 | RECORDED
@@ -136,12 +112,6 @@ server/src/main/kotlin/dev/dertyp/services/ImageService.kt | createBatch | Image
 server/src/main/kotlin/dev/dertyp/services/ImageService.kt | deleteImagesByIds | ImageTable | deleteWhere | 1 | BOOKKEEPING: only called for images no row references, so no cover is set to null
 server/src/main/kotlin/dev/dertyp/services/ImageService.kt | markAnalysisAttempt | ImageTable | update | 1 | BOOKKEEPING: lastAnalysisAttempt / analysisUnrecoverable only
 server/src/main/kotlin/dev/dertyp/services/ImageService.kt | moveImages | ImageTable | update | 1 | BOOKKEEPING: ImageTable.path only, not exposed
-server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | AlbumTable | update | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | ArtistTable | update | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | CollectionTable | update | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | PlaylistTable | update | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | SongTable | update | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/ImageService.kt | purgeNonImageFiles | UserPlaylistTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/ImageService.kt | upsertImage | ImageTable | upsert | 1 | BOOKKEEPING: image row (path, hash, origin), no song, album or artist field changes
 server/src/main/kotlin/dev/dertyp/services/LibraryFileDeleter.kt | deleteSongRows | AlbumTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/LibraryFileDeleter.kt | deleteSongRows | SongTable | deleteWhere | 1 | RECORDED
@@ -175,13 +145,6 @@ server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongRef
 server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | mergeSongReferences | UserSongTable | update | 2 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | performSongMerge | SongTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | performSongMerge | SongTable | update | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumArtistTable | batchInsert | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumGenreTable | batchInsert | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumMusicBrainzTable | insert | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumTable | insert | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumTable | update | 3 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | AlbumVersionGroupTable | insertAndGetId | 1 | RECORDED
-server/src/main/kotlin/dev/dertyp/services/LibraryMergeService.kt | splitSongsToNewAlbum | SongTable | update | 2 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/LyricsService.kt | transcribeLyrics | SyncedLyricsTable | upsert | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchAlbumGenresWithMbId | AlbumGenreTable | batchInsert | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/MetadataFetchingService.kt | fetchAlbumGenresWithMbId | AlbumGenreTable | deleteWhere | 1 | RECORDED

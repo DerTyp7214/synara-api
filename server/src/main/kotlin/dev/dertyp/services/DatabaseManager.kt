@@ -5,6 +5,8 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.db.Dialect
+import dev.dertyp.db.MigrationBase
+import dev.dertyp.db.MigrationBaseCheck
 import dev.dertyp.db.UserTable
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -15,6 +17,7 @@ import java.io.Closeable
 
 class DatabaseManager(private val config: ServerConfig) : Closeable {
     private var mainDataSource: HikariDataSource? = null
+    private var currentSchemaVersion: String? = null
 
     fun init() {
         val database = setupDatabase()
@@ -78,14 +81,22 @@ class DatabaseManager(private val config: ServerConfig) : Closeable {
 
         val flyway = Flyway.configure()
             .dataSource(dataSource)
-            .locations("classpath:db/migrations", "classpath:dev/dertyp/db/migrations")
-            .baselineOnMigrate(true)
+            .locations(MigrationBase.location(Dialect.ofDriver(config.database.driverClassName)))
+            .ignoreMigrationPatterns("versioned:missing", "*:future")
+            .placeholderReplacement(false)
+            .baselineOnMigrate(false)
             .load()
 
+        val database = Database.connect(dataSource)
+        MigrationBaseCheck(flyway, database).refusal()?.let { throw it }
         flyway.migrate()
+        currentSchemaVersion = flyway.info().current()?.version?.version
 
-        return Database.connect(dataSource)
+        return database
     }
+
+    fun schemaVersion(): String =
+        checkNotNull(currentSchemaVersion) { "The database has no schema version because it was not initialised" }
 
     override fun close() {
         mainDataSource?.close()

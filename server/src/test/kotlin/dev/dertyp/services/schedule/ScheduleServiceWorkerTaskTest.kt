@@ -4,6 +4,8 @@ import dev.dertyp.core.ApplicationScope
 import dev.dertyp.data.TaskKeys
 import dev.dertyp.data.TaskStatus
 import dev.dertyp.plugins.TaskCompletionTrigger
+import dev.dertyp.testing.RecordedEntityEvents
+import dev.dertyp.testing.entityEventsModule
 import dev.dertyp.testing.relaxedTaskLogService
 import io.mockk.coVerify
 import io.mockk.every
@@ -40,6 +42,7 @@ class ScheduleServiceWorkerTaskTest : KoinTest {
     }
 
     private val logService = relaxedTaskLogService()
+    private val events = RecordedEntityEvents()
 
     @BeforeEach
     fun setup() {
@@ -48,6 +51,7 @@ class ScheduleServiceWorkerTaskTest : KoinTest {
 
         startKoin {
             modules(module {
+                includes(entityEventsModule(events))
                 single { configService }
                 single { logService }
                 single { MusicBrainzWorker() }
@@ -61,6 +65,7 @@ class ScheduleServiceWorkerTaskTest : KoinTest {
     fun tearDown() = runBlocking {
         ApplicationScope.scope.coroutineContext.cancelChildren()
         yield()
+        events.stop()
         stopKoin()
     }
 
@@ -139,6 +144,7 @@ class ScheduleServiceWorkerTaskTest : KoinTest {
     @Test
     fun `post index tasks run the managed tasks and notify their dependents`() = runBlocking {
         val service = ScheduleService()
+        service.subscribe(events.hooks)
         val musicBrainzRuns = AtomicInteger(0)
         val imageRuns = CompletableDeferred<Unit>()
         val audioStartRuns = CompletableDeferred<Unit>()

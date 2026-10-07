@@ -73,14 +73,14 @@ class GamdlIndexerTest {
     }
 
     @Test
-    fun `canHandle accepts flac under the gamdl tracks path and rejects others`() {
+    fun `canHandle accepts flac under the gamdl tracks path and rejects others`(@TempDir elsewhere: Path) {
         val flac = flacAt("123/456.flac")
         assertTrue(indexer.canHandle(flac))
 
         val mp3 = flacAt("123/x.mp3")
         assertFalse(indexer.canHandle(mp3)) // mp3 is not a lossless library format
 
-        val outside = Files.createTempFile("outside", ".flac")
+        val outside = Files.createFile(elsewhere.resolve("outside.flac"))
         assertFalse(indexer.canHandle(outside)) // not under the gamdl tracks path
     }
 

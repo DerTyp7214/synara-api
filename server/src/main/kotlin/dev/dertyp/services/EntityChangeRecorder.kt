@@ -40,7 +40,7 @@ import org.jetbrains.exposed.v1.jdbc.upsert
 import java.util.UUID
 import kotlin.time.Clock
 
-class EntityChangeRecorder {
+class EntityChangeRecorder : EntityWriteSubscriber, HookSubscriber {
     private data class Scope(val type: EntityType, val id: UUID)
 
     private class CommitStamp : StatementInterceptor {
@@ -75,7 +75,11 @@ class EntityChangeRecorder {
             mapOf(COMMIT_STAMP to this)
     }
 
-    fun created(type: EntityType, ids: Collection<UUID>) {
+    override fun subscribe(hooks: HookService) {
+        hooks.inTransaction(this)
+    }
+
+    override fun created(type: EntityType, ids: Collection<UUID>) {
         val entities = ids.toSet()
         if (entities.isEmpty()) return
         val now = Clock.System.now().toEpochMilliseconds()
@@ -84,7 +88,7 @@ class EntityChangeRecorder {
         markMembers(containersOf(scopes), now)
     }
 
-    fun updated(type: EntityType, ids: Collection<UUID>, containersChanged: Boolean = false) {
+    override fun updated(type: EntityType, ids: Collection<UUID>, containersChanged: Boolean) {
         val entities = ids.toSet()
         if (entities.isEmpty()) return
         val now = Clock.System.now().toEpochMilliseconds()
@@ -97,7 +101,7 @@ class EntityChangeRecorder {
         markMembers(containersOf(scopes), now)
     }
 
-    internal fun relinked(type: EntityType, ids: Collection<UUID>) {
+    override fun relinked(type: EntityType, ids: Collection<UUID>) {
         val entities = ids.toSet()
         if (entities.isEmpty()) return
         upsertLibrary(
@@ -109,13 +113,13 @@ class EntityChangeRecorder {
         )
     }
 
-    fun leavingContainers(type: EntityType, ids: Collection<UUID>) {
+    override fun leavingContainers(type: EntityType, ids: Collection<UUID>) {
         val entities = ids.toSet()
         if (entities.isEmpty()) return
         markMembers(containersOf(scopesOf(type, entities)), Clock.System.now().toEpochMilliseconds())
     }
 
-    fun membersChanged(type: EntityType, ids: Collection<UUID>) {
+    override fun membersChanged(type: EntityType, ids: Collection<UUID>) {
         val entities = ids.toSet()
         if (entities.isEmpty()) return
         upsertLibrary(
@@ -127,7 +131,7 @@ class EntityChangeRecorder {
         )
     }
 
-    fun deleting(type: EntityType, ids: Collection<UUID>) {
+    override fun deleting(type: EntityType, ids: Collection<UUID>) {
         val entities = ids.toSet()
         if (entities.isEmpty()) return
         val now = Clock.System.now().toEpochMilliseconds()
@@ -142,7 +146,7 @@ class EntityChangeRecorder {
         recordDeleted(type, entities, now)
     }
 
-    fun merging(type: EntityType, keptId: UUID, removedIds: Collection<UUID>) {
+    override fun merging(type: EntityType, keptId: UUID, removedIds: Collection<UUID>) {
         val removed = removedIds.toSet() - keptId
         if (removed.isEmpty()) return
         val now = Clock.System.now().toEpochMilliseconds()
@@ -165,10 +169,10 @@ class EntityChangeRecorder {
         markMembers(holdersOf(type, kept), now)
     }
 
-    fun likesChanged(userId: UUID, type: EntityType, ids: Collection<UUID>) =
+    override fun likesChanged(userId: UUID, type: EntityType, ids: Collection<UUID>) =
         upsertUser(userId, type, ids.toSet(), EntityChangeAspect.LIKE)
 
-    fun timecodesChanged(userId: UUID, songIds: Collection<UUID>) =
+    override fun timecodesChanged(userId: UUID, songIds: Collection<UUID>) =
         upsertUser(userId, EntityType.SONG, songIds.toSet(), EntityChangeAspect.TIMECODES)
 
     fun restartTracking() {

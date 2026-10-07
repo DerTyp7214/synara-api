@@ -5,6 +5,8 @@ import com.github.luben.zstd.ZstdOutputStream
 import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.data.User
+import dev.dertyp.db.BackupSchemaCheck
+import dev.dertyp.db.BackupSchemaInfo
 import dev.dertyp.db.FlacInfoTable
 import dev.dertyp.db.PcmInfoTable
 import dev.dertyp.db.SongMusicBrainzTable
@@ -93,6 +95,7 @@ class RpcBackupService(
 @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 class BackupService(
     private val dbManagementService: DbManagementService,
+    private val databaseManager: DatabaseManager,
     private val storageService: StorageService,
     private val pluginManager: PluginManager,
     private val config: ServerConfig
@@ -101,6 +104,10 @@ class BackupService(
 
     private val blobsDir = backupDir.resolve("blobs")
     private val maxBackups = 10
+
+    private companion object {
+        const val SCHEMA_VERSION_ENTRY = "schema.version"
+    }
 
     private val imagePath = Paths.get(storageService.imagesPath).toFile()
 
@@ -151,6 +158,10 @@ class BackupService(
         try {
             logger.info("Writing backup to $backupFile")
             val imageIndex = ZipOutputStream(backupFile.outputStream()).use { zip ->
+                zip.putNextEntry(ZipEntry(SCHEMA_VERSION_ENTRY))
+                zip.write(databaseManager.schemaVersion().toByteArray())
+                zip.closeEntry()
+
                 zip.putNextEntry(ZipEntry("database.cbor.zst"))
                 dbManagementService.exportData(zip)
                 zip.closeEntry()
@@ -337,6 +348,12 @@ class BackupService(
                 var entry = zip.nextEntry
                 while (entry != null) {
                     when (entry.name) {
+                        SCHEMA_VERSION_ENTRY -> {
+                            val version = zip.readBytes().decodeToString()
+                            BackupSchemaCheck.refusal(BackupSchemaInfo(version, emptySet()), databaseManager.schemaVersion())
+                                ?.let { throw it }
+                        }
+
                         "database.cbor.zst" -> {
                             logger.info("Restoring database from ${backupFile.name}")
                             dbManagementService.importData(zip)

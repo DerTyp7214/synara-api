@@ -6,7 +6,9 @@ import dev.dertyp.db.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.testing.RecordedEntityEvents
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -33,6 +35,7 @@ class AlbumServiceDeletionTest : KoinTest {
     private val storageService = mockk<StorageService>(relaxed = true)
     private val libraryMergeService = mockk<LibraryMergeService>(relaxed = true)
     private val redisSearchService = mockk<RedisSearchService>(relaxed = true)
+    private val events = RecordedEntityEvents().also { it.subscribe(SearchIndexRemover()) }
 
     @TempDir
     lateinit var tempDir: File
@@ -40,7 +43,7 @@ class AlbumServiceDeletionTest : KoinTest {
     fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule(events))
                 single { musicBrainzService }
                 single { MusicBrainzCacheService() }
                 single { storageService }
@@ -93,6 +96,7 @@ class AlbumServiceDeletionTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        runBlocking { events.stop() }
         runBlocking { service.stopService() }
         stopKoin()
         TestDatabase.cleanUp()
@@ -175,8 +179,8 @@ class AlbumServiceDeletionTest : KoinTest {
             assertFalse(variantFile.exists())
             assertFalse(albumDir.exists())
             verify { storageService.invalidate(StorageCategory.TOTAL) }
-            verify { redisSearchService.remove(SearchIndexEntityType.SONG, listOf(songId)) }
-            verify { redisSearchService.remove(SearchIndexEntityType.ALBUM, match { albumId in it }) }
+            verify(timeout = 5000) { redisSearchService.remove(SearchIndexEntityType.SONG, listOf(songId)) }
+            verify(timeout = 5000) { redisSearchService.remove(SearchIndexEntityType.ALBUM, match { albumId in it }) }
         }
 
     @ParameterizedTest
@@ -189,6 +193,7 @@ class AlbumServiceDeletionTest : KoinTest {
 
         assertTrue(service.deleteAlbums(listOf(albumId)))
         assertNull(service.byId(albumId))
+        verify(timeout = 5000) { redisSearchService.remove(SearchIndexEntityType.ALBUM, match { albumId in it }) }
     }
 
     @ParameterizedTest
@@ -198,7 +203,7 @@ class AlbumServiceDeletionTest : KoinTest {
         val emptyAlbum = insertAlbum("Empty")
 
         assertEquals(1, service.deleteEmptyAlbums())
-        verify { redisSearchService.remove(SearchIndexEntityType.ALBUM, listOf(emptyAlbum)) }
+        verify(timeout = 5000) { redisSearchService.remove(SearchIndexEntityType.ALBUM, listOf(emptyAlbum)) }
     }
 
     @ParameterizedTest

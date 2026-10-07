@@ -8,6 +8,7 @@ import dev.dertyp.db.*
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.audio.ValencePostProcessor
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.spyk
@@ -36,7 +37,7 @@ class AudioAnalysisServiceTest {
     private fun setup(dialect: DbDialect) = runBlocking {
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
             })
         }
         TestDatabase.connect(dialect, "audio_analysis_test")

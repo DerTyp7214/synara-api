@@ -5,7 +5,6 @@ import dev.dertyp.data.EntityType
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserAlbumTable
 import dev.dertyp.db.UserTable
-import dev.dertyp.plugins.HookBus
 import dev.dertyp.services.release.AppleMusicReleaseService
 import dev.dertyp.services.release.ProviderLinkService
 import dev.dertyp.services.subsonic.SubsonicQueryService
@@ -35,7 +34,6 @@ abstract class EntityChangeContentTest : EntityChangeLibraryTest() {
     protected fun setupContent(dialect: DbDialect) {
         setup(dialect)
         loadKoinModules(module {
-            single<HookBus> { HookService() }
             single { mockk<AppleMusicReleaseService>(relaxed = true) }
             single { mockk<ProviderLinkService>(relaxed = true) }
             single { UserPlaylistService() }

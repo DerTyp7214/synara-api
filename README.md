@@ -57,6 +57,16 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full developer workflow: 
 ./dev.sh
 ```
 
+## Updating from 0.0.1
+
+A server that is older than the final `0.0.1-dev` image cannot be updated straight to a newer version. Start it once with `ghcr.io/dertyp7214/synara:0.0.1-dev`, leave it running until its log shows `Finished custom migration FillAlbumReleaseDates`, then stop it and update to the new version. The database is not changed by this step beyond finishing the migrations of that version.
+
+If you start a newer version on a database that did not go through this step, the server does not start and logs a message beginning with `This database cannot be used by this server version`, which names the image and the log line to wait for. Nothing in the database is changed by the refused start.
+
+A database that went through this step gets the schema migrations after `1.109` on its first start with the new version. The log shows `Current version of schema "public": 1.109` (`"main"` on SQLite), one line `Migrating schema "public" to version ...` per migration, and on every later start `Schema "public" is up to date. No migration necessary.`
+
+Backups follow the same rule. A backup made by `0.0.1` or older is restored only if it was taken after the custom migrations finished. Otherwise the restore is refused with a message beginning with `This backup cannot be restored by this server version`, and nothing is changed. Restore that backup on `ghcr.io/dertyp7214/synara:0.0.1-dev` first, leave that server running until the log line above appears, take a new backup there and restore the new one. A backup from a newer server than the one restoring it is refused too, update the server first.
+
 ## Technical Details
 
 - **Transcoding**: Saves and streams as `Opus` to balance quality and bandwidth.

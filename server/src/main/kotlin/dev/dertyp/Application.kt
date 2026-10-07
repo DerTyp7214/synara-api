@@ -10,6 +10,8 @@ import dev.dertyp.core.coreModule
 import dev.dertyp.core.db.SqliteForeignKeyCheck
 import dev.dertyp.core.process.killAll
 import dev.dertyp.data.RemoteServerConfig
+import dev.dertyp.db.BackupSchemaException
+import dev.dertyp.db.DatabaseNotAtBaseException
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.mcp.mcpModule
@@ -57,7 +59,6 @@ import org.jaudiotagger.tag.TagOptionSingleton
 import org.jaudiotagger.tag.reference.ID3V2Version
 import org.slf4j.bridge.SLF4JBridgeHandler
 import java.io.File
-import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.seconds
 
 fun main(args: Array<String>) {
@@ -105,12 +106,18 @@ fun Application.module() {
         slf4jLogger()
         modules(mainModule(application, environment))
     }
+    configureHooks()
 
     ServiceLifecycle.register(get<DatabaseManager>())
     ServiceLifecycle.start(get<HttpClientFactory>())
     ServiceLifecycle.start(get<HttpClientQueueService>())
 
-    get<DatabaseManager>().init()
+    try {
+        get<DatabaseManager>().init()
+    } catch (refusal: DatabaseNotAtBaseException) {
+        log.error(refusal.message)
+        Runtime.getRuntime().halt(1)
+    }
     configureCache()
 
     val backupService = get<BackupService>()
@@ -120,54 +127,58 @@ fun Application.module() {
     val setupFromMirrorUrl = setup.fromMirror.url
 
     if (!setupFromBackup.isNullOrBlank() || !setupFromMirrorUrl.isNullOrBlank()) {
-        transaction {
-            val songCount = SongTable.selectAll().count()
-            val userCount = UserTable.selectAll().count()
-            if ((songCount == 0L) && (userCount <= 1L)) {
-                if (!setupFromBackup.isNullOrBlank()) {
-                    log.info("Database is empty. Setting up from backup: $setupFromBackup")
-                    val backupFile = File(setupFromBackup)
-                    if (backupFile.exists()) {
+        val databaseIsEmpty = transaction {
+            SongTable.selectAll().count() == 0L && UserTable.selectAll().count() <= 1L
+        }
+        if (databaseIsEmpty) {
+            if (!setupFromBackup.isNullOrBlank()) {
+                log.info("Database is empty. Setting up from backup: $setupFromBackup")
+                val backupFile = File(setupFromBackup)
+                if (backupFile.exists()) {
+                    try {
                         runBlocking {
                             backupService.loadBackup(backupFile)
                         }
-                        log.info("Backup restored successfully. Restarting server...")
-                        exitProcess(0)
-                    } else {
-                        log.error("Backup file not found: $setupFromBackup")
+                    } catch (refusal: BackupSchemaException) {
+                        log.error(refusal.message)
+                        Runtime.getRuntime().halt(1)
                     }
-                } else if (!setupFromMirrorUrl.isNullOrBlank()) {
-                    val setupFromMirrorUser = setup.fromMirror.username
-                    val setupFromMirrorPass = setup.fromMirror.password
-                    val endpoint = setup.fromMirror.endpoint
+                    log.info("Backup restored successfully. Restarting server...")
+                    Runtime.getRuntime().halt(0)
+                } else {
+                    log.error("Backup file not found: $setupFromBackup")
+                }
+            } else if (!setupFromMirrorUrl.isNullOrBlank()) {
+                val setupFromMirrorUser = setup.fromMirror.username
+                val setupFromMirrorPass = setup.fromMirror.password
+                val endpoint = setup.fromMirror.endpoint
 
-                    if (setupFromMirrorUser != null && setupFromMirrorPass != null && endpoint != null) {
-                        log.info("Database is empty. Setting up from mirror: $setupFromMirrorUrl")
-                        val port = endpoint.specifiedPort.takeIf { it != DEFAULT_PORT } ?: 8080
-                        val secure = endpoint.protocol == URLProtocol.HTTPS
+                if (setupFromMirrorUser != null && setupFromMirrorPass != null && endpoint != null) {
+                    log.info("Database is empty. Setting up from mirror: $setupFromMirrorUrl")
+                    val port = endpoint.specifiedPort.takeIf { it != DEFAULT_PORT } ?: 8080
+                    val secure = endpoint.protocol == URLProtocol.HTTPS
 
-                        runBlocking {
-                            remoteMirrorService.startMirror(
-                                RemoteServerConfig(
-                                    host = endpoint.host,
-                                    port = port,
-                                    username = setupFromMirrorUser,
-                                    password = setupFromMirrorPass,
-                                    secure = secure,
-                                    isImport = true,
-                                    importUsers = true
-                                )
+                    runBlocking {
+                        remoteMirrorService.startMirror(
+                            RemoteServerConfig(
+                                host = endpoint.host,
+                                port = port,
+                                username = setupFromMirrorUser,
+                                password = setupFromMirrorPass,
+                                secure = secure,
+                                isImport = true,
+                                importUsers = true
                             )
+                        )
 
-                            while (remoteMirrorService.isMirroring) {
-                                delay(1.seconds)
-                            }
+                        while (remoteMirrorService.isMirroring) {
+                            delay(1.seconds)
                         }
-                        log.info("Mirror setup completed. Restarting server...")
-                        exitProcess(0)
-                    } else {
-                        log.error("Mirror setup requested but username or password missing")
                     }
+                    log.info("Mirror setup completed. Restarting server...")
+                    Runtime.getRuntime().halt(0)
+                } else {
+                    log.error("Mirror setup requested but username or password missing")
                 }
             }
         }

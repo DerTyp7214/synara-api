@@ -3,381 +3,439 @@ package dev.dertyp.migrations
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.config.ServerConfig
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.CollectionAlbumTable
-import dev.dertyp.db.CollectionArtistTable
-import dev.dertyp.db.CollectionPlaylistTable
-import dev.dertyp.db.CollectionSongTable
-import dev.dertyp.db.EntityChangeScopeTable
-import dev.dertyp.db.EntityChangeTable
-import dev.dertyp.db.PlaylistSongTable
-import dev.dertyp.db.UserEntityChangeTable
-import dev.dertyp.db.UserPlaylistSongTable
+import dev.dertyp.core.db.Dialect
+import dev.dertyp.core.db.SchemaTables
+import dev.dertyp.db.CustomMigrationTable
+import dev.dertyp.db.DatabaseNotAtBaseException
+import dev.dertyp.db.DatabaseNotAtBaseException.Reason
+import dev.dertyp.db.MigrationBase
+import dev.dertyp.db.SearchIndexQueueTable
 import dev.dertyp.services.DatabaseManager
-import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.MapApplicationConfig
-import io.mockk.every
-import io.mockk.mockk
+import org.flywaydb.core.Flyway
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.exists
+import org.jetbrains.exposed.v1.jdbc.insert
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
-import org.koin.dsl.module
-import org.koin.test.KoinTest
 import java.io.File
+import java.nio.file.Files
 import java.sql.Connection
 import java.sql.DriverManager
 import java.util.UUID
+import kotlin.test.assertNotNull
 
-class FlywayMigrationTest : KoinTest {
-    private var currentFile: File? = null
+class FlywayMigrationTest {
+    private val files = mutableListOf<File>()
+    private val managers = mutableListOf<DatabaseManager>()
+    private val directories = mutableListOf<File>()
+
+    private val steppingStoneImage = "ghcr.io/dertyp7214/synara:0.0.1-dev"
+    private val lastCustomMigration = "FillAlbumReleaseDates"
+    private val oldMigrations = (0..109).filter { it != 56 }
+    private val laterMigrations = MigrationFiles.versioned(MigrationFiles.resources, Dialect.SQLITE).map { it.version }
+    private val headHistory = listOf("1.109" to "SQL_BASELINE") + laterMigrations.map { "1.$it" to "SQL" }
+    private val futureMigration = (laterMigrations + MigrationFiles.baseVersion).max() + 1
+
+    private class Target(val driver: String, val url: String, val user: String, val password: String)
+
+    private data class Snapshot(
+        val tables: Set<String>,
+        val history: List<List<String?>>?,
+        val customMigrations: List<List<String?>>?,
+        val users: List<List<String?>>?,
+    )
 
     @AfterEach
     fun tearDown() {
-        stopKoin()
-        currentFile?.delete()
+        managers.forEach { it.close() }
+        directories.forEach { it.deleteRecursively() }
+        files.forEach { file ->
+            file.delete()
+            File(file.path + "-wal").delete()
+            File(file.path + "-shm").delete()
+        }
+        TestDatabase.cleanUp()
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `test all flyway migrations run successfully`(dialect: DbDialect) {
-        if (dialect == DbDialect.POSTGRES && TestDatabase.postgresContainer == null) {
-            println("Skipping PostgreSQL flyway migration test because Docker is not available.")
-            return
+    fun `an empty database gets the base with its migrations and a second start changes nothing`(dialect: DbDialect) {
+        val target = emptyDatabase(dialect) ?: return
+
+        manager(target, admin = true).init()
+
+        val first = snapshot(target)
+        val history = assertNotNull(first.history)
+        assertEquals(headHistory, history.map { it[1] to it[3] })
+        assertEquals(1, first.users?.size)
+        assertEquals(emptyList<List<String?>>(), first.customMigrations)
+
+        val missing = manager(target).tempConnection {
+            SchemaTables.all.filterNot { it.exists() }.toSet()
         }
+        val expectedMissing = if (dialect == DbDialect.SQLITE) setOf(SearchIndexQueueTable) else emptySet()
+        assertEquals(expectedMissing, missing)
 
-        val environment = mockk<ApplicationEnvironment>()
-
-        val dbDriver: String
-        val dbUrl: String
-        val user: String
-        val pass: String
-
-        when (dialect) {
-            DbDialect.POSTGRES -> {
-                dbDriver = if (TestDatabase.postgresContainer != null) "org.postgresql.Driver" else "org.h2.Driver"
-                dbUrl = TestDatabase.getPostgresDbUrl(
-                    "flyway_test_${
-                        UUID.randomUUID().toString().replace("-", "")
-                    }".lowercase()
+        if (dialect == DbDialect.POSTGRES) {
+            connection(target).use { connection ->
+                assertEquals(
+                    setOf(
+                        "album_artist_change_indexing_trigger",
+                        "album_change_indexing_trigger",
+                        "album_mb_change_indexing_trigger",
+                        "artist_alias_change_indexing_trigger",
+                        "artist_change_indexing_trigger",
+                        "artist_mb_change_indexing_trigger",
+                        "song_artist_change_indexing_trigger",
+                        "song_change_indexing_trigger",
+                        "song_mb_change_indexing_trigger",
+                    ),
+                    names(connection, "SELECT tgname FROM pg_trigger WHERE NOT tgisinternal")
                 )
-                user = TestDatabase.postgresContainer?.username ?: "sa"
-                pass = TestDatabase.postgresContainer?.password ?: ""
+                assertEquals(
+                    setOf(
+                        "queue_for_search_indexing",
+                        "trigger_on_album_artist_change",
+                        "trigger_on_album_change",
+                        "trigger_on_album_mb_change",
+                        "trigger_on_artist_alias_change",
+                        "trigger_on_artist_change",
+                        "trigger_on_artist_mb_change",
+                        "trigger_on_song_artist_change",
+                        "trigger_on_song_change",
+                        "trigger_on_song_mb_change",
+                    ),
+                    names(
+                        connection,
+                        "SELECT proname FROM pg_proc WHERE pronamespace = current_schema()::regnamespace"
+                    )
+                )
+                assertEquals(
+                    setOf("album", "artist", "song"),
+                    names(
+                        connection,
+                        "SELECT table_name FROM information_schema.columns " +
+                            "WHERE column_name = 'search_vector' AND udt_name = 'tsvector'"
+                    )
+                )
+                assertEquals(
+                    18,
+                    names(
+                        connection,
+                        "SELECT indexname FROM pg_indexes " +
+                            "WHERE schemaname = current_schema() AND indexdef LIKE '%USING gin%'"
+                    ).size
+                )
             }
-
-            DbDialect.SQLITE -> {
-                currentFile = File.createTempFile("flyway_test", ".db")
-                dbDriver = "org.sqlite.JDBC"
-                dbUrl = "jdbc:sqlite:${currentFile!!.absolutePath}"
-                user = "sa"
-                pass = ""
-            }
         }
 
-        val config = MapApplicationConfig(
-            "storage.driverClassName" to dbDriver,
-            "storage.jdbcURL" to dbUrl,
-            "storage.user" to user,
-            "storage.password" to pass
-        )
+        manager(target, admin = true).init()
 
-        every { environment.config } returns config
-
-        val databaseManager = DatabaseManager(ServerConfig(environment.config))
-
-        startKoin {
-            modules(module {
-                single { databaseManager }
-            })
-        }
-
-        assertDoesNotThrow {
-            databaseManager.init()
-        }
-        databaseManager.close()
-    }
-
-    @Test
-    fun `a postgres database that stopped before the album title tags migration upgrades to the current schema`() {
-        val container = TestDatabase.postgresContainer
-        if (container == null) {
-            println("Skipping PostgreSQL flyway upgrade test because Docker is not available.")
-            return
-        }
-
-        val dbUrl = TestDatabase.getPostgresDbUrl(
-            "flyway_upgrade_test_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
-        )
-        val config = MapApplicationConfig(
-            "storage.driverClassName" to "org.postgresql.Driver",
-            "storage.jdbcURL" to dbUrl,
-            "storage.user" to container.username,
-            "storage.password" to container.password
-        )
-        val databaseManager = DatabaseManager(ServerConfig(config))
-        startKoin {
-            modules(module {
-                single { databaseManager }
-            })
-        }
-
-        databaseManager.init()
-        databaseManager.close()
-
-        DriverManager.getConnection(dbUrl, container.username, container.password).use { connection ->
-            assertTrue(appliedVersions(connection).containsAll(listOf("1.106", "1.107")))
-            connection.createStatement().use { statement ->
-                statement.execute("ALTER TABLE album DROP COLUMN \"versionGroupId\"")
-                statement.execute("ALTER TABLE album DROP COLUMN title_tags")
-                statement.execute("DROP TABLE album_title_tag")
-                statement.execute("DROP TABLE album_version_group")
-            }
-            val reverted = appliedVersions(connection).filter { it.substringAfter('.').toInt() >= 106 }
-            connection.prepareStatement("DELETE FROM flyway_schema_history WHERE version = ?").use { statement ->
-                for (version in reverted) {
-                    statement.setString(1, version)
-                    statement.executeUpdate()
-                }
-            }
-            assertEquals(emptySet<String>(), tableNames(connection, "album_title_tag", "album_version_group"))
-            assertEquals(emptySet<String>(), albumColumns(connection, "title_tags", "versionGroupId"))
-            assertFalse(appliedVersions(connection).any { it == "1.106" || it == "1.107" })
-        }
-
-        assertDoesNotThrow {
-            databaseManager.init()
-        }
-        databaseManager.close()
-
-        DriverManager.getConnection(dbUrl, container.username, container.password).use { connection ->
-            assertEquals(
-                setOf("album_title_tag", "album_version_group"),
-                tableNames(connection, "album_title_tag", "album_version_group")
-            )
-            assertEquals(
-                setOf("title_tags", "versionGroupId"),
-                albumColumns(connection, "title_tags", "versionGroupId")
-            )
-            assertTrue(appliedVersions(connection).containsAll(listOf("1.106", "1.107")))
-        }
-    }
-
-    @Test
-    fun `a postgres database that stopped before the entity change migration upgrades to the current schema`() {
-        val container = TestDatabase.postgresContainer
-        if (container == null) {
-            println("Skipping PostgreSQL flyway upgrade test because Docker is not available.")
-            return
-        }
-
-        val dbUrl = TestDatabase.getPostgresDbUrl(
-            "flyway_upgrade_test_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
-        )
-        val config = MapApplicationConfig(
-            "storage.driverClassName" to "org.postgresql.Driver",
-            "storage.jdbcURL" to dbUrl,
-            "storage.user" to container.username,
-            "storage.password" to container.password
-        )
-        val databaseManager = DatabaseManager(ServerConfig(config))
-        startKoin {
-            modules(module {
-                single { databaseManager }
-            })
-        }
-        val tables = arrayOf("entity_change_scope", "user_entity_change", "entity_change", "entity_change_tracking")
-        val memberColumns = listOf(
-            UserPlaylistSongTable.songId,
-            PlaylistSongTable.songId,
-            CollectionSongTable.songId,
-            CollectionAlbumTable.albumId,
-            CollectionArtistTable.artistId,
-            CollectionPlaylistTable.playlistId,
-        )
-        val (memberIndices, changeIndices) = databaseManager.tempConnection {
-            memberColumns.map { column ->
-                column.table.indices.single { index -> index.columns == listOf(column) }.indexName.lowercase()
-            } to listOf(EntityChangeTable, UserEntityChangeTable, EntityChangeScopeTable)
-                .flatMap { table -> table.indices.map { it.indexName.lowercase() } }
-        }
-
-        databaseManager.init()
-        databaseManager.close()
-
-        DriverManager.getConnection(dbUrl, container.username, container.password).use { connection ->
-            assertTrue(appliedVersions(connection).contains("1.108"))
-            assertEquals(tables.toSet(), tableNames(connection, *tables))
-            assertEquals(6, memberIndices.toSet().size)
-            assertEquals(7, changeIndices.toSet().size)
-            assertEquals((memberIndices + changeIndices).toSet(), indexNames(connection, memberIndices + changeIndices))
-            connection.createStatement().use { statement ->
-                for (table in tables) statement.execute("DROP TABLE $table")
-                for (index in memberIndices) statement.execute("DROP INDEX $index")
-            }
-            val reverted = appliedVersions(connection).filter { it.substringAfter('.').toInt() >= 108 }
-            connection.prepareStatement("DELETE FROM flyway_schema_history WHERE version = ?").use { statement ->
-                for (version in reverted) {
-                    statement.setString(1, version)
-                    statement.executeUpdate()
-                }
-            }
-            assertEquals(emptySet<String>(), tableNames(connection, *tables))
-            assertEquals(emptySet<String>(), indexNames(connection, memberIndices + changeIndices))
-            assertFalse(appliedVersions(connection).contains("1.108"))
-        }
-
-        assertDoesNotThrow {
-            databaseManager.init()
-        }
-        databaseManager.close()
-
-        DriverManager.getConnection(dbUrl, container.username, container.password).use { connection ->
-            assertEquals(tables.toSet(), tableNames(connection, *tables))
-            assertEquals((memberIndices + changeIndices).toSet(), indexNames(connection, memberIndices + changeIndices))
-            assertTrue(appliedVersions(connection).contains("1.108"))
-        }
+        assertEquals(first, snapshot(target))
     }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `a database that stopped before the album release date marker migration upgrades to the current schema`(
+    fun `a database upgraded by the last old version applies the later migrations and keeps its history`(
         dialect: DbDialect
     ) {
-        if (dialect == DbDialect.POSTGRES && TestDatabase.postgresContainer == null) {
-            println("Skipping PostgreSQL flyway upgrade test because Docker is not available.")
-            return
+        val target = upgradedDatabase(dialect) ?: return
+        val before = snapshot(target)
+        val oldHistory = assertNotNull(before.history)
+        assertEquals(109, oldHistory.size)
+        if (dialect == DbDialect.SQLITE) {
+            assertEquals(
+                setOf("hue_bridge_userId_bridgeId", "hue_bridge_userId_bridgeId_unique"),
+                hueBridgeIndexes(target)
+            )
         }
 
-        val dbDriver: String
-        val dbUrl: String
-        val user: String
-        val pass: String
-        when (dialect) {
-            DbDialect.POSTGRES -> {
-                dbDriver = "org.postgresql.Driver"
-                dbUrl = TestDatabase.getPostgresDbUrl(
-                    "flyway_upgrade_test_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
-                )
-                user = TestDatabase.postgresContainer!!.username
-                pass = TestDatabase.postgresContainer!!.password
-            }
+        manager(target).init()
 
-            DbDialect.SQLITE -> {
-                currentFile = File.createTempFile("flyway_upgrade_test", ".db")
-                dbDriver = "org.sqlite.JDBC"
-                dbUrl = "jdbc:sqlite:${currentFile!!.absolutePath}"
-                user = "sa"
-                pass = ""
-            }
+        val after = snapshot(target)
+        val history = assertNotNull(after.history)
+        assertEquals(oldHistory, history.take(oldHistory.size))
+        assertEquals(headHistory.drop(1), history.drop(oldHistory.size).map { it[1] to it[3] })
+        assertEquals(before.copy(history = history), after)
+        if (dialect == DbDialect.SQLITE) {
+            assertEquals(setOf("hue_bridge_userId_bridgeId_unique"), hueBridgeIndexes(target))
         }
-        val config = MapApplicationConfig(
-            "storage.driverClassName" to dbDriver,
-            "storage.jdbcURL" to dbUrl,
-            "storage.user" to user,
-            "storage.password" to pass
+
+        manager(target).init()
+
+        assertEquals(after, snapshot(target))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an upgraded database without the last custom migration is refused`(dialect: DbDialect) {
+        val target = upgradedDatabase(dialect, customMigrationRecorded = false) ?: return
+
+        assertRefused(target, Reason.CUSTOM_MIGRATIONS_UNFINISHED, foundVersion = "1.109")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an upgraded database without the custom migration table is refused`(dialect: DbDialect) {
+        val target = upgradedDatabase(dialect, customMigrationRecorded = false) ?: return
+        manager(target).tempConnection { SchemaUtils.drop(CustomMigrationTable) }
+        assertNull(snapshot(target).customMigrations)
+
+        assertRefused(target, Reason.CUSTOM_MIGRATIONS_UNFINISHED, foundVersion = "1.109")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a database whose history ends below the base is refused`(dialect: DbDialect) {
+        val target = upgradedDatabase(dialect, versions = oldMigrations - 109) ?: return
+
+        assertRefused(target, Reason.BELOW_BASE, foundVersion = "1.108")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a database with a failed last migration is refused`(dialect: DbDialect) {
+        val target = upgradedDatabase(dialect, failed = setOf(109)) ?: return
+
+        assertRefused(target, Reason.FAILED_MIGRATION, foundVersion = "1.109")
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a database with tables but without a history table is refused`(dialect: DbDialect) {
+        val target = upgradedDatabase(dialect) ?: return
+        connection(target).use { connection ->
+            connection.createStatement().use { it.execute("DROP TABLE flyway_schema_history") }
+        }
+        assertNull(snapshot(target).history)
+
+        assertRefused(target, Reason.TABLES_WITHOUT_HISTORY, foundVersion = null)
+
+        assertNull(snapshot(target).history)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a database that holds only an empty history table gets the base`(dialect: DbDialect) {
+        val target = emptyDatabase(dialect) ?: return
+        val noMigrations = Files.createTempDirectory("no_migrations").toFile()
+        directories += noMigrations
+        Flyway.configure()
+            .dataSource(target.url, target.user, target.password)
+            .locations("filesystem:${noMigrations.absolutePath}")
+            .load()
+            .migrate()
+        val before = snapshot(target)
+        assertEquals(setOf("flyway_schema_history"), before.tables)
+        assertEquals(emptyList<List<String?>>(), before.history)
+
+        manager(target, admin = true).init()
+
+        val after = snapshot(target)
+        val history = assertNotNull(after.history)
+        assertEquals(headHistory, history.map { it[1] to it[3] })
+        assertEquals(1, after.users?.size)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a database with tables and an empty history table is refused`(dialect: DbDialect) {
+        val target = upgradedDatabase(dialect) ?: return
+        connection(target).use { connection ->
+            connection.createStatement().use { it.executeUpdate("DELETE FROM flyway_schema_history") }
+        }
+        assertEquals(emptyList<List<String?>>(), snapshot(target).history)
+
+        assertRefused(target, Reason.TABLES_WITHOUT_HISTORY, foundVersion = null)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a database that is ahead of this build starts`(dialect: DbDialect) {
+        val target = upgradedDatabase(dialect) ?: return
+        manager(target).init()
+        insertHistory(
+            target,
+            firstRank = oldMigrations.size + laterMigrations.size + 1,
+            versions = listOf(futureMigration),
+            failed = emptySet()
         )
-        val databaseManager = DatabaseManager(ServerConfig(config))
-        startKoin {
-            modules(module {
-                single { databaseManager }
-            })
+        val before = snapshot(target)
+        assertEquals(
+            oldMigrations.map { "1.$it" } + headHistory.drop(1).map { it.first } + "1.$futureMigration",
+            before.history?.map { it[1] }
+        )
+
+        manager(target).init()
+
+        assertEquals(before, snapshot(target))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a database created from the base that is ahead of this build starts`(dialect: DbDialect) {
+        val target = emptyDatabase(dialect) ?: return
+        manager(target).init()
+        insertHistory(target, firstRank = headHistory.size + 1, versions = listOf(futureMigration), failed = emptySet())
+        val before = snapshot(target)
+        assertEquals(headHistory.map { it.first } + "1.$futureMigration", before.history?.map { it[1] })
+
+        manager(target).init()
+
+        assertEquals(before, snapshot(target))
+    }
+
+    private fun assertRefused(target: Target, reason: Reason, foundVersion: String?) {
+        val before = snapshot(target)
+        assertEquals(emptyList<List<String?>>(), before.users)
+
+        val refusal = assertThrows(DatabaseNotAtBaseException::class.java) {
+            manager(target, admin = true).init()
         }
 
-        databaseManager.init()
-        databaseManager.close()
+        assertEquals(reason, refusal.reason)
+        assertEquals(foundVersion, refusal.foundVersion)
+        val message = assertNotNull(refusal.message)
+        assertTrue(message.contains(steppingStoneImage), message)
+        assertTrue(message.contains(reason.description), message)
+        assertTrue(message.contains(lastCustomMigration), message)
+        assertTrue(message.contains("Found schema version: ${foundVersion ?: "none"}"), message)
+        Reason.entries.filter { it != reason }.forEach { other ->
+            assertFalse(message.contains(other.description), message)
+        }
+        assertEquals(before, snapshot(target))
+    }
 
-        val unrelated = AlbumTable.lastProviderEnrichment
-        val (dropUnrelated, restoreUnrelated) = databaseManager.tempConnection {
-            unrelated.dropStatement() to unrelated.createStatement()
+    private fun emptyDatabase(dialect: DbDialect): Target? = when (dialect) {
+        DbDialect.POSTGRES -> TestDatabase.postgresContainer?.let { container ->
+            Target(
+                driver = "org.postgresql.Driver",
+                url = TestDatabase.getPostgresDbUrl(
+                    "flyway_test_${UUID.randomUUID().toString().replace("-", "")}".lowercase()
+                ),
+                user = container.username,
+                password = container.password,
+            )
+        } ?: run {
+            println("Skipping PostgreSQL flyway migration test because Docker is not available.")
+            null
         }
 
-        DriverManager.getConnection(dbUrl, user, pass).use { connection ->
-            assertTrue(appliedVersions(connection).contains("1.109"))
-            assertTrue(hasReleaseDateMarker(connection))
-            assertTrue(hasAlbumColumn(connection, unrelated.name))
-            connection.createStatement().use { statement ->
-                statement.execute("ALTER TABLE album DROP COLUMN \"releaseDateEstimated\"")
-                for (sql in dropUnrelated) statement.execute(sql)
-            }
-            assertFalse(hasAlbumColumn(connection, unrelated.name))
-            val reverted = appliedVersions(connection).filter { it.substringAfter('.').toInt() >= 109 }
-            connection.prepareStatement("DELETE FROM flyway_schema_history WHERE version = ?").use { statement ->
-                for (version in reverted) {
-                    statement.setString(1, version)
-                    statement.executeUpdate()
-                }
-            }
-            assertFalse(hasReleaseDateMarker(connection))
-            assertFalse(appliedVersions(connection).contains("1.109"))
-        }
-
-        assertDoesNotThrow {
-            databaseManager.init()
-        }
-        databaseManager.close()
-
-        DriverManager.getConnection(dbUrl, user, pass).use { connection ->
-            assertTrue(hasReleaseDateMarker(connection))
-            assertTrue(appliedVersions(connection).contains("1.109"))
-            assertFalse(hasAlbumColumn(connection, unrelated.name))
-            connection.createStatement().use { statement ->
-                for (sql in restoreUnrelated) statement.execute(sql)
-            }
-            assertTrue(hasAlbumColumn(connection, unrelated.name))
-            connection.prepareStatement("DELETE FROM flyway_schema_history WHERE version = ?").use { statement ->
-                statement.setString(1, "1.109")
-                statement.executeUpdate()
-            }
-            assertFalse(appliedVersions(connection).contains("1.109"))
-        }
-
-        assertDoesNotThrow {
-            databaseManager.init()
-        }
-        databaseManager.close()
-
-        DriverManager.getConnection(dbUrl, user, pass).use { connection ->
-            assertTrue(appliedVersions(connection).contains("1.109"))
-            assertTrue(hasReleaseDateMarker(connection))
-            assertTrue(hasAlbumColumn(connection, unrelated.name))
+        DbDialect.SQLITE -> {
+            val file = File.createTempFile("flyway_test", ".db")
+            files += file
+            Target(driver = "org.sqlite.JDBC", url = "jdbc:sqlite:${file.absolutePath}", user = "", password = "")
         }
     }
 
-    private fun hasReleaseDateMarker(connection: Connection): Boolean =
-        hasAlbumColumn(connection, "releaseDateEstimated")
-
-    private fun hasAlbumColumn(connection: Connection, name: String): Boolean =
-        connection.metaData.getColumns(null, null, "album", name).use { it.next() }
-
-    private fun indexNames(connection: Connection, names: List<String>): Set<String> =
-        connection.createStatement().use { statement ->
-            statement.executeQuery("SELECT indexname FROM pg_indexes WHERE schemaname = 'public'").use { rows ->
-                buildSet { while (rows.next()) add(rows.getString(1)) }
-            }
-        }.intersect(names.toSet())
-
-    private fun appliedVersions(connection: Connection): List<String> =
-        connection.createStatement().use { statement ->
-            statement.executeQuery(
-                "SELECT version FROM flyway_schema_history WHERE version IS NOT NULL AND success"
-            ).use { rows ->
-                buildList { while (rows.next()) add(rows.getString(1)) }
+    private fun upgradedDatabase(
+        dialect: DbDialect,
+        versions: List<Int> = oldMigrations,
+        failed: Set<Int> = emptySet(),
+        customMigrationRecorded: Boolean = true,
+    ): Target? {
+        val target = emptyDatabase(dialect) ?: return null
+        Flyway.configure()
+            .dataSource(target.url, target.user, target.password)
+            .locations(MigrationBase.location(Dialect.ofDriver(target.driver)))
+            .target(MigrationBase.VERSION)
+            .placeholderReplacement(false)
+            .load()
+            .migrate()
+        connection(target).use { connection ->
+            connection.createStatement().use { it.executeUpdate("DELETE FROM flyway_schema_history") }
+        }
+        insertHistory(target, firstRank = 1, versions = versions, failed = failed)
+        if (customMigrationRecorded) {
+            val recorded = lastCustomMigration
+            manager(target).tempConnection {
+                CustomMigrationTable.insert {
+                    it[id] = recorded
+                    it[executedAt] = 1791326209381
+                }
             }
         }
+        return target
+    }
 
-    private fun tableNames(connection: Connection, vararg names: String): Set<String> =
-        connection.metaData.getTables(null, "public", "%", arrayOf("TABLE")).use { rows ->
+    private fun insertHistory(target: Target, firstRank: Int, versions: List<Int>, failed: Set<Int>) {
+        connection(target).use { connection ->
+            connection.prepareStatement(
+                "INSERT INTO flyway_schema_history " +
+                    "(installed_rank, version, description, type, script, checksum, installed_by, execution_time, success) " +
+                    "VALUES (?, ?, ?, 'JDBC', ?, NULL, ?, ?, ?)"
+            ).use { statement ->
+                versions.forEachIndexed { index, minor ->
+                    statement.setInt(1, firstRank + index)
+                    statement.setString(2, "1.$minor")
+                    statement.setString(3, "Step$minor")
+                    statement.setString(4, "dev.dertyp.db.migrations.V1_${minor}__Step$minor")
+                    statement.setString(5, target.user)
+                    statement.setInt(6, 5)
+                    statement.setBoolean(7, minor !in failed)
+                    statement.addBatch()
+                }
+                statement.executeBatch()
+            }
+        }
+    }
+
+    private fun manager(target: Target, admin: Boolean = false): DatabaseManager {
+        val settings = buildList {
+            add("storage.driverClassName" to target.driver)
+            add("storage.jdbcURL" to target.url)
+            add("storage.user" to target.user)
+            add("storage.password" to target.password)
+            if (admin) {
+                add("client.id" to "test-client")
+                add("client.secret" to "test-secret")
+            }
+        }
+        return DatabaseManager(ServerConfig(MapApplicationConfig(*settings.toTypedArray()))).also { managers += it }
+    }
+
+    private fun hueBridgeIndexes(target: Target): Set<String> = connection(target).use { connection ->
+        names(connection, "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'hue_bridge' AND sql IS NOT NULL")
+    }
+
+    private fun connection(target: Target): Connection =
+        DriverManager.getConnection(target.url, target.user, target.password)
+
+    private fun snapshot(target: Target): Snapshot = connection(target).use { connection ->
+        val tables = connection.metaData.getTables(null, null, "%", arrayOf("TABLE")).use { rows ->
             buildSet { while (rows.next()) add(rows.getString("TABLE_NAME")) }
-        }.intersect(names.toSet())
+        }
+        Snapshot(
+            tables = tables,
+            history = rows(connection, tables, "flyway_schema_history", "installed_rank"),
+            customMigrations = rows(connection, tables, "customMigration", "id"),
+            users = rows(connection, tables, "user", "id"),
+        )
+    }
 
-    private fun albumColumns(connection: Connection, vararg names: String): Set<String> =
-        connection.metaData.getColumns(null, "public", "album", "%").use { rows ->
-            buildSet { while (rows.next()) add(rows.getString("COLUMN_NAME")) }
-        }.intersect(names.toSet())
+    private fun rows(connection: Connection, tables: Set<String>, table: String, order: String): List<List<String?>>? {
+        if (tables.none { it.equals(table, ignoreCase = true) }) return null
+        return connection.createStatement().use { statement ->
+            statement.executeQuery("SELECT * FROM \"${tables.first { it.equals(table, ignoreCase = true) }}\" ORDER BY $order")
+                .use { result ->
+                    buildList {
+                        while (result.next()) add((1..result.metaData.columnCount).map { result.getString(it) })
+                    }
+                }
+        }
+    }
+
+    private fun names(connection: Connection, query: String): Set<String> =
+        connection.createStatement().use { statement ->
+            statement.executeQuery(query).use { rows ->
+                buildSet { while (rows.next()) add(rows.getString(1)) }
+            }
+        }
 }

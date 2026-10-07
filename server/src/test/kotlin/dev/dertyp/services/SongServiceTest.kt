@@ -15,11 +15,14 @@ import dev.dertyp.credentials.CredentialNames
 import dev.dertyp.credentials.ResolvedCredential
 import dev.dertyp.data.*
 import dev.dertyp.db.*
+import dev.dertyp.plugins.HookEvent
 import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.import.Type
 import dev.dertyp.testing.FakeCredentialProvider
 import dev.dertyp.services.metadata.*
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.RecordedEntityEvents
+import dev.dertyp.testing.entityEventsModule
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -61,6 +64,7 @@ import org.koin.test.KoinTest
 import org.koin.test.get
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 
 class SongServiceTest : KoinTest {
     private lateinit var database: Database
@@ -72,6 +76,7 @@ class SongServiceTest : KoinTest {
     private val transcoder = mockk<Transcoder>()
     private val storageService = mockk<StorageService>(relaxed = true)
     private val fingerprintService = mockk<AcoustIdFingerprintService>()
+    private val events = RecordedEntityEvents().subscribeLibraryReactions()
     private var acoustIdQueue: HttpClientQueueService? = null
     private val acoustIdRequests = mutableListOf<Url>()
 
@@ -84,7 +89,7 @@ class SongServiceTest : KoinTest {
     fun setup(dialect: DbDialect) {
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule(events))
                 single { environment }
                 single { transcoder }
                 single { musicBrainzService }
@@ -165,6 +170,7 @@ class SongServiceTest : KoinTest {
 
     @AfterEach
     fun tearDown() {
+        runBlocking { events.stop() }
         stopKoin()
         TestDatabase.cleanUp()
         acoustIdQueue?.let {
@@ -3235,28 +3241,39 @@ class SongServiceTest : KoinTest {
             coEvery { spied.rebuildVersionGroups() } returns 0
             loadKoinModules(module { single<AlbumService> { spied } })
 
-            fun incoming(albumName: String) = InsertableSong(
-                title = "Song of $albumName",
+            fun incoming(title: String) = InsertableSong(
+                title = title,
                 artists = listOf("Cleanup Artist"),
-                album = InsertableAlbum(albumName, listOf("Cleanup Artist")),
+                album = InsertableAlbum("First", listOf("Cleanup Artist")),
                 duration = 100,
                 explicit = false,
-                path = "/path/$albumName",
+                path = "/path/$title",
                 audio = AudioInfo("flac", 44100, 16, 128000, 0, 2)
             )
 
-            assertEquals(1, songService.createBatch(listOf(incoming("First"))).size)
+            assertEquals(1, songService.createBatch(listOf(incoming("Opening"))).size)
             coVerify(timeout = 5000, exactly = 1) { spied.rebuildVersionGroups() }
 
             val emptyAlbum = transaction(database) {
                 AlbumTable.insertAndGetId { it[name] = "Empty" }.value
             }
+            val albumEvents = CopyOnWriteArrayList<HookEvent>()
+            events.hooks.on(HookEvent.EntitiesCreated::class) { if (it.type == EntityType.ALBUM) albumEvents += it }
+            events.hooks.on(HookEvent.EntitiesUpdated::class) { if (it.type == EntityType.ALBUM) albumEvents += it }
+            events.hooks.on(HookEvent.EntitiesMerged::class) { if (it.type == EntityType.ALBUM) albumEvents += it }
+            events.hooks.on(HookEvent.EntitiesDeleted::class) { if (it.type == EntityType.ALBUM) albumEvents += it }
+            events.hooks.on(HookEvent.AlbumsLinkedToMusicBrainz::class) { albumEvents += it }
 
-            assertEquals(1, songService.createBatch(listOf(incoming("Second"))).size)
+            assertEquals(1, songService.createBatch(listOf(incoming("Closing"))).size)
 
-            coVerify(timeout = 5000, exactly = 3) { spied.rebuildVersionGroups() }
+            coVerify(timeout = 5000, exactly = 2) { spied.rebuildVersionGroups() }
+            assertEquals(
+                listOf<HookEvent>(HookEvent.EntitiesDeleted(EntityType.ALBUM, setOf(emptyAlbum))),
+                albumEvents.toList()
+            )
             transaction(database) {
                 assertEquals(0, AlbumTable.selectAll().where { AlbumTable.id eq emptyAlbum }.count())
+                assertEquals(1, AlbumTable.selectAll().count())
             }
         }
 

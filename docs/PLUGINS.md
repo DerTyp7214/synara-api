@@ -14,6 +14,7 @@ interface ISynaraPlugin {
     val name: String
     val apiVersion: Int get() = 1
     val enabled: Boolean get() = true
+    val hookGroups: Set<HookGroup> get() = emptySet()
 
     fun init(context: PluginContext)
     fun getKoinModule(): Module? = null
@@ -21,6 +22,8 @@ interface ISynaraPlugin {
 ```
 
 `enabled` decides whether the plugin is loaded at all — a disabled plugin registers no importers, routes or UI contributions.
+
+`hookGroups` names the groups of server events the plugin subscribes to, see [Hooks](#hooks). A plugin that subscribes to nothing leaves the default.
 
 `IImporter` has the same `enabled` flag plus `installed`. `enabled` means "ready to import": the backend is present *and* authenticated, and it is what the import routing uses to pick a backend. `installed` means only that the backend itself is available (its binary was found). Importers that need a login report `installed` as soon as their binary exists and `enabled` only once a token is present, and their plugin bases `enabled` on `installed` — so the plugin still loads while unauthenticated and the importer settings page can offer the login.
 
@@ -34,9 +37,72 @@ Additional capabilities are opt-in through marker interfaces your plugin class c
 
 ### `PluginContext`
 
-Passed to `init`. Provides the logger, storage, the library APIs (`songLibrary`, `albumLibrary`, `artistLibrary`, `playlistLibrary`, `imageLibrary`), metadata and lyrics services, the `scheduleService` for scheduled tasks, the `hooks` bus, `apiKeyScopes`, and — since API version 2 — `ui`, `settings` and `i18n`.
+Passed to `init`. Provides the logger, storage, the library APIs (`songLibrary`, `albumLibrary`, `artistLibrary`, `playlistLibrary`, `imageLibrary`), metadata and lyrics services, the `scheduleService` for scheduled tasks, the `hooks` of the plugin (see [Hooks](#hooks)), `apiKeyScopes`, and — since API version 2 — `ui`, `settings` and `i18n`.
 
-The `hooks` bus emits `HookEvent`s a plugin can subscribe to with `hooks.on<E> { }`: `ListenIngested` (listens arrived from ListenBrainz), `PlaylistChanged` and `CollectionChanged` (content of a user playlist or collection changed), and `NowPlayingChanged` (a user started, paused, seeked, reported progress on or stopped a song; `songId` is null on stop, `positionMs` is the playback position at `startedAt` and `playing` tells whether it advances, `generation` increases per report so stale events can be dropped).
+## Hooks
+
+The server announces what happens to its data as typed `HookEvent`s. A plugin subscribes with `context.hooks.on<E> { event -> }` and gets a `HookRegistration` back, whose `cancel()` ends the subscription. A subscriber observes: it cannot stop or change the operation it hears about.
+
+```kotlin
+class MyPlugin : ISynaraPlugin {
+    override val id = "myplugin"
+    override val name = "My Plugin"
+    override val apiVersion = 4
+    override val hookGroups = setOf(HookGroup.LIBRARY, HookGroup.PLAYBACK)
+
+    override fun init(context: PluginContext) {
+        context.hooks.on<HookEvent.EntitiesDeleted> { event ->
+            if (event.type == EntityType.SONG) forget(event.ids)
+        }
+        context.hooks.on<HookEvent.NowPlayingChanged> { show(it.userId, it.songId) }
+    }
+}
+```
+
+### Hook groups
+
+`context.hooks` belongs to the plugin and delivers only the events of the groups the plugin declares in `hookGroups`. Subscribing to an event of a group that is not declared throws an `IllegalArgumentException` that names the missing group. Thrown from `init`, it keeps the plugin from loading, so a missing declaration shows up in the log at startup.
+
+| Group | Events |
+|---|---|
+| `HookGroup.LIBRARY` | `EntitiesCreated`, `EntitiesUpdated`, `EntityMembersChanged`, `EntitiesDeleted` and `EntitiesMerged` for songs, albums and artists, `LibraryIndexed` |
+| `HookGroup.PLAYLISTS` | `EntitiesCreated`, `EntitiesUpdated`, `EntityMembersChanged`, `EntitiesDeleted` and `EntitiesMerged` for user playlists, global playlists and collections, `PlaylistChanged`, `CollectionChanged` |
+| `HookGroup.USER_STATE` | `LikesChanged`, `TimecodesChanged` |
+| `HookGroup.PLAYBACK` | `NowPlayingChanged`, `ListenIngested` |
+
+The entity events exist in two groups and their `type` decides: a plugin that declares only `LIBRARY` and subscribes to `EntitiesCreated` gets songs, albums and artists and never a playlist. `USER_STATE` is what a user saved on entities of the library, `PLAYBACK` is what users listen to. Both tell what a single user did, so declare them only when the plugin works with the data of single users. `HookEvent.hookGroup()` and `EntityType.hookGroup()` return the group of an event or entity type, or null when it belongs to none.
+
+### Events
+
+| Event | Meaning |
+|---|---|
+| `EntitiesCreated(type, ids)` | Entities of one type were added. |
+| `EntitiesUpdated(type, ids)` | Data of the entities changed, including what they are linked to, such as the artists of a song or the MusicBrainz release of an album. |
+| `EntityMembersChanged(type, ids)` | The content of the containers changed: the songs of a playlist or album, the entries of a collection. |
+| `EntitiesDeleted(type, ids)` | Entities were removed. |
+| `EntitiesMerged(type, keptId, removedIds)` | Entities were merged into one. `keptId` remains and holds what `removedIds` had. |
+| `LibraryIndexed` | An indexer finished a run over the library. |
+| `PlaylistChanged(playlistId)` | The songs of a user playlist changed, or the playlist was created without a cover of its own or lost it. |
+| `CollectionChanged(collectionId)` | The entries of a collection changed, or the collection was created without a cover of its own or lost it. |
+| `LikesChanged(userId, type, ids)` | A user liked or unliked songs, starred or unstarred albums, or followed or unfollowed artists. |
+| `TimecodesChanged(userId, songIds)` | A user changed the timecode tags of songs. |
+| `NowPlayingChanged(...)` | A user started, paused, seeked, reported progress on or stopped a song. `songId` is null on stop, `positionMs` is the playback position at `startedAt`, `playing` tells whether it advances, and `generation` increases per report so stale events can be dropped. |
+| `ListenIngested(listenBrainzUserId, count)` | `count` listens arrived for a ListenBrainz account. `listenBrainzUserId` is the id of that account, not of a Synara user. |
+
+`type` is an `EntityType`: `SONG`, `ALBUM`, `ARTIST`, `USER_PLAYLIST`, `PLAYLIST` (a global playlist) or `COLLECTION`.
+
+`HookEvent.AlbumsLinkedToMusicBrainz` belongs to no hook group. The server uses it for its own duplicate check, it is not delivered to plugins and subscribing to it throws an `IllegalArgumentException`. A plugin learns that an album was linked to a MusicBrainz release, linked to another one or unlinked through `EntitiesUpdated` with type `ALBUM`.
+
+### Delivery
+
+- Events about stored data arrive after the transaction that made the change has committed. A change that is rolled back is never announced. `PlaylistChanged`, `CollectionChanged`, `NowPlayingChanged` and `ListenIngested` are announced right after the operation they describe.
+- Handlers run asynchronously in their own coroutines, outside any transaction. A slow handler delays neither the operation nor other subscribers, only the later events of the same handler. An exception is logged with the plugin id and affects nothing else.
+- An event carries ids, not rows. Read the current state through the library APIs of the `PluginContext`. For `EntitiesDeleted` and the `removedIds` of `EntitiesMerged` the rows are already gone, so anything a plugin needs about such an entity has to be kept by the plugin while the entity exists.
+- All announcements of one transaction are combined: one event per kind and entity type with all ids. Within a transaction an entity that was created and then updated arrives only in `EntitiesCreated`, an entity that was created and then deleted does not arrive at all, and the ids a merge removes arrive only in `EntitiesMerged`, never in `EntitiesDeleted`, whether they were deleted before or after the merge.
+- A plugin cannot announce events. `context.hooks.emit` throws an `UnsupportedOperationException`.
+- The subscriptions of a plugin end when the plugin fails to load.
+
+The hook groups protect against mistakes and document what a plugin reacts to. They are not a sandbox: a plugin runs in the server's process with its class loader, its Koin container and its database connection, so the groups do not contain a hostile jar.
 
 ## Creating a Plugin
 
@@ -203,4 +269,6 @@ All text in a tree must be translated on the server. Register bundles with `cont
 
 Plugins specify an `apiVersion`. Synara will only load plugins with an `apiVersion` less than or equal to the server's current supported version. This ensures backward compatibility as the plugin API evolves.
 
-Current Supported API Version: **3** (adds `credentials` to `PluginContext`). Version 2 added `ui`, `settings` and `i18n` to `PluginContext` and the `IUiPlugin` interface. Plugins with version 2 or 1 still load.
+Current Supported API Version: **4** (adds `hookGroups` to `ISynaraPlugin`, scopes `context.hooks` to the plugin and adds the entity events, `LikesChanged`, `TimecodesChanged` and `LibraryIndexed`). Version 3 added `credentials` to `PluginContext`. Version 2 added `ui`, `settings` and `i18n` to `PluginContext` and the `IUiPlugin` interface. Plugins with version 3, 2 or 1 still load.
+
+A plugin declares its `hookGroups` from version 4 on, and a version 4 plugin that subscribes to an event of a group it does not declare does not load. A plugin with version 3, 2 or 1 could not declare groups, so the server grants it `PLAYLISTS` and `PLAYBACK` in addition to anything it declares. These are the groups of the four events that existed before version 4: `PlaylistChanged`, `CollectionChanged`, `NowPlayingChanged` and `ListenIngested`. Such a plugin keeps receiving them without a change and cannot subscribe to an event of another group. `hooks.emit` throws for every version, so a plugin that called it has to stop doing so.

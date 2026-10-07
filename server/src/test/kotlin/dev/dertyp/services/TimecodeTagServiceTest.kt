@@ -32,7 +32,6 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import org.koin.dsl.module
 import org.koin.test.KoinTest
 import java.util.UUID
 
@@ -41,7 +40,7 @@ class TimecodeTagServiceTest : KoinTest {
     private lateinit var service: TimecodeTagService
 
     private fun setup(dialect: DbDialect) {
-        startKoin { modules(module { single { EntityChangeRecorder() } }) }
+        startKoin { modules(entityEventsModule()) }
 
         database = TestDatabase.connect(dialect, "timecode_tag_test")
         transaction(database) {

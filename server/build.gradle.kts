@@ -45,6 +45,23 @@ tasks.register<JavaExec>("generateApiConstantsDocs") {
     args("docs/API_CONSTANTS.md", "docs/MODELS.md", "docs/RPC_SERVICES.md")
 }
 
+tasks.register<JavaExec>("generateMigration") {
+    group = "build setup"
+    description =
+        "Writes the next schema migration as one SQL file per database type from what Exposed still needs. " +
+            "Usage: -Pname=AddSomething, optionally -PpostgresUrl, -PpostgresUser and -PpostgresPassword."
+    mainClass.set("dev.dertyp.migrations.MigrationGeneratorKt")
+    classpath = sourceSets["test"].runtimeClasspath
+    workingDir = rootProject.projectDir
+    args(
+        layout.projectDirectory.dir("src/main/resources/db/migrations").asFile.path,
+        providers.gradleProperty("name").getOrElse(""),
+    )
+    listOf("postgresUrl", "postgresUser", "postgresPassword").forEach { key ->
+        providers.gradleProperty(key).orNull?.let { systemProperty(key, it) }
+    }
+}
+
 val javacppPlatforms: List<String> = providers.gradleProperty("javacppPlatforms")
     .map { value -> value.split(",").map(String::trim).filter(String::isNotEmpty) }
     .orElse(providers.systemProperty("os.name").map { osName ->
@@ -105,8 +122,6 @@ dependencies {
     implementation(libs.exposed.dao)
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)
-    implementation(libs.exposed.migration.core)
-    implementation(libs.exposed.migration.jdbc)
     implementation(libs.h2)
     implementation(libs.javacpp)
     implementation(libs.ffmpeg)
@@ -166,6 +181,8 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.exposed.migration.core)
+    testImplementation(libs.exposed.migration.jdbc)
 }
 
 tasks.test {

@@ -8,6 +8,7 @@ import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.testing.RecordedChange
 import dev.dertyp.testing.clearRecordedChanges
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import dev.dertyp.testing.recordedChanges
 import dev.dertyp.testing.updated
 import io.mockk.every
@@ -52,7 +53,7 @@ class ImageEntityChangeTest {
 
         startKoin {
             modules(module {
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
                 single { storageService }
                 single { redisConfig }
             })
@@ -142,24 +143,6 @@ class ImageEntityChangeTest {
         assertEquals(emptySet<Any>(), recordedChanges(database))
     }
 
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `purging a cover that is no image records the entities that lose it`(dialect: DbDialect) = runBlocking {
-        setup(dialect)
-        val bogus = service.createImage("<html>not found</html>".toByteArray(), "https://covers.example/front")
-        val entities = covered(bogus)
-
-        val result = service.purgeNonImageFiles(listOf("https://covers.example/"))
-
-        assertEquals(1, result.deleted)
-        assertEquals(updatedOf(entities), recordedChanges(database))
-        clearRecordedChanges(database)
-
-        service.purgeNonImageFiles(listOf("https://covers.example/"))
-
-        assertEquals(emptySet<Any>(), recordedChanges(database))
-    }
-
     private fun pictured(picture: UUID): Set<RecordedChange> = transaction(database) {
         val author = UserTable.insertAndGetId {
             it[username] = "creator-${UUID.randomUUID()}"
@@ -206,25 +189,6 @@ class ImageEntityChangeTest {
             clearRecordedChanges(database)
 
             service.analyzeImage(picture)
-
-            assertEquals(emptySet<Any>(), recordedChanges(database))
-        }
-
-    @ParameterizedTest
-    @EnumSource(DbDialect::class)
-    fun `purging a cover that is no image records the playlists and collections that lose it`(dialect: DbDialect) =
-        runBlocking {
-            setup(dialect)
-            val bogus = service.createImage("<html>not found</html>".toByteArray(), "https://covers.example/front")
-            val shown = pictured(bogus)
-
-            val result = service.purgeNonImageFiles(listOf("https://covers.example/"))
-
-            assertEquals(1, result.deleted)
-            assertEquals(shown, recordedChanges(database))
-            clearRecordedChanges(database)
-
-            service.purgeNonImageFiles(listOf("https://covers.example/"))
 
             assertEquals(emptySet<Any>(), recordedChanges(database))
         }

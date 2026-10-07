@@ -12,6 +12,7 @@ import dev.dertyp.plugins.RedisCacheProvider
 import dev.dertyp.services.metadata.*
 import dev.dertyp.services.release.*
 import dev.dertyp.testing.entityChangeTables
+import dev.dertyp.testing.entityEventsModule
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -80,7 +81,7 @@ class ReleaseServiceTest : KoinTest {
                 single { mockk<AppleMusicReleaseService>(relaxed = true) }
                 single { ProviderLinkService() }
                 single { ReleaseArtistService() }
-                single { EntityChangeRecorder() }
+                includes(entityEventsModule())
             })
         }
 
