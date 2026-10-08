@@ -4,6 +4,7 @@ import org.rnorth.ducttape.ratelimits.RateLimiterBuilder
 import org.rnorth.ducttape.unreliables.Unreliables
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.utility.DockerImageName
+import redis.clients.jedis.RedisClusterClient
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
@@ -14,6 +15,7 @@ object TestRedis {
     private const val READY_WITHIN_SECONDS = 60
     private const val READY_CHECKS_PER_SECOND = 10
     private const val CLUSTER_READY = "cluster_state:ok"
+    private const val INDEX_SCAN_RUNNING = "indexing"
 
     private val redisStart by lazy {
         TestContainers.start(
@@ -53,6 +55,19 @@ object TestRedis {
 
     val port: Int
         get() = redisContainer.getMappedPort(CONTAINER_PORT)
+
+    fun awaitSearchIndexes(jedis: RedisClusterClient, indexPrefix: String) {
+        val checks = RateLimiterBuilder.newBuilder()
+            .withRate(READY_CHECKS_PER_SECOND, TimeUnit.SECONDS)
+            .withConstantThroughput()
+            .build()
+        Unreliables.retryUntilTrue(READY_WITHIN_SECONDS, TimeUnit.SECONDS) {
+            checks.getWhenReady {
+                val indexes = jedis.ftList().filter { it.startsWith("$indexPrefix:") }
+                indexes.isNotEmpty() && indexes.none { jedis.ftInfo(it)[INDEX_SCAN_RUNNING].toString() != "0" }
+            }
+        }
+    }
 
     private fun addressOf(container: GenericContainer<*>): String = InetAddress.getByName(container.host).hostAddress
 

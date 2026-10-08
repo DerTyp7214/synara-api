@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertAll
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -41,6 +42,7 @@ class RedisSearchServiceTest {
         redisProvider = GlobalContext.get().get()
         service = GlobalContext.get().get()
         service.initIndex()
+        TestRedis.awaitSearchIndexes(redisProvider.jedis, config.indexPrefix)
     }
 
     @AfterEach
@@ -146,6 +148,35 @@ class RedisSearchServiceTest {
         assertEquals(2, results.ids.size)
         assertEquals(id1, results.ids[0], "Name match should be first")
         assertEquals(id2, results.ids[1], "Alias match should be second")
+    }
+
+    @Test
+    fun `artists written after index creation are indexed once and ranked by field weight`() {
+        val jedis = redisProvider.jedis
+        val indexedTwice = mutableListOf<Int>()
+        val misranked = mutableListOf<Int>()
+
+        repeat(40) { round ->
+            config.indexPrefix = "test-${UUID.randomUUID()}"
+            service.initIndex()
+            TestRedis.awaitSearchIndexes(jedis, config.indexPrefix)
+
+            val id1 = UUID.randomUUID()
+            val id2 = UUID.randomUUID()
+            service.indexArtist(id1, "Target Artist", "", "", "")
+            service.indexArtist(id2, "Other Artist", "Target Alias", "", "")
+
+            Thread.sleep(50)
+
+            val info = jedis.ftInfo("${config.indexPrefix}:artist-index")
+            if (info["max_doc_id"].toString().toLong() != 2L) indexedTwice += round
+            if (service.search("artist", "Target").ids != listOf(id1, id2)) misranked += round
+        }
+
+        assertAll(
+            { assertEquals(emptyList<Int>(), indexedTwice, "Rounds in which the index scan indexed an artist again") },
+            { assertEquals(emptyList<Int>(), misranked, "Rounds in which the name match was not first") }
+        )
     }
 
     @Test

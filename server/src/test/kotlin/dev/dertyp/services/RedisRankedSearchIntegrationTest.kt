@@ -88,6 +88,7 @@ class RedisRankedSearchIntegrationTest : KoinTest {
         songService = GlobalContext.get().get()
 
         redisSearchService.initIndex()
+        TestRedis.awaitSearchIndexes(redisProvider.jedis, config.indexPrefix)
     }
 
     @AfterEach
