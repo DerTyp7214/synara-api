@@ -47,7 +47,7 @@ Use them to decide *before* fetching: pick Atmos when `atmos != null` and your p
 
 All three return a bare JSON number. `HEAD` on the stream route itself is usually the better option: it answers with `Content-Length` and the content type the server resolved for the file, and costs nothing.
 
-**Only `HEAD` reports that type.** The `GET` body — ranged or not — is typed by Ktor from the file name, so a FLAC song arrives as `application/octet-stream` even though `HEAD` says `audio/flac`. Podcast episodes are no different: the server derives `audio/mpeg`, `audio/mp4`, `audio/aac`, `audio/ogg`, `audio/flac` or `audio/wav` from the extension, but that value reaches the `HEAD` response only. Decide what to decode from `HEAD` or from the song's `audio.codec`, not from the streamed response.
+**Only `HEAD` reliably reports that type.** The `GET` body — ranged or not — is typed from the file extension by a generic table: MP3, M4A, OGG, WAV and AIFF files arrive with an `audio/*` type, but a FLAC or `.opus` song arrives as `application/octet-stream` even though `HEAD` says `audio/flac` or `audio/ogg`. Podcast episodes are no different: the server derives `audio/mpeg`, `audio/mp4`, `audio/aac`, `audio/ogg`, `audio/flac` or `audio/wav` from the extension, but that value reaches the `HEAD` response only, and a FLAC or Opus episode is `application/octet-stream` on `GET`. Decide what to decode from `HEAD` or from the song's `audio.codec`, not from the streamed response.
 
 All three audio routes are file responses: `Accept-Ranges: bytes`, `Content-Disposition: inline; filename="…"`, and Ktor's `PartialContent` handling for `Range` (at most 10 ranges per request), which yields `206` with `Content-Range`. Normal players seek with `Range` and need nothing else.
 
@@ -110,7 +110,7 @@ Image ids are stable for the lifetime of the image, so cache by id.
 
 Reporting is what makes now-playing, listening statistics and ListenBrainz work. It is cheap, and the server needs it whether or not you also use the queue.
 
-1. **On track start** — `POST /scrobble/nowPlaying/{songId}`. The now-playing state expires on its own after the song's duration, so a client that dies does not leave a ghost.
+1. **On track start** — `POST /scrobble/nowPlaying/{songId}`. The now-playing state is a lease that every `reportPlayback` renews. Without further reports it is cleared on its own after at most 3 minutes while playing (earlier when the song ends first, with a few seconds of grace) and after 30 minutes while paused, so a client that dies does not leave a ghost, and a client that keeps reporting keeps the state alive for a song of any length.
 2. **On every playback event and while playing** — `POST /scrobble/reportPlayback` with [`PlaybackReport`](MODELS.md#devdertypdataplaybackreport): `{"songId": …, "positionMs": 12345, "isPlaying": true, "sentAt": <client epoch ms>}`. Send it on play, pause, resume and seek, and every 10 to 15 seconds while playing. The response is the server's epoch milliseconds at receipt, so you can measure the offset between client and server clocks; `sentAt` lets the server compensate transport delay.
 3. **On finish** — `POST /scrobble/listened` with [`ScrobbleRequest`](MODELS.md#devdertypdatascrobblerequest): `{"songId": …, "listenedAt": <epoch ms>, "msPlayed": …}`. `listenedAt` defaults to the server's current time.
 4. **On stop** — `POST /scrobble/clearNowPlaying`.
@@ -165,7 +165,7 @@ Playing a particular song on the target goes through the shared queue described 
 | `GET /remoteControl/observeStatus/{sessionId}` (SSE) | follow that status, replaying the last one immediately |
 | `POST /remoteControl/sendCommand/{sessionId}` | deliver a `PlaybackCommand` and wait for the ack |
 
-A session belonging to another user answers `403`. A target that is not online, lacks `REMOTE_CONTROL`, or a `SetVolume` outside `0..1` or sent to a device without `REMOTE_VOLUME`, all answer `400`. As with queue observation, presence and pending requests live in the memory of a single server instance — there is no cross-instance fan-out.
+A session belonging to another user answers `403`. A target that is not online, lacks `REMOTE_CONTROL`, or a `SetVolume` outside `0..1` or sent to a device without `REMOTE_VOLUME`, all answer `400`. The two status routes check the target the same way: `GET /remoteControl/status/{sessionId}` and `GET /remoteControl/observeStatus/{sessionId}` answer `400` for a device that is not online and `403` for another user's session, so a controller reads them only for devices from `getOnlineDevices`. As with queue observation, presence and pending requests live in the memory of a single server instance — there is no cross-instance fan-out.
 
 ## The shared queue
 
@@ -219,7 +219,7 @@ Media elements and `EventSource` cannot set an `Authorization` header, and the s
 
 ## Checklist
 
-1. Send `X-Api-Version` on every request, or you will receive version-1 shapes without `audio`, `atmos` or title tags.
+1. Send `X-Api-Version` on every request, or you will receive version-1 shapes: title tags folded back into the titles, no Atmos stream, and WAV and AIFF transcoded to FLAC.
 2. Choose a source from `audio`/`atmos` before fetching; use `HEAD` or the size routes when you need the exact length.
 3. Seek with `Range`; fall back to `offset` only when the response has no `Accept-Ranges`.
 4. Warm a transcode with `downloadSize`/`downloadSong` (`force=false`) before you need it, and never block the UI on the first call.

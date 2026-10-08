@@ -75,8 +75,8 @@ Create it once and keep it for the lifetime of the app.
 | `fun isAuthenticated(): Boolean` | Whether credentials exist at all. Guards the "session expired" path and stops repeated logout callbacks. |
 | `suspend fun updateAuth(response: AuthenticationResponse)` | Persist a fresh `token` / `refreshToken` / `expiresAt` after a login or a refresh. |
 | `suspend fun handleAuthFailure(reason: Throwable?)` | The session is gone for good: clear credentials and send the user back to the login screen. |
-| `val sslConfirmed: Boolean` | Whether TLS has ever worked against this server. Persisted, not per-run. |
-| `suspend fun setSslConfirmed(value: Boolean)` | Store that flag. |
+| `val sslConfirmed: Boolean` | Whether TLS has ever worked against this server. Persisted, not per-run. The manager only reads it. It decides whether a TLS failure demotes the stored URL for good or for the current run only (see *Server validation and the TLS fallback*). |
+| `suspend fun setSslConfirmed(value: Boolean)` | Store that flag. Your app sets it. Call it with `true` once a `wss://` connection has worked, for example when `validateServer(useSsl = true)` returns `useSsl = true`. |
 
 Optional overrides worth knowing: `supportsSsl` (default `true`; set `false` on a platform without TLS to skip the probe entirely), `uiLocale()` and `uiTimeZone()` (default `null`, see *Locale* below), `onServerReachable()` / `onServerUnreachable()` (default: flip the `isServerReachable` flow), and the classifiers `isAuthException`, `isTransportException`, `isRefreshRejected`, `isSslException`.
 
@@ -223,7 +223,7 @@ if (result.validated) {
 
 `validateServer` tries `wss://` then `ws://` (only `ws://` when `useSsl = false`), opens a throwaway kRPC client against `<base>/rpc`, calls `IServerStatsService.health()` with a 5-second timeout and closes it again. The returned `ServerValidationResult` carries `validated` and the scheme that answered (`useSsl`), so a server behind a plain-HTTP reverse proxy is detected instead of silently failing later.
 
-Separately, `checkSslSupport()` runs once per connection attempt on any `https`/`wss` URL: it issues a plain GET to `<base>/handshake` and only cares whether the failure is TLS-shaped (`isSslException` matches "ssl", "tls", "certificate" or "handshake failed" in the message). A TLS failure on a server where TLS has never been confirmed rewrites the stored URL to plain `ws://` through `setRpcUrl`; if TLS *had* been confirmed before, the demotion is kept to the current run only, exposed as `sessionSslOverride`, so a temporary certificate problem does not permanently downgrade the connection. `resetSslSession()` clears both. Any other error is ignored — this probe is a TLS check, not a reachability check. It is worth knowing why: `/handshake` is a WebSocket route, so a plain GET to it answers `400` on a real server and the probe never decodes a `HandshakeResponse` at all. Read the handshake with `fetchHandshake()` or `GET /handshake/handshake` instead.
+Separately, `checkSslSupport()` runs once per connection attempt on any `https`/`wss` URL: it issues a plain GET to `<base>/handshake` and only cares whether the failure is TLS-shaped (`isSslException` matches "ssl", "tls", "certificate" or "handshake failed" in the message). A TLS failure on a server where TLS has never been confirmed rewrites the stored URL to plain `ws://` through `setRpcUrl`; if TLS *had* been confirmed before, the demotion is kept to the current run only, exposed as `sessionSslOverride`, so a temporary certificate problem does not permanently downgrade the connection. `resetSslSession()` clears both. Any other error is ignored — this probe is a TLS check, not a reachability check. It is worth knowing why: `/handshake` is a WebSocket route, so a plain GET to it answers `400` on a real server and the probe never decodes a `HandshakeResponse` at all. Read the handshake with `fetchHandshake()` or `GET /handshake/handshake` instead. The same fact has a consequence for `sslConfirmed`: the manager calls `setSslConfirmed(true)` only after that GET decoded a handshake, which does not happen against a real server, and `validateServer` never calls it. So the manager never confirms TLS by itself, and the flag stays `false` unless your app sets it — do that when `validateServer(useSsl = true)` comes back with `useSsl = true`, or after the first successful `wss://` connection. Without it every TLS failure permanently rewrites the stored URL to `ws://`.
 
 ## Handshake and versions
 
@@ -277,7 +277,7 @@ All connection work runs on `ioDispatcher`, and the RPC clients themselves are c
 docker run -p 8081:8081 ghcr.io/dertyp7214/synara-mock:latest-dev
 ```
 
-Point `getRpcUrl()` at `ws://localhost:8081`. The mock server registers every service in the registry at `/rpc`, `/rpc/auth` and `/rpc/services` and generates dummy data from the return types, so you can build screens before a real library exists. Its only authentication rule is that protected services need *some* `Authorization` header — the content is never checked, so your token handling compiles but is not exercised. Details in [MOCK_SERVER.md](MOCK_SERVER.md).
+Point `getRpcUrl()` at `ws://localhost:8081`. The mock server registers every service in the registry at `/rpc`, `/rpc/auth` and `/rpc/services` and generates dummy data from the return types, so you can build screens before a real library exists. Its only authentication rule is that protected services need an `Authorization` header starting with `Bearer ` — anything else answers 401, and the token itself is never checked, so your token handling compiles but is not exercised. Details in [MOCK_SERVER.md](MOCK_SERVER.md).
 
 For unit tests, the pattern in [ServerValidationTest.kt](../server/src/test/kotlin/dev/dertyp/ServerValidationTest.kt) works without any server: a Ktor `testApplication` registering one service with `installKrpc { serialization { cbor(AppCbor) } }` on the client side, and a stub manager whose members all return constants.
 
@@ -287,7 +287,7 @@ For unit tests, the pattern in [ServerValidationTest.kt](../server/src/test/kotl
 2. Build the `HttpClient` once with `createRpcHttpClient(appVersion)`.
 3. Subclass `BaseRpcServiceManager`: URL storage, token storage, an `isTokenExpired()` with a small margin, and a `handleAuthFailure` that logs the user out.
 4. Override `uiLocale()` if you render server-driven UI, and `supportsSsl` if your platform cannot do TLS.
-5. Validate a user-entered address with `validateServer` before storing it; store the scheme it returns.
+5. Validate a user-entered address with `validateServer` before storing it; store the scheme it returns, and call `setSslConfirmed(true)` when that scheme is `wss://`.
 6. Call `fetchHandshake()` after the first successful connection and compare `apiVersion` with yours.
 7. Use `getService<T>()` for ordinary calls, a `ReconnectingRpcClient` over `getDedicatedClient()` for long-lived streams.
 8. Wrap never-ending observations in `resilientObservation(gate = isServerReachable)`.

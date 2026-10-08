@@ -60,7 +60,8 @@ Every node is a `UiComponent`. On the wire (JSON) each node carries `"type"` wit
 | `button` | `label`, `action`, `style`, `icon?`, `enabled` | |
 | `listItem` | `title`, `subtitle?`, `icon?`, `trailing?`, `action?` | |
 | `table` | `columns`, `rows[{cells, action?}]` | |
-| `spacer` / `divider` | | |
+| `spacer` | `size` (`NONE`/`SMALL`/`MEDIUM`/`LARGE`) | Empty space of that size. |
+| `divider` | | |
 | `native` | `name`, `params`, `fallback?` | Portal, see below. |
 | `emptyState` | `title`, `description?`, `icon?`, `actions` | "Nothing here" placeholder: large muted icon, bold title, secondary description, all centered in the available space (iOS `ContentUnavailableView`), optional buttons below. |
 | `log` | `lines`, `maxLines` | Fixed-height (~300pt) pane of small monospaced secondary text, one entry per line, scroll anchored to the newest line; keep at most `maxLines`. |
@@ -69,13 +70,13 @@ Every node is a `UiComponent`. On the wire (JSON) each node carries `"type"` wit
 
 ### Form fields
 
-All fields have `key` (the payload key), `label`, `helper?`, `error?`, `required`, `enabled`.
+All fields have `key` (the payload key), `label`, `helper?` and `enabled`. All except `switch` also have `error?` and `required`.
 
 | Type | Extra fields | Payload value |
 |---|---|---|
 | `textField` | `value?`, `placeholder?`, `secret`, `multiline`, `kind`, `toolbar` | `{"text": "…"}` |
-| `fileField` | `accept`, `binary`, `allowPaste`, `secret`, `value?` | `{"text": "<file content>"}` |
-| `numberField` | `value?`, `min?`, `max?`, `step?` | `{"number": 3.0}` |
+| `fileField` | `accept`, `binary`, `allowPaste`, `secret`, `value?`, `toolbar` | `{"text": "<file content>"}` |
+| `numberField` | `value?`, `min?`, `max?`, `step?`, `toolbar` | `{"number": 3.0}` |
 | `switch` | `value` | `{"flag": true}` |
 | `select` | `value?`, `options[{value,label,icon?}]` | `{"text": "<option value>"}` |
 
@@ -107,7 +108,7 @@ Tones map to your design system: `DEFAULT`, `PRIMARY` (accent), `SUCCESS`, `WARN
 | `dismissKeyboard` | | Unfocus the current input and close the on-screen keyboard (no-op on desktop). |
 | `openUrl` | `url` | Open in the system browser (used for OAuth logins). |
 | `openNative` | `name`, `params` | Open a native screen by portal name, e.g. `externalSearch` with `query`. |
-| `openMenu` | `items[{label, action, icon?, tone, enabled}]`, `title?` | Show a native menu anchored to the element (dropdown on desktop, context menu or bottom sheet on mobile) and perform the chosen item's `action`. An item's action may be another `openMenu` (sub-menu). A "menu button" is simply a `button` whose action is `openMenu`; a `listItem` or `tile` can open a menu the same way. |
+| `openMenu` | `items[{label, action, icon?, tone, enabled, id?}]`, `title?` | Show a native menu anchored to the element (dropdown on desktop, context menu or bottom sheet on mobile) and perform the chosen item's `action`. An item's action may be another `openMenu` (sub-menu). A "menu button" is simply a `button` whose action is `openMenu`; a `listItem` or `tile` can open a menu the same way. |
 | `refresh` | | Re-render the contribution. |
 
 `UiInvokeResult` carries `status` (`OK`, `VALIDATION_ERROR`, `ERROR`, `UNAUTHORIZED`), an optional `message` to toast, `fieldErrors` (key → text, show next to the field), `refresh` (re-render now) and `next` (perform this action afterwards, e.g. `openUrl`).
@@ -125,7 +126,7 @@ If you don't implement a name, render `fallback` if present, otherwise nothing.
 
 ## Reading and subscribing
 
-- `listContributions(kind?, slot?)` – discover what exists (`UiContributionInfo` includes `title`, `icon`, `live`, `hooks`, access flags).
+- `listContributions(kind?, slot?)` – discover what exists (`UiContributionInfo` includes `title`, `icon`, `live`, `hooks`, `cardSize` for home cards, access flags).
 - `renderSlot(slot, context)` – one call per native screen; render `items` in order.
 - `render(contributionId, context)` – one-off render, e.g. a page.
 - `subscribeWithContext(contributionId, context)` – a `Flow<UiRender>` that emits immediately and again on every change; use it for pages and live cards with the same `UiContext` passed to `render`, so pages opened with `params` keep them. `revision` increases per emission; only re-render when `root` or `toolbar` actually changed. `subscribe(contributionId, entityId?)` is the older variant that only carries the entity id.
@@ -143,7 +144,7 @@ Rules: one subscription per `live` node while it is on screen; cancel it when th
 
 ### Pages and the toolbar
 
-A `UiRender` of a `PAGE` contribution has `title` (use it as the screen title) and `toolbar`: a list of components for the native app bar — `button`s (render as icon buttons using `icon`, with `label` as tooltip/accessibility text), `icon`s and `native` portals. A toolbar button with an `openMenu` action is the overflow menu. Nothing in `toolbar` appears in `root`, so the page body stays free of chrome. Slot items and home cards always have an empty `toolbar`.
+Every `UiRender` carries `contributionId`, `root`, `revision` and `schemaVersion`, the UI schema version the tree was shaped for. A `UiRender` of a `PAGE` contribution additionally has `title` (use it as the screen title) and `toolbar`: a list of components for the native app bar — `button`s (render as icon buttons using `icon`, with `label` as tooltip/accessibility text), `icon`s and `native` portals. A toolbar button with an `openMenu` action is the overflow menu. Nothing in `toolbar` appears in `root`, so the page body stays free of chrome. Slot items and home cards always have an empty `toolbar`.
 
 The `song.menu` slot (and future `*.menu` slots) is the native context menu of an entity: render each item's `root` as menu entries — contributions return `listItem`s or `button`s there, whose actions you perform when chosen.
 
@@ -177,8 +178,10 @@ Example — download from external search:
 
 ```http
 POST /ui/intake
-{"items": [{"type": "id", "provider": "tidal", "id": "123", "contentType": "track"}]}
+[{"type": "id", "provider": "tidal", "id": "123", "contentType": "track"}]
 ```
+
+`items` is the only body parameter, so the body is the bare array. A preselected handler goes in the `resolverId` query parameter (`POST /ui/intake?resolverId=import.tidal`).
 
 ```json
 {"status": "OK", "message": "1 items queued", "accepted": 1}
@@ -200,17 +203,21 @@ Work accepted by an intake handler runs in server-side **jobs**, queued per kind
 
 ## Home cards
 
-`getHomeCards()` returns every `HOME_CARD` contribution with `pinned` and `position`. `IChangeService.observeChanges` reports the `HOME_CARDS` topic when the layout changes, so read `getHomeCards()` again then. Render pinned cards on the home screen (each through `subscribe(card.contributionId)`), offer the unpinned ones in a picker, and persist changes with `setHomeCardPinned` / `setHomeCardOrder`.
+`getHomeCards()` returns every `HOME_CARD` contribution with `pinned`, `position` and its preferred `size` (`UiCardSize`: `SMALL`, `MEDIUM`, `LARGE`, `WIDE`). `IChangeService.observeChanges` reports the `HOME_CARDS` topic when the layout changes, so read `getHomeCards()` again then. Render pinned cards on the home screen (each through `subscribe(card.contributionId)`), offer the unpinned ones in a picker, and persist changes with `setHomeCardPinned` / `setHomeCardOrder`.
 
 ## Hooks
 
-When the app receives a shared URL or text, call `dispatchHook(UiHookEvent.ShareUrl(url))` (or `ShareText`). The result is a list of `UiHookHandler`:
+When the app receives a shared URL or text, call `dispatchHook(UiHookEvent.ShareUrl(url, title?))` (or `ShareText(text)`). `title` is the optional title that accompanied the share. The result is a list of `UiHookHandler`:
 
 - empty → fall back to your native behaviour;
 - one → perform `handler.action` directly, unless `confirmText` is set — then ask first;
 - several → show a chooser with `title`/`description`/`icon`, then perform the chosen `action`.
 
-Nothing is executed on the server during dispatch, so offering never has side effects. Shared URLs and text are parsed into `IntakeItem`s, so the handlers are the intake handlers (an `intake` action per importer that can take the link — "Import with Tidal", confirm "Import this link?") plus contribution offers such as the importer page's "Open in importer" (`openPage` with the text pre-filled) and, for plain text, "Search catalog".
+Nothing is executed on the server during dispatch, so offering never has side effects.
+
+`listHookHandlers(kind?)` (`GET /ui/hookHandlers?kind=`) lists every handler that may offer to take hook events for the current user, without an event: a `UiHookHandlerInfo` per handler with `id`, `source`, `title`, `description?`, `icon?` and the `kinds` it serves. Use it to build a picker or a settings list, for example a default-importer choice. Unlike `dispatchHook` it carries no `action` and says nothing about a specific URL or text, so whether a handler accepts a given event is only known from `dispatchHook`. Its `id` matches `UiHookHandler.id` and `UiMenuItem.id`, and it is what you pass as `resolverId` to `intake`.
+
+Shared URLs and text are parsed into `IntakeItem`s, so the handlers are the intake handlers (an `intake` action per importer that can take the link — "Import with Tidal", confirm "Import this link?") plus contribution offers such as the importer page's "Open in importer" (`openPage` with the text pre-filled) and, for plain text, "Search catalog".
 
 ## Worked example: the importer screen
 
@@ -219,9 +226,11 @@ The importer is modelled after the iOS importer screen: a `PAGE` contribution (`
 ### 1. Library entry
 
 ```http
-POST /ui/renderSlot
-{"slot": "library", "context": {}}
+POST /ui/renderSlot?slot=library
+{}
 ```
+
+`slot` is a query parameter. The body is the bare `UiContext`, here an empty one.
 
 ```json
 {
@@ -325,8 +334,10 @@ A URL shared to the app:
 
 ```http
 POST /ui/dispatchHook
-{"event": {"type": "shareUrl", "url": "https://music.apple.com/album/1"}}
+{"type": "shareUrl", "url": "https://music.apple.com/album/1"}
 ```
+
+The event is the only body parameter, so it is sent bare.
 
 ```json
 [

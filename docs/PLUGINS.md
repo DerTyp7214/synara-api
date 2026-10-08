@@ -37,7 +37,7 @@ Additional capabilities are opt-in through marker interfaces your plugin class c
 
 ### `PluginContext`
 
-Passed to `init`. Provides the logger, storage, the library APIs (`songLibrary`, `albumLibrary`, `artistLibrary`, `playlistLibrary`, `imageLibrary`), metadata and lyrics services, the `scheduleService` for scheduled tasks, the `hooks` of the plugin (see [Hooks](#hooks)), `apiKeyScopes`, and — since API version 2 — `ui`, `settings` and `i18n`.
+Passed to `init`. Provides the `logger`, `storageService`, the `indexer` and `importService` of the server, the library APIs (`songLibrary`, `albumLibrary`, `artistLibrary`, `playlistLibrary`, `imageLibrary`), `metadataService` and `lrcLibService`, the `scheduleService` for scheduled tasks, the `hooks` of the plugin (see [Hooks](#hooks)), `apiKeyScopes`, `ui`, `settings` and `i18n` (see [Server-Driven UI](#server-driven-ui)), `intake` and `jobs` (see [Intake resolvers](#intake-resolvers) and [Jobs](#jobs)) and `credentials` (see [Credentials](#credentials)). Every member is available to every plugin that loads, whatever `apiVersion` it declares.
 
 ## Hooks
 
@@ -116,7 +116,7 @@ The hook groups protect against mistakes and document what a plugin reacts to. T
 
 1.  **Build the JAR**: Package your plugin as a shadow/fat JAR (including all non-provided dependencies).
 2.  **Deploy**: Place the resulting `.jar` file into the `plugins/` directory in the Synara root.
-3.  **Restart**: Restart the Synara server. You should see "Loaded plugin: [Your Plugin Name]" in the logs.
+3.  **Restart**: Restart the Synara server. You should see `Loaded plugin: <Your Plugin Name> (<your plugin id>)` in the logs.
 
 ## Server-Driven UI
 
@@ -199,7 +199,7 @@ class MySettings : UiContribution(
 - `access` restricts who sees and may invoke the contribution (`requiresAdmin`, required `UserCapability`s). Authorization is enforced by the server.
 - Use `context.ui.invalidate(id)` to push a re-render from outside the flow.
 
-Slots available today: `library`, `settings`, `admin.dashboard`, `home` (home cards), `importer` (sections on the importer page), `album.detail`, `artist.detail`, `song.detail`, `song.menu`, `playlist.detail`.
+Slots available today: `library`, `settings`, `admin.dashboard`, `home` (home cards), `importer` (sections on the importer page), `album.detail`, `artist.detail`, `song.detail`, `song.menu`, `playlist.detail`, `collection.detail`.
 
 Secret fields (`TextField(secret = true)`) must never echo the stored value; treat an empty submitted value as "unchanged".
 
@@ -245,7 +245,7 @@ context.intake.register(object : IntakeResolver {
 
 ### Credentials
 
-`context.credentials` stores and reads secrets such as API keys and logins. It requires `apiVersion` 3. Names are scoped to your plugin, so two plugins can both use the name `api`. `get(name)` returns the `ResolvedCredential` or null, `store(name, credential)` saves one and `remove(name)` deletes it.
+`context.credentials` stores and reads secrets such as API keys and logins. It was added with API version 3 and is available to every loaded plugin regardless of its declared `apiVersion`. Names are scoped to your plugin, so two plugins can both use the name `api`. `get(name)` returns the `ResolvedCredential` or null, `store(name, credential)` saves one and `remove(name)` deletes it.
 
 Without a credential server configured, credentials are kept encrypted in the local database. With a credential server, grants are looked up as `plugin:<pluginId>:<name>`. `managedRemotely` tells whether the credential server is in use. Names managed remotely cannot be changed from the plugin, so `store` and `remove` are rejected for them.
 

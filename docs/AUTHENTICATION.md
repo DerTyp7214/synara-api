@@ -38,9 +38,9 @@ The access token is a JWT signed with HMAC-256 using the server's `jwt.secret`, 
 
 Validation is not purely cryptographic: after verifying the signature, audience and issuer, the server looks the `ses` claim up and rejects the token if that session is no longer active. A still-valid, unexpired token therefore stops working the moment its session is deactivated.
 
-The refresh token is not a JWT — it is a fixed number of random bytes, URL-safe Base64, truncated to a fixed length, stored server-side; see [API_CONSTANTS.md#authentication](API_CONSTANTS.md#authentication) for the exact sizes and its lifetime.
+The refresh token is not a JWT — it is 192 random bytes, URL-safe Base64, truncated to 255 characters, stored server-side ([JwtService.kt](../server/src/main/kotlin/dev/dertyp/services/JwtService.kt)). Its lifetime is in [API_CONSTANTS.md#authentication](API_CONSTANTS.md#authentication).
 
-Clients should treat `expiresAt` as the source of truth and refresh slightly early — the first-party client considers a token expired one minute before `expiresAt` — rather than waiting for a call to fail.
+Clients should treat `expiresAt` as the source of truth and refresh slightly early — the first-party client considers a token expired five minutes before `expiresAt` — rather than waiting for a call to fail.
 
 ## Refreshing
 
@@ -92,21 +92,21 @@ The server accepts the access token two ways, and prefers the cookie when both a
 1. `Authorization: Bearer <token>` — use this everywhere you control the request.
 2. The cookie named in [API_CONSTANTS.md#authentication](API_CONSTANTS.md#authentication) (`synara-auth` in the code samples throughout these docs), holding the raw token.
 
-The cookie exists for contexts that cannot set headers: `<img>`, `<audio>` and `<video>` sources, `EventSource` (Server-Sent Events), and plain navigation. The web UI the server ships sets it (and a `synara-refresh` cookie for its own refresh flow) from the login response with `path=/; SameSite=Strict`, expiring at `expiresAt`, and clears both on logout ([mirror.js](../server/src/main/resources/static/mirror.js)). A native client should stay on the header.
+The cookie exists for contexts that cannot set headers: `<img>`, `<audio>` and `<video>` sources, `EventSource` (Server-Sent Events), and plain navigation. The web UI the server ships sets it from the login response with `path=/; SameSite=Strict`, expiring at `expiresAt`, sets a `synara-refresh` cookie for its own refresh flow the same way but with a fixed `max-age` of 30 days, and clears both on logout ([mirror.js](../server/src/main/resources/static/mirror.js)). A native client should stay on the header.
 
 Two path families skip JWT authentication entirely: anything ending in `/callback` (OAuth returns) and anything containing `/proxy/`.
 
 ## Admin and capabilities
 
-Authorization has two levels. `isAdmin` is a flag on the user; capabilities are a list. **An admin implicitly has every capability** — `hasCapability` returns true for an admin regardless of the list ([User.kt](../common-rpc/src/commonMain/kotlin/dev/dertyp/data/User.kt)). The current user's own flags come from `IUserService.me()` (`GET /user/me`) or `GET /userInfo`; use them to hide actions the user cannot perform, and still handle the failure, because the server checks independently. The two return different models: `me()` answers the full [`User`](MODELS.md#devdertypdatauser) — including a `passwordHash` field that the server blanks to `""` before sending — while `GET /userInfo` answers [`UserInfo`](MODELS.md#devdertypdatauserinfo), the same identity without that field.
+Authorization has two levels. `isAdmin` is a flag on the user; capabilities are a list. **An admin implicitly has every capability** — `hasCapability` returns true for an admin regardless of the list ([User.kt](../common-rpc/src/commonMain/kotlin/dev/dertyp/data/User.kt)). The current user's own flags come from `IUserService.me()` (`GET /user/me`) or `GET /userInfo`; use them to hide actions the user cannot perform, and still handle the failure, because the server checks independently. The two return different models — `me()` answers [`User`](MODELS.md#devdertypdatauser), `GET /userInfo` answers [`UserInfo`](MODELS.md#devdertypdatauserinfo) — but both carry the same fields today, and neither contains the password hash.
 
 Methods are gated by the `@RequiresCapability` and `@RequiresAdmin` annotations on the service interfaces, enforced by a proxy in front of every authenticated service ([Authorization.kt](../server/src/main/kotlin/dev/dertyp/utils/Authorization.kt)). The full list of which service methods each capability and admin-only status gates is generated from those annotations into [PERMISSIONS.md](PERMISSIONS.md).
 
-Everything not listed there needs nothing beyond a valid session. `POST /register` is admin-only too, checked in the route itself rather than by annotation.
+Everything not listed there needs nothing beyond a valid session, with one family of exceptions: things that belong to a user are owner-only. A collection or user playlist and the cover generation for them can only be changed by the user who created them, a playback session, a queue or a remote-control target only by the user they belong to, and a UI contribution only by the users it is open to. Anyone else gets the same `UnauthorizedException` (403 over REST) as a failed capability check. `POST /register` is admin-only too, checked in the route itself rather than by annotation.
 
 ## API keys
 
-Interactive clients use tokens; long-lived and headless integrations use API keys, which never expire on their own and are bound to a scope ([IApiKeyService](RPC_SERVICES.md#devdertypservicesiapikeyservice)):
+Interactive clients use tokens; long-lived and headless integrations use API keys, which never expire on their own — the key metadata carries an `expiresAt` field, but nothing sets it, so it is always empty — and are bound to a scope ([IApiKeyService](RPC_SERVICES.md#devdertypservicesiapikeyservice)):
 
 ```kotlin
 val key = manager.getService<IApiKeyService>().createApiKey("Living room speaker", listOf("radio"))
@@ -114,7 +114,7 @@ val key = manager.getService<IApiKeyService>().createApiKey("Living room speaker
 
 The raw key is returned once at creation (and can be read back later with `getApiKeyString(id)`); it looks like `synara_<base64>`. `listApiKeys()` returns metadata only — label, creation time, last use, scopes, revocation state — never the secret. `revokeApiKey(id)` kills a key permanently. The built-in scopes are listed in [API_CONSTANTS.md#authentication](API_CONSTANTS.md#authentication), but plugins can register more, so `listAvailableScopes()` is the authoritative list for a given server.
 
-Where a route takes an API key, it is read from `?apiKey=`, the `X-API-Key` header or an `Authorization: Bearer` header, in that order ([Call.kt](../server/src/main/kotlin/dev/dertyp/core/Call.kt)). A key that is revoked, expired or missing the required scope is treated as no key at all, and the route answers 401. API keys do **not** unlock the RPC or the general REST surface — those still need a JWT.
+Where a route takes an API key, it is read from `?apiKey=`, the `X-API-Key` header or an `Authorization: Bearer` header, in that order ([Call.kt](../server/src/main/kotlin/dev/dertyp/core/Call.kt)). A key that is revoked, past an `expiresAt` (should one ever be set) or missing the required scope is treated as no key at all, and the route answers 401. API keys do **not** unlock the RPC or the general REST surface — those still need a JWT.
 
 ## What failures look like
 
@@ -124,7 +124,7 @@ Over **REST** ([RestCall.kt](../server/src/main/kotlin/dev/dertyp/routing/rest/R
 |---|---|
 | 400 | An `IllegalArgumentException` from the service, or unbindable parameters. The body is the exception message. This is how the **generated** auth routes report bad credentials: `POST /auth/authenticate?username=…&password=…` with a wrong password answers `400` with the body `Invalid username or password`, and the generated refresh route answers `400 Invalid refresh token` — only the hand-written `POST /authenticate` and `POST /refresh-token` use 401. A client on the generated routes must therefore treat 400 as "credentials rejected" and not wait for a 401. |
 | 401 | No valid token: the JWT challenge answers `Token is not valid or has expired`; an authenticated route with no resolvable user answers an empty 401; `POST /authenticate` answers `Invalid username or password` and `POST /refresh-token` answers `Invalid refresh token` or `Invalid user`. |
-| 403 | An `UnauthorizedException` — the capability or admin check failed. Body: `User does not have required capability: EDIT` or `User is not an admin`. `POST /register` by a non-admin answers `Only admins can register new users`. |
+| 403 | An `UnauthorizedException` — the capability, admin or owner check failed. Body: `User does not have required capability: EDIT` or `User is not an admin`. `POST /register` by a non-admin answers `Only admins can register new users`. |
 | 404 | The method returned `null` (no such song, album, …). |
 | 409 | `POST /register` for a username that already exists. |
 | 500 | Anything else, with the exception message in the body. |

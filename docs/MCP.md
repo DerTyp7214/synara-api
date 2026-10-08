@@ -71,7 +71,7 @@ Raw listens, newest first, keyset-paginated.
 | `qualifiedOnly` | boolean                        | false   |
 | `timezone`      | IANA zone                      | UTC     |
 
-Returns `{ listens: [...], nextCursor, hasMore }`. Each listen has `id`, `listenedAt`, `msPlayed` (raw client report, may be null), `playedMs` (effective played duration), `qualified` (counts as a full play: at least three minutes or half the song), `source`, and either `song` or `unmatched`.
+Returns `{ listens: [...], nextCursor, hasMore }`. Each listen has `id`, `listenedAt`, `msPlayed` (raw client report, may be null), `playedMs` (effective played duration), `qualified` (counts as a full play: at least three minutes or half the song, and always when no play time was reported), `source`, and either `song` or `unmatched`.
 
 ### `get_listening_summary`
 

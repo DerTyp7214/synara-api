@@ -23,8 +23,8 @@ The mock server uses the `MockGenerator` to create dynamic proxies for service i
 - **Strings**: Randomly generated UUID-based strings.
 - **Numbers**: Random values within sensible ranges.
 - **Data Classes**: Recursively populates all constructor parameters with dummy data.
-- **Collections**: Generates small lists (usually 3-5 items) of the requested type.
-- **Nullable Types**: Occasionally returns `null` (approx. 10% chance) to test null handling in clients.
+- **Collections**: Lists, sets, maps and `Flow`s carry 3 items of the requested type, a `PaginatedResponse` carries 5. Collections nested deeper than 5 levels are empty.
+- **Nullable Types**: Returns `null` with about a 10% chance to test null handling in clients, and always once the nesting depth exceeds 3.
 
 ## Running the Mock Server
 
@@ -70,7 +70,7 @@ For explicit mocks the REST endpoints call the real implementation (string query
 The mock server includes a `MockAuthPlugin` that simulates authentication.
 
 - **Public Services**: `IAuthService` and `IServerStatsService` are accessible without authentication.
-- **Protected Services**: All other services require an `Authorization` header to be present in the request. The content of the header is not validated, but it must be present.
+- **Protected Services**: All other services require an `Authorization` header that starts with `Bearer `. Requests without it are answered with `401 Unauthorized`. The token after the prefix is not validated, any value works.
 
 ## API Endpoints
 

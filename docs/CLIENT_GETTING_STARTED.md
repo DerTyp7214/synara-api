@@ -48,7 +48,7 @@ The quickest way to see real shapes without owning a server is the **mock server
 docker run -p 8081:8081 ghcr.io/dertyp7214/synara-mock:latest-dev
 ```
 
-It listens on port `8081`, serves `/rpc`, `/rpc/auth` and `/rpc/services`, and accepts any `Authorization` header without validating it — so you can exercise everything except real authentication. Details and limits are in [MOCK_SERVER.md](MOCK_SERVER.md).
+It listens on port `8081`, serves `/rpc`, `/rpc/auth` and `/rpc/services`, and accepts any `Authorization` header that starts with `Bearer ` without validating the token — so you can exercise everything except real authentication. Details and limits are in [MOCK_SERVER.md](MOCK_SERVER.md).
 
 Against a real server, the first call worth making is the handshake, which tells you the API version the server speaks, whether it supports server-driven UI and whether TLS is available:
 
@@ -59,7 +59,7 @@ curl http://localhost:8080/handshake/handshake
 An observed response, from a server built at the same point in time as this page:
 
 ```json
-{"secure":false,"sslSupported":false,"apiVersion":7,"uiSchemaVersion":2}
+{"secure":false,"sslSupported":false,"apiVersion":10,"uiSchemaVersion":2}
 ```
 
 Running a server of your own is covered in [DEVELOPMENT.md](DEVELOPMENT.md) and the project [README](../README.md).
@@ -71,7 +71,7 @@ These hold across both RPC and REST and are worth internalising before you read 
 1. **Ids are UUIDs.** In JSON they are the usual hyphenated strings; over CBOR the same value is encoded as a 16-byte string, because the RPC transport swaps `UUIDSerializer` for `UUIDByteSerializer` ([Serializers.kt](../common-rpc/src/commonMain/kotlin/dev/dertyp/serializers/Serializers.kt)). If you write your own CBOR decoder, expect bytes, not text.
 2. **Timestamps come in two shapes.** A `PlatformDate` field (`AuthenticationResponse.expiresAt`, `UserSong.userSongCreatedAt`) is epoch milliseconds as a `Long`; a `PlatformInstant` field is an ISO-8601 string. Plain durations, such as `Song.duration` and `audioStartMs`, are milliseconds. The model reference in [MODELS.md](MODELS.md) names the type per field.
 3. **Lists are paginated.** Any method with `page` and `pageSize` returns [`PaginatedResponse`](MODELS.md#devdertypdatapaginatedresponse): `data`, `page` (**0-based**), `total`, `pageSize` and `hasNextPage`. Page through until `hasNextPage` is false rather than computing page counts yourself.
-4. **`explicit` is a required filter, not a preference.** Most song and album queries (`allSongs`, `likedSongs`, `rankedSearch`, `byColor`, …) take an `explicit: Boolean` with no default: pass `false` to hide explicit tracks, `true` to include them. Whatever your app's setting is, it belongs in that parameter.
+4. **`explicit` is a required filter on songs and an optional preference on albums.** Song queries (`allSongs`, `likedSongs`, `rankedSearch`, `byColor`, …) take an `explicit: Boolean` with no default: pass `false` to hide explicit tracks, `true` to include them. Whatever your app's setting is, it belongs in that parameter. On album queries (`allAlbums`, `byArtist`, `byVersionGroup`) the parameter is optional and means something else: when an album exists in an explicit and a clean edition, `true` makes the explicit edition the main entry and `false` the clean one. Left out, the explicit edition is preferred. Album `rankedSearch` and `byColor` have no `explicit` at all.
 5. **Covers are ids plus a blur hash.** Songs and albums carry `coverId`, artists and playlists carry `imageId`, and a user carries `profileImageId`, each next to a `blurHash` — never an image URL. Render the blur hash immediately, then fetch the bytes from the public route `GET /image/imageData/{id}?size=<px>` (`size=0` or omitted means original), or over RPC via `IImageService.getImageData`. See [RPC_SERVICES.md](RPC_SERVICES.md#devdertypservicesiimageservice).
 
 ## Headers to always send
@@ -81,7 +81,7 @@ These hold across both RPC and REST and are worth internalising before you read 
 | `X-Api-Version` | the `ApiVersion.CURRENT` you built against | Without it the server treats you as the legacy version and strips newer fields. See [API_VERSIONING.md](API_VERSIONING.md) and [API_CONSTANTS.md#api-version](API_CONSTANTS.md#api-version) for the actual values. |
 | `X-Ui-Schema-Version` | `UiSchemaVersion.CURRENT` | Only needed if you render server-driven UI; omitting it turns every component into `Fallback`. See [API_CONSTANTS.md#ui-schema-version](API_CONSTANTS.md#ui-schema-version). |
 | `Accept-Language` | e.g. `de-AT, de;q=0.9, en;q=0.5` | Server-driven UI text arrives translated; default is `en`. |
-| `Authorization` | `Bearer <token>` | Everything except the handshake, the stats service, the auth service and the public image routes. See [AUTHENTICATION.md](AUTHENTICATION.md). |
+| `Authorization` | `Bearer <token>` | Everything except the handshake, the stats service, the auth service and the public image routes (`GET /image/imageData/{id}`, `GET /animatedImage/imageData/{id}` and `GET /release/releaseImage/{releaseId}`). See [AUTHENTICATION.md](AUTHENTICATION.md). |
 | `User-Agent` | something identifying your app | It is stored as the session's name, so it is what the user sees in their session list. |
 
 On the RPC surface, headers are read at WebSocket upgrade time — changing the app language means reconnecting.

@@ -4,17 +4,24 @@ Synara is a powerful, modern music server and API designed for high-fidelity aud
 
 ## Key Features
 
-- **High-Fidelity Audio**: Native support for `FLAC` with transcoding to `Opus` for efficient streaming and downloads.
+- **High-Fidelity Audio**: Lossless library in `FLAC`, `WAV` or `AIFF` (`audio.losslessFormat`) with transcoding to `Opus` or `AAC` for efficient streaming and downloads, optionally ahead of time (`audio.autoTranscode`, `audio.autoTranscodeAac`).
 - **Service Integrations**:
     - **Tidal**: Metadata fetching, favorites synchronization, integrated downloading, and Dolby Atmos import; see [docs/API_VERSIONING.md](docs/API_VERSIONING.md) for how clients opt into Atmos streaming and newer response shapes.
+    - **Apple Music**: Import via `gamdl`.
+    - **YouTube** and **SoundCloud**: Importers for both platforms.
     - **Spotify**: Metadata resolution and artist/album matching.
     - **MusicBrainz**: Comprehensive metadata enrichment and persistent identifiers.
+    - **ListenBrainz**: Listening history sync and listening statistics.
 - **Advanced Library Management**:
     - Automatic indexing of local media.
     - Intelligent artist management (merging, splitting, and aliasing).
     - Global and user-specific playlist support.
     - Synced and unsynced lyrics search.
-- **Modern Communication**: Built on `kotlinx.rpc` and Ktor, utilizing **CBOR** for high-performance, type-safe RPC communication.
+    - Podcasts: feed subscriptions, episode import and streaming, searchable podcast indexes.
+    - Recommendations and radio channels built from the library and listening history.
+- **Modern Communication**: Built on `kotlinx.rpc` and Ktor, utilizing **CBOR** for high-performance, type-safe RPC communication (the wire format is negotiated per client, REST speaks JSON).
+- **More Ways In**: Subsonic-compatible API for existing clients, a read-only MCP server over the listening history ([docs/MCP.md](docs/MCP.md)), and Philips Hue light sync for playback.
+- **Plugins**: Importers, indexers, scheduled tasks and server-driven UI from plugin jars ([docs/PLUGINS.md](docs/PLUGINS.md)), with secrets kept locally or on a separate credential server ([docs/CREDENTIAL_SERVER.md](docs/CREDENTIAL_SERVER.md)).
 - **Multi-Device Sync**: Playback state synchronization and session management across all your devices.
 - **Extensible Architecture**: Includes built-in support for reverse proxies, image caching, and scheduled maintenance tasks.
 - **Admin Tools**: Integrated backup/restore system and detailed server statistics.
@@ -23,7 +30,7 @@ Synara is a powerful, modern music server and API designed for high-fidelity aud
 
 The full index is at [docs/README.md](docs/README.md); Swagger/OpenAPI documentation is also available at `/swagger` when the server is running.
 
-**Build a client**: [Getting Started](docs/CLIENT_GETTING_STARTED.md) · [Kotlin RPC](docs/CLIENT_KOTLIN_RPC.md) · [REST](docs/CLIENT_REST.md) · [Authentication](docs/AUTHENTICATION.md) · [Streaming & Playback](docs/STREAMING_AND_PLAYBACK.md) · [API Versioning](docs/API_VERSIONING.md) · [Server-Driven UI](docs/SERVER_DRIVEN_UI.md) · [Client Settings](docs/CLIENT_SETTINGS.md) · [Mock Server](docs/MOCK_SERVER.md)
+**Build a client**: [Getting Started](docs/CLIENT_GETTING_STARTED.md) · [Kotlin RPC](docs/CLIENT_KOTLIN_RPC.md) · [REST](docs/CLIENT_REST.md) · [Authentication](docs/AUTHENTICATION.md) · [Streaming & Playback](docs/STREAMING_AND_PLAYBACK.md) · [API Versioning](docs/API_VERSIONING.md) · [Deprecations](docs/DEPRECATIONS.md) · [Server-Driven UI](docs/SERVER_DRIVEN_UI.md) · [Client Settings](docs/CLIENT_SETTINGS.md) · [Mock Server](docs/MOCK_SERVER.md)
 
 **Reference (generated, do not edit — `./gradlew generateDocs` regenerates all of these)**: [RPC Services](docs/RPC_SERVICES.md) (`:common-rpc:kspCommonMainKotlinMetadata`) · [Models](docs/MODELS.md) (`:common-rpc:kspCommonMainKotlinMetadata`) · [Permissions](docs/PERMISSIONS.md) (`:common-rpc:kspCommonMainKotlinMetadata`) · [REST API](docs/REST_API.md) (`:server:kspKotlin`) · [API Constants](docs/API_CONSTANTS.md) (`:server:generateApiConstantsDocs`) · [Environment Variables](docs/ENVIRONMENT_VARIABLES.md) (`generateEnvDocs`)
 
@@ -49,6 +56,8 @@ Pick a transport first: Kotlin/KMP apps use the typed RPC SDK ([docs/CLIENT_KOTL
 | **Gradle** | `./gradlew :server:run` |
 | **Docker** | `docker compose up`     |
 
+`docker-compose.yml` does not compile the server. Its `api` service is built from `Dockerfile.nobuild`, which copies a prebuilt `*.jar` from the repository root into the image, so build the fat jar first with `./gradlew :server:shadowJar` and copy `server/build/libs/server-all.jar` to the repository root. The file also uses host networking, reads a `.server.env` file next to it and mounts a music directory from the host (`/home/typ/Music`), so adjust the volume paths and create `.server.env` before the first start. The root `Dockerfile` builds the server from source instead, and `docker-compose.server.yml` and `docker-compose-prod.yml` run the published `ghcr.io/dertyp7214/synara*` images.
+
 ### Development Setup
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full developer workflow: cloning with submodules, configuration, tests, and the `common-rpc` submodule. As a quick start, `./dev.sh` builds and runs both the server and the proxy components together:
@@ -69,7 +78,7 @@ Backups follow the same rule. A backup made by `0.0.1` or older is restored only
 
 ## Technical Details
 
-- **Transcoding**: Saves and streams as `Opus` to balance quality and bandwidth.
+- **Transcoding**: Streams and stores transcodes as `Opus` or `AAC` to balance quality and bandwidth. The lossless originals are kept in `FLAC`, `WAV` or `AIFF`.
 - **Database**: Supports SQLite (default) and PostgreSQL for larger deployments.
 
 ---
@@ -77,6 +86,16 @@ Backups follow the same rule. A backup made by `0.0.1` or older is restored only
 If the server starts successfully, you'll see:
 
 ```
-2024-12-04 14:32:45.584 [main] INFO  Application - Application started in 0.303 seconds.
-2024-12-04 14:32:45.682 [main] INFO  Application - Responding at http://0.0.0.0:8080
+2026-10-08 14:32:44.912 [main] INFO  Application -
+-------------------------------------------------------
+Synara API Started
+Version: 0.0.2
+Commit:  6f263263a1b2c3d4e5f60718293a4b5c6d7e8f90
+Build:   2026-10-08T12:30:11Z
+Runtime: Linux (amd64) | Kernel: 6.12.0
+-------------------------------------------------------
+2026-10-08 14:32:45.584 [main] INFO  Application - Application started in 0.303 seconds.
+2026-10-08 14:32:45.682 [main] INFO  Application - Responding at http://0.0.0.0:8080
 ```
+
+`Commit` and `Build` come from the fat jar. A server started with `./gradlew :server:run` prints `dev` for both.
