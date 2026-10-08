@@ -5,6 +5,7 @@ import dev.dertyp.core.ApplicationScope
 import dev.dertyp.core.db.Dialect
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.services.import.ImportService
+import dev.dertyp.services.ReverseProxyService
 import dev.dertyp.services.SearchIndexWorker
 import dev.dertyp.services.ServiceLifecycle
 import dev.dertyp.services.StorageService
@@ -31,7 +32,9 @@ fun Application.configureServices() {
     val importerState by inject<ImporterState>()
     val localCredentialProvider by inject<LocalCredentialProvider>()
     val remoteCredentialProvider by inject<RemoteCredentialProvider>()
+    val reverseProxyService by inject<ReverseProxyService>()
 
+    ServiceLifecycle.start(reverseProxyService)
     ServiceLifecycle.start(localCredentialProvider)
     ServiceLifecycle.start(remoteCredentialProvider)
     ServiceLifecycle.start(pluginManager)
