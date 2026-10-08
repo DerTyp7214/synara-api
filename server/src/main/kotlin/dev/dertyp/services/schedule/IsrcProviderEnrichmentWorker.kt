@@ -41,7 +41,7 @@ class IsrcProviderEnrichmentWorker : Worker("ISRC/Barcode Provider Enrichment Wo
                 it to MetadataService.getMetadataService(it, environment)
             }.filter { (_, service) ->
                 service.supportedFeatures.contains(IMetadataService.Feature.GET_TRACK_BY_ISRC) ||
-                        service.supportedFeatures.contains(IMetadataService.Feature.GET_ALBUM_BY_BARCODE)
+                    service.supportedFeatures.contains(IMetadataService.Feature.GET_ALBUM_BY_BARCODE)
             }
 
         if (providers.isEmpty()) {

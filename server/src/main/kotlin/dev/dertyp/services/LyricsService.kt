@@ -37,7 +37,6 @@ class LyricsService : ILyricsService, Service() {
     private val entityEvents by inject<EntityEventPublisher>()
     private val lyricsSyncWorker by inject<LyricsSyncWorker>()
 
-
     private val transcriberUrl: String
         get() = config.analysis.transcriber.baseUrl
 
@@ -92,11 +91,11 @@ class LyricsService : ILyricsService, Service() {
                 }
                 setBody(
                     mapOf(
-                    "path" to file.absolutePath,
-                    "artist" to (song.artists.firstOrNull()?.name ?: ""),
-                    "title" to song.title,
-                    "lyrics" to rawLyrics.ifBlank { null }
-                ))
+                        "path" to file.absolutePath,
+                        "artist" to (song.artists.firstOrNull()?.name ?: ""),
+                        "title" to song.title,
+                        "lyrics" to rawLyrics.ifBlank { null }
+                    ))
             }
         } catch (e: CancellationException) {
             throw e

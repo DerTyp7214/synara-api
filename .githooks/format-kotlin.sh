@@ -23,31 +23,22 @@ root="$(git rev-parse --show-superproject-working-tree)"
 if [ -z "$root" ]; then
     root="$(git rev-parse --show-toplevel)"
 fi
-style="$root/.idea/codeStyles/Project.xml"
+style="$root/.editorconfig"
 if [ ! -f "$style" ]; then
     echo "Kotlin formatting skipped: code style $style not found"
     exit 0
 fi
 
-formatter=""
-if [ -n "$IDEA_FORMATTER" ] && [ -x "$IDEA_FORMATTER" ]; then
-    formatter="$IDEA_FORMATTER"
-elif [ -x "$HOME/.local/share/JetBrains/Toolbox/scripts/idea" ]; then
-    formatter="$HOME/.local/share/JetBrains/Toolbox/scripts/idea"
-elif command -v idea > /dev/null 2>&1; then
-    formatter="$(command -v idea)"
-fi
-if [ -z "$formatter" ]; then
-    echo "Kotlin formatting skipped: IntelliJ not found"
+if ! command -v ktlint > /dev/null 2>&1; then
+    echo "Kotlin formatting skipped: ktlint not found"
     exit 0
 fi
 
 echo "Formatting ${#files[@]} Kotlin file(s)..."
-if "$formatter" format -s "$style" "${files[@]}"; then
-    git add -- "${files[@]}"
-    echo "Formatted and restaged ${#files[@]} file(s)"
-else
-    echo "Kotlin formatting failed (is IntelliJ open?), committing unformatted"
+if ! ktlint --format --editorconfig="$style" --log-level=error "${files[@]}"; then
+    echo "ktlint reported findings it could not fix, committing what it formatted"
 fi
+git add -- "${files[@]}"
+echo "Formatted and restaged ${#files[@]} file(s)"
 
 exit 0

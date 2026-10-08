@@ -39,8 +39,8 @@ class RpcMetricsService(
             RpcCallStatsTable.selectAll()
                 .where {
                     (RpcCallStatsTable.service eq service) and
-                            (RpcCallStatsTable.method eq method) and
-                            (RpcCallStatsTable.bucketStart greaterEq sinceMillis)
+                        (RpcCallStatsTable.method eq method) and
+                        (RpcCallStatsTable.bucketStart greaterEq sinceMillis)
                 }
                 .orderBy(RpcCallStatsTable.bucketStart, SortOrder.ASC)
                 .map {

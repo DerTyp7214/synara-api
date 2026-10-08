@@ -95,10 +95,10 @@ class YoutubeCommandGenerationTest : KoinTest {
         coVerify {
             executeCommand(match { cmd ->
                 cmd.contains("-x") &&
-                        cmd.contains("--audio-format") &&
-                        cmd.contains("flac") &&
-                        cmd.contains("-o") &&
-                        cmd.any { it.contains(videoId) }
+                    cmd.contains("--audio-format") &&
+                    cmd.contains("flac") &&
+                    cmd.contains("-o") &&
+                    cmd.any { it.contains(videoId) }
             }, any(), any(), any(), any(), any())
         }
     }

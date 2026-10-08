@@ -29,10 +29,10 @@ class MusicBrainzImporter(private val context: PluginContext) : IImporter, KoinC
 
     override fun canHandle(url: String): Boolean {
         return mbRecordingRegex.containsMatchIn(url) ||
-                mbReleaseRegex.containsMatchIn(url) ||
-                mbReleaseGroupRegex.containsMatchIn(url) ||
-                lbRecordingRegex.containsMatchIn(url) ||
-                lbReleaseRegex.containsMatchIn(url)
+            mbReleaseRegex.containsMatchIn(url) ||
+            mbReleaseGroupRegex.containsMatchIn(url) ||
+            lbRecordingRegex.containsMatchIn(url) ||
+            lbReleaseRegex.containsMatchIn(url)
     }
 
     override suspend fun parseUrl(url: String): Pair<String, Type?>? {

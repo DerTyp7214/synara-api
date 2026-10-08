@@ -320,7 +320,6 @@ abstract class BaseImporter(override var indexer: IPluginIndexer, internal val s
             loggingIn.store(false)
         }
 
-
         return authorizedCheck(result)
     }
 

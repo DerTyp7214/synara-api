@@ -170,7 +170,7 @@ class AppleMusicServiceTest : KoinTest {
 
     private fun enableCatalog(storefront: String? = null) {
         every { environment.config.propertyOrNull("appleMusic.storefront") } returns
-                storefront?.let { value -> mockk { every { getString() } returns value } }
+            storefront?.let { value -> mockk { every { getString() } returns value } }
         provideDeveloperToken()
     }
 

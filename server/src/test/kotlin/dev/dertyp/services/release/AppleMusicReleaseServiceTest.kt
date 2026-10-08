@@ -674,7 +674,7 @@ class AppleMusicReleaseServiceTest : KoinTest {
         val urls = slot<Collection<String>>()
         coEvery { musicBrainzService.fetchReleasesByUrls(capture(urls), any()) } returns listOf(mbRelease)
         coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns
-                listOf("https://listen.tidal.com/album/42")
+            listOf("https://listen.tidal.com/album/42")
 
         coEvery { appleMusicService.getArtistCatalogAlbums(appleArtistId, any()) } returns listOf(
             catalogAlbum(
@@ -744,7 +744,7 @@ class AppleMusicReleaseServiceTest : KoinTest {
             )
         )
         coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns
-                listOf("https://tidal.com/album/456")
+            listOf("https://tidal.com/album/456")
 
         val result = service.fetchFollowedArtistReleases()
 
@@ -801,7 +801,7 @@ class AppleMusicReleaseServiceTest : KoinTest {
                 )
             )
             coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns
-                    listOf("https://tidal.com/album/789")
+                listOf("https://tidal.com/album/789")
 
             service.fetchFollowedArtistReleases()
 
@@ -827,7 +827,7 @@ class AppleMusicReleaseServiceTest : KoinTest {
             )
         )
         coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns
-                listOf("https://open.spotify.com/album/abc")
+            listOf("https://open.spotify.com/album/abc")
 
         service.fetchFollowedArtistReleases()
 
@@ -859,7 +859,7 @@ class AppleMusicReleaseServiceTest : KoinTest {
             )
         )
         coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns
-                listOf("https://open.spotify.com/album/abc")
+            listOf("https://open.spotify.com/album/abc")
 
         service.fetchFollowedArtistReleases()
         service.fetchFollowedArtistReleases()
@@ -913,7 +913,7 @@ class AppleMusicReleaseServiceTest : KoinTest {
             )
         )
         coEvery { linkResolverService.batchResolve(any(), any(), any(), any()) } returns
-                listOf("https://tidal.com/album/222")
+            listOf("https://tidal.com/album/222")
 
         val result = service.fetchFollowedArtistReleases()
 
@@ -1580,8 +1580,8 @@ class AppleMusicReleaseServiceTest : KoinTest {
             assertTrue(flagged[ProviderReleaseTable.suspect])
             assertEquals(
                 "copyright holder \"13652890 records dk\", label \"13652890 Records DK\" " +
-                        "and ISRC registrant \"QZK6P\" never seen for this artist " +
-                        "(genre Pop, artist mostly Hip-Hop/Rap)",
+                    "and ISRC registrant \"QZK6P\" never seen for this artist " +
+                    "(genre Pop, artist mostly Hip-Hop/Rap)",
                 flagged[ProviderReleaseTable.suspectReason]
             )
             assertEquals("QZK6P", flagged[ProviderReleaseTable.isrcRegistrants])

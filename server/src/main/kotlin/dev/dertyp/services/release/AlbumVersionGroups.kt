@@ -51,7 +51,7 @@ object AlbumVersionGroups {
         for (cluster in clusters(unlinked)) {
             val matches = cluster.flatMapTo(mutableSetOf()) { member ->
                 identity(member)?.let { releaseGroupsByIdentity[it] }.orEmpty() +
-                        member.coverId?.let { releaseGroupsByCover[it] }.orEmpty()
+                    member.coverId?.let { releaseGroupsByCover[it] }.orEmpty()
             }
             if (matches.size == 1) attached.getOrPut(matches.single()) { mutableListOf() } += cluster
             else standalone += cluster

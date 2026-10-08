@@ -110,7 +110,6 @@ suspend fun executeCommand(
             outputJob.join()
 
             return@coroutineScope ProcessExecutionResult(exitCode, fullOutput.toString(), "")
-
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

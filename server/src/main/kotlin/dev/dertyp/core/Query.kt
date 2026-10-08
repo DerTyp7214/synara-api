@@ -350,9 +350,9 @@ private fun Query.databaseRankedSearch(
         val matches = columns.map { col ->
             col.isNull() or not(
                 (col ilike "$clean %") or
-                        (col ilike "% $clean") or
-                        (col ilike "% $clean %") or
-                        (col eq stringLiteral(clean))
+                    (col ilike "% $clean") or
+                    (col ilike "% $clean %") or
+                    (col eq stringLiteral(clean))
             )
         }
 
@@ -450,10 +450,10 @@ suspend inline fun <A : Any, B : Any> Query.fetchBatchedResultsByKeyset(
                 query.adjustWhere {
                     val firstParam = QueryParameter(after.first, firstColumn.columnType)
                     val newOp = GreaterOp(firstColumn, firstParam) or
-                            (EqOp(firstColumn, firstParam) and GreaterOp(
-                                secondColumn,
-                                QueryParameter(after.second, secondColumn.columnType)
-                            ))
+                        (EqOp(firstColumn, firstParam) and GreaterOp(
+                            secondColumn,
+                            QueryParameter(after.second, secondColumn.columnType)
+                        ))
                     if (this != null) this and newOp
                     else newOp
                 }

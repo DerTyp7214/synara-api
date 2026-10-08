@@ -205,5 +205,5 @@ class CredentialResolver(private val repository: SecretRepository, httpClient: H
 
     private fun keep(value: String, previous: String?, field: String): String =
         value.takeIf { it.isNotBlank() } ?: previous
-        ?: throw CredentialException(CredentialErrorCode.INVALID, "$field is required")
+            ?: throw CredentialException(CredentialErrorCode.INVALID, "$field is required")
 }

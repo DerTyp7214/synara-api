@@ -40,7 +40,7 @@ class LrcLibWorker : Worker("LrcLibWorker") {
                 .selectAll()
                 .where {
                     (SongTable.lyrics eq "") and
-                            (SongTable.lastLyricsFetchAttempt less oneWeekAgo.toEpochMilliseconds())
+                        (SongTable.lastLyricsFetchAttempt less oneWeekAgo.toEpochMilliseconds())
                 }
                 .map {
                     it[SongTable.id].value

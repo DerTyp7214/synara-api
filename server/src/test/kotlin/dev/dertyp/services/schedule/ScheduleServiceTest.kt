@@ -134,11 +134,11 @@ class ScheduleServiceTest : KoinTest {
 
         service.schedule(
             ScheduledTask(
-            trigger = TaskCompletionTrigger(firstTask.id),
-            task = {
-                secondExecuted.complete(Unit)
-            }
-        ))
+                trigger = TaskCompletionTrigger(firstTask.id),
+                task = {
+                    secondExecuted.complete(Unit)
+                }
+            ))
 
         val job = launch { service.startService() }
 

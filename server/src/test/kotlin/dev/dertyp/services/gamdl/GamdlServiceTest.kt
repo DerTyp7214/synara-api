@@ -281,8 +281,8 @@ class GamdlServiceTest : KoinTest {
         coVerify {
             importService.addToQueue(match {
                 it is UrlImportQueueEntry &&
-                        it.urls.contains("https://music.apple.com/us/song/111") &&
-                        it.urls.contains("https://music.apple.com/us/song/222")
+                    it.urls.contains("https://music.apple.com/us/song/111") &&
+                    it.urls.contains("https://music.apple.com/us/song/222")
             })
         }
     }
@@ -299,8 +299,8 @@ class GamdlServiceTest : KoinTest {
         coVerify {
             importService.addToQueue(match {
                 it is UrlImportQueueEntry &&
-                        it.urls.contains("https://music.apple.com/us/song/1") &&
-                        it.urls.contains("https://music.apple.com/us/song/2")
+                    it.urls.contains("https://music.apple.com/us/song/1") &&
+                    it.urls.contains("https://music.apple.com/us/song/2")
             })
         }
     }

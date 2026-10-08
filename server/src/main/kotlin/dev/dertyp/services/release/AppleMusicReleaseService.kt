@@ -42,7 +42,6 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
     private val releaseService by inject<ReleaseService>()
     private val releaseArtistService by inject<ReleaseArtistService>()
 
-
     private val appleMusicService: AppleMusicService
         get() = MetadataService.getMetadataService(
             IMetadataService.MetadataType.appleMusic,
@@ -364,7 +363,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                         .where { RecentReleaseLinkTable.releaseId inList artistGroupIds }
                         .associate {
                             (it[ProviderLinkTable.provider] to it[ProviderLinkTable.externalId]) to
-                                    it[RecentReleaseLinkTable.releaseId].value
+                                it[RecentReleaseLinkTable.releaseId].value
                         }
                 }
             }
@@ -502,7 +501,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
 
             val lastResolve = existing?.linksResolvedAt
             val resolveDue = directMatch == null &&
-                    (lastResolve == null || nowMs - lastResolve >= LINK_RESOLVE_RETRY.inWholeMilliseconds)
+                (lastResolve == null || nowMs - lastResolve >= LINK_RESOLVE_RETRY.inWholeMilliseconds)
 
             var lookupMatch: UUID? = null
             var untrackedGroupId: UUID? = null
@@ -656,7 +655,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             val storedImageId = existing?.imageId
             val lastImageFetch = existing?.lastImageFetch
             val imageDue = storedImageId == null &&
-                    (lastImageFetch == null || nowMs - lastImageFetch >= IMAGE_RETRY.inWholeMilliseconds)
+                (lastImageFetch == null || nowMs - lastImageFetch >= IMAGE_RETRY.inWholeMilliseconds)
 
             if (albumArtworkUrl != null && imageDue) {
                 val persistedImageId = runCatchingCancellable { persistArtwork(albumArtworkUrl) }
@@ -794,8 +793,8 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
             .andWhere { ProviderReleaseTable.provider eq PROVIDER }
             .andWhere {
                 ProviderReleaseTable.releaseGroupId.isNotNull() or
-                        ProviderReleaseTable.albumId.isNotNull() or
-                        ProviderReleaseTable.songId.isNotNull()
+                    ProviderReleaseTable.albumId.isNotNull() or
+                    ProviderReleaseTable.songId.isNotNull()
             }
             .forEach { row ->
                 row[ProviderReleaseTable.copyrightHolder]?.takeIf { it.isNotBlank() }?.let { names += it }
@@ -880,7 +879,7 @@ class AppleMusicReleaseService(private val environment: ApplicationEnvironment) 
                         .where { ReleaseArtistTable.providerReleaseId.isNotNull() }
                         .andWhere {
                             ReleaseArtistTable.artistId inSubQuery
-                                    FollowedArtistTable.select(FollowedArtistTable.artistId)
+                                FollowedArtistTable.select(FollowedArtistTable.artistId)
                         }
                 }
                 .map { it[ProviderReleaseTable.id].value }

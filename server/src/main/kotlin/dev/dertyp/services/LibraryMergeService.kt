@@ -513,8 +513,8 @@ class LibraryMergeService : Service() {
             if (provider to externalId !in providersForKept) {
                 AlbumProviderTable.update({
                     (AlbumProviderTable.albumId eq oldAlbumId) and
-                            (AlbumProviderTable.provider eq provider) and
-                            (AlbumProviderTable.externalId eq externalId)
+                        (AlbumProviderTable.provider eq provider) and
+                        (AlbumProviderTable.externalId eq externalId)
                 }) {
                     it[AlbumProviderTable.albumId] = keptAlbumId
                 }
@@ -689,12 +689,12 @@ class LibraryMergeService : Service() {
                 .map { it[SongVariantTable.kind] }.toSet()
         SongVariantTable.select(SongVariantTable.kind).where { SongVariantTable.songId eq oldSongId }
             .map { it[SongVariantTable.kind] }.forEach { variantKind ->
-            if (variantKind !in variantsForKept) {
-                SongVariantTable.update({ (SongVariantTable.songId eq oldSongId) and (SongVariantTable.kind eq variantKind) }) {
-                    it[SongVariantTable.songId] = keptSongId
+                if (variantKind !in variantsForKept) {
+                    SongVariantTable.update({ (SongVariantTable.songId eq oldSongId) and (SongVariantTable.kind eq variantKind) }) {
+                        it[SongVariantTable.songId] = keptSongId
+                    }
                 }
             }
-        }
         SongVariantTable.deleteWhere { SongVariantTable.songId eq oldSongId }
 
         val transForOld =
@@ -733,8 +733,8 @@ class LibraryMergeService : Service() {
             if (provider to externalId !in providersForKept) {
                 SongProviderTable.update({
                     (SongProviderTable.songId eq oldSongId) and
-                            (SongProviderTable.provider eq provider) and
-                            (SongProviderTable.externalId eq externalId)
+                        (SongProviderTable.provider eq provider) and
+                        (SongProviderTable.externalId eq externalId)
                 }) {
                     it[SongProviderTable.songId] = keptSongId
                 }

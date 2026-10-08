@@ -93,7 +93,7 @@ fun Application.module() {
         Build:   ${BuildInfo.buildTime}
         Runtime: $osName ($osArch) | Kernel: $osVersion
         -------------------------------------------------------
-    """.trimIndent()
+        """.trimIndent()
     )
 
     install(CallLogging)

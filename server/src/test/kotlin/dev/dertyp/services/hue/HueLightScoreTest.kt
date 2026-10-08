@@ -307,7 +307,6 @@ class HueLightScoreTest {
         assertTrue(bass.keyframes.all { it.floor == 0.30 }, bass.keyframes.take(3).toString())
     }
 
-
     @Test
     fun `next index search skips ineligible and past keyframes`() {
         val score = HueLightScore.build(null, 120.0, 5_000, 8_000)

@@ -31,9 +31,9 @@ object CredentialPresets {
         val default = defaultTidalClients[name]
         return TidalClient(
             id = clientId?.takeIf { it.isNotBlank() } ?: previous?.clientId ?: default?.id
-            ?: throw CredentialException(CredentialErrorCode.INVALID, "A Tidal client id is required"),
+                ?: throw CredentialException(CredentialErrorCode.INVALID, "A Tidal client id is required"),
             secret = clientSecret?.takeIf { it.isNotBlank() } ?: previous?.clientSecret ?: default?.secret
-            ?: throw CredentialException(CredentialErrorCode.INVALID, "A Tidal client secret is required"),
+                ?: throw CredentialException(CredentialErrorCode.INVALID, "A Tidal client secret is required"),
         )
     }
 

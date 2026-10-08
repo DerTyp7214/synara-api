@@ -89,8 +89,8 @@ class AppleMusicArtistResolver(private val environment: ApplicationEnvironment) 
 
         logger.info(
             "No Apple Music artist id resolved for $artistName ($artistId) from ${evidence.size} catalog resources " +
-                    "(${evidence.count { it.creditConsistent }} credit-consistent): " +
-                    evidence.joinToString { "${it.localCredits}->${it.appleArtistIds.joinToString("/")}" }
+                "(${evidence.count { it.creditConsistent }} credit-consistent): " +
+                evidence.joinToString { "${it.localCredits}->${it.appleArtistIds.joinToString("/")}" }
         )
         return null
     }

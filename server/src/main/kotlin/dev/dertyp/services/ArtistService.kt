@@ -933,8 +933,8 @@ class ArtistService(private val searchIndexWorker: SearchIndexWorker? = null) : 
             .select(ArtistTable.id)
             .where {
                 ArtistMusicBrainzTable.artistId.isNull() or
-                        (ArtistMusicBrainzTable.lastCheck eq 0L) or
-                        (ArtistMusicBrainzTable.musicBrainzId.isNull() and (ArtistMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
+                    (ArtistMusicBrainzTable.lastCheck eq 0L) or
+                    (ArtistMusicBrainzTable.musicBrainzId.isNull() and (ArtistMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
             }
             .fetchBatchedResultsByIdKeyset(ArtistTable.id, 1000) { batch ->
                 for (row in batch) {

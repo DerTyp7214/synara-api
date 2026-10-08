@@ -40,7 +40,6 @@ class MusicBrainzCacheService : Service() {
         )
     }
 
-
     fun staleArtistIdsFlow(
         staleSince: Long = Clock.System.now().toEpochMilliseconds() - 30.days.inWholeMilliseconds
     ): Flow<UUID> = flow {
@@ -576,10 +575,10 @@ class MusicBrainzCacheService : Service() {
                 MBRelationProviderTable.select(MBRelationProviderTable.ownerId)
                     .where {
                         (MBRelationProviderTable.rawUrl eq url) or
-                                (if (parsed != null) {
-                                    (MBRelationProviderTable.provider eq parser.name) and
-                                            (MBRelationProviderTable.externalId eq parsed.first)
-                                } else Op.FALSE)
+                            (if (parsed != null) {
+                                (MBRelationProviderTable.provider eq parser.name) and
+                                    (MBRelationProviderTable.externalId eq parsed.first)
+                            } else Op.FALSE)
                     }
                     .map { it[MBRelationProviderTable.ownerId] }
                     .distinct()

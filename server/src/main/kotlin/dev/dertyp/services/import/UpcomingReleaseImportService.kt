@@ -323,7 +323,7 @@ class UpcomingReleaseImportService(
                         if (hit.albumTitle != null && hit.albumTitle != album.title) {
                             logger.info(
                                 "Tidal track ${hit.id} for ${track.title} comes from \"${hit.albumTitle}\" " +
-                                        "instead of \"${album.title}\""
+                                    "instead of \"${album.title}\""
                             )
                         }
                         return LookupOutcome(

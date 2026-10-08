@@ -928,18 +928,18 @@ class RemoteMirrorService : Service() {
         var lastTask: String? = null
         val progressHistory = mutableListOf<Triple<Long, Double, Long?>>()
         var statusMessage: String? = null
-        var syncedSongs = 0;
-        var existingSongs = 0;
-        var syncedArtists = 0;
-        var existingArtists = 0;
-        var syncedAlbums = 0;
-        var existingAlbums = 0;
-        var syncedImages = 0;
+        var syncedSongs = 0
+        var existingSongs = 0
+        var syncedArtists = 0
+        var existingArtists = 0
+        var syncedAlbums = 0
+        var existingAlbums = 0
+        var syncedImages = 0
         var existingImages = 0
-        var syncedPlaylists = 0;
-        var existingPlaylists = 0;
-        var syncedUserPlaylists = 0;
-        var existingUserPlaylists = 0;
+        var syncedPlaylists = 0
+        var existingPlaylists = 0
+        var syncedUserPlaylists = 0
+        var existingUserPlaylists = 0
         var syncedErrors = 0
         val failedItemNames = mutableListOf<String>()
         val progressMutex = Mutex()
@@ -955,7 +955,7 @@ class RemoteMirrorService : Service() {
         val requiredImageIds = mutableSetOf<PlatformUUID>()
         val isFiltered =
             !config.playlistIds.isNullOrEmpty() || !config.userPlaylistIds.isNullOrEmpty() || !config.likedByUserIds.isNullOrEmpty()
-        var totalBytesSynced = 0L;
+        var totalBytesSynced = 0L
         var songCount = 0
 
         fun updateProgress(

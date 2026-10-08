@@ -35,14 +35,14 @@ fun isoDateKey(iso: Expression<String?>): Expression<String> {
     val month = part(6, 2)
     val day = part(9, 2)
     val leapYear = (part(3, 2) inList twoDigitMultiplesOfFour) and
-            ((part(3, 2) neq "00") or (part(1, 2) inList twoDigitMultiplesOfFour))
+        ((part(3, 2) neq "00") or (part(1, 2) inList twoDigitMultiplesOfFour))
     val validDay = (day inList twoDigits(1..28)) or
-            ((day eq "29") and ((month neq "02") or leapYear)) or
-            ((day eq "30") and (month neq "02")) or
-            ((day eq "31") and (month inList longMonths))
+        ((day eq "29") and ((month neq "02") or leapYear)) or
+        ((day eq "30") and (month neq "02")) or
+        ((day eq "31") and (month inList longMonths))
     val yearOnly = (length eq 4) and digits(1..4)
     val fullDate = (length eq 10) and digits(1..4) and (part(5, 1) eq "-") and digits(6..7) and
-            (part(8, 1) eq "-") and digits(9..10) and (month inList twoDigits(1..12)) and validDay
+        (part(8, 1) eq "-") and digits(9..10) and (month inList twoDigits(1..12)) and validDay
     return case()
         .When(yearOnly, concat(iso, stringLiteral("-01-01")))
         .When(fullDate, concat(iso, stringLiteral("")))

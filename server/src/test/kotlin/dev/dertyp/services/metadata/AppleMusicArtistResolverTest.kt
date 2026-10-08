@@ -41,7 +41,6 @@ class AppleMusicArtistResolverTest : KoinTest {
         }
     }
 
-
     private lateinit var database: Database
     private lateinit var resolver: AppleMusicArtistResolver
     private lateinit var appleMusicService: AppleMusicService
@@ -285,7 +284,7 @@ class AppleMusicArtistResolverTest : KoinTest {
             id
         }
         coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900764", any()) } returns
-                listOf(catalogSong(listOf("111")))
+            listOf(catalogSong(listOf("111")))
 
         assertEquals("111", resolver.resolve(artistId))
         assertEquals("111", storedRow(artistId)?.get(ArtistProviderTable.externalId))
@@ -305,7 +304,7 @@ class AppleMusicArtistResolverTest : KoinTest {
             id
         }
         coEvery { appleMusicService.getCatalogAlbumsByUpc("00602445790234", any()) } returns
-                listOf(catalogAlbum(listOf("111")))
+            listOf(catalogAlbum(listOf("111")))
 
         assertEquals("111", resolver.resolve(artistId))
         assertEquals("111", storedRow(artistId)?.get(ArtistProviderTable.externalId))
@@ -322,7 +321,7 @@ class AppleMusicArtistResolverTest : KoinTest {
             id
         }
         coEvery { appleMusicService.getCatalogAlbumsByUpc("00602445790234", any()) } returns
-                listOf(catalogAlbum(listOf("999")))
+            listOf(catalogAlbum(listOf("999")))
 
         assertNull(resolver.resolve(artistId))
         assertNull(storedRow(artistId))
@@ -342,9 +341,9 @@ class AppleMusicArtistResolverTest : KoinTest {
             id
         }
         coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900001", any()) } returns
-                listOf(catalogSong(listOf("111", "999")))
+            listOf(catalogSong(listOf("111", "999")))
         coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900002", any()) } returns
-                listOf(catalogSong(listOf("222", "999")))
+            listOf(catalogSong(listOf("222", "999")))
 
         assertEquals("999", resolver.resolve(artistId))
         assertEquals("999", storedRow(artistId)?.get(ArtistProviderTable.externalId))
@@ -365,9 +364,9 @@ class AppleMusicArtistResolverTest : KoinTest {
             id
         }
         coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900001", any()) } returns
-                listOf(catalogSong(listOf("111")))
+            listOf(catalogSong(listOf("111")))
         coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900002", any()) } returns
-                listOf(catalogSong(listOf("222")))
+            listOf(catalogSong(listOf("222")))
 
         assertNull(resolver.resolve(artistId))
         assertNull(storedRow(artistId))
@@ -386,7 +385,7 @@ class AppleMusicArtistResolverTest : KoinTest {
                 id
             }
             coEvery { appleMusicService.getCatalogSongsByIsrc("USUM71900001", any()) } returns
-                    listOf(catalogSong(listOf("111", "999")))
+                listOf(catalogSong(listOf("111", "999")))
 
             assertNull(resolver.resolve(artistId))
             assertNull(storedRow(artistId))
@@ -403,7 +402,7 @@ class AppleMusicArtistResolverTest : KoinTest {
                 id
             }
             coEvery { appleMusicService.getCatalogAlbumsByIds(listOf("12345"), any()) } returns
-                    listOf(catalogAlbum(listOf("111"), id = "12345"))
+                listOf(catalogAlbum(listOf("111"), id = "12345"))
 
             assertEquals("111", resolver.resolve(artistId))
             assertEquals("111", storedRow(artistId)?.get(ArtistProviderTable.externalId))
@@ -420,7 +419,7 @@ class AppleMusicArtistResolverTest : KoinTest {
             id
         }
         coEvery { appleMusicService.getCatalogAlbumsByIds(listOf("12345"), any()) } returns
-                listOf(catalogAlbum(listOf("111", "999"), id = "12345"))
+            listOf(catalogAlbum(listOf("111", "999"), id = "12345"))
 
         assertNull(resolver.resolve(artistId))
         assertNull(storedRow(artistId))

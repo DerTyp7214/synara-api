@@ -209,7 +209,6 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
                             logger.error("Error fetching album from TheAudioDB: $mbid", e)
                         }
 
-
                         if (genres.isNotEmpty()) {
                             val genreIds = genreService.getOrCreateGenres(genres.toList())
                             dbQuery {
@@ -389,7 +388,7 @@ class MetadataFetchingService(private val environment: ApplicationEnvironment) :
             dbQuery {
                 ArtistTable.update({
                     (ArtistTable.image eq null) and
-                            (ArtistTable.lastImageCheck eq 0L or (ArtistTable.lastImageCheck less thirtyDaysAgo.toEpochMilliseconds()))
+                        (ArtistTable.lastImageCheck eq 0L or (ArtistTable.lastImageCheck less thirtyDaysAgo.toEpochMilliseconds()))
                 }) {
                     it[lastImageCheck] = System.currentTimeMillis()
                 }

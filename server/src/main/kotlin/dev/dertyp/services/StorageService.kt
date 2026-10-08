@@ -67,14 +67,14 @@ class StorageService(config: ServerConfig) : IStorageService, IServerStorageServ
 
     private fun computeTotalStorage(): Long {
         val pathsToMeasure = (
-                listOfNotNull(
-                    tracksPath,
-                    albumsPath,
-                    playlistsPath
-                ).map { File(it).parentFile } +
-                        secondaryTracksPaths.map { File(it) } +
-                        listOf(File(customAudioPath)) +
-                        podcastRoots())
+            listOfNotNull(
+                tracksPath,
+                albumsPath,
+                playlistsPath
+            ).map { File(it).parentFile } +
+                secondaryTracksPaths.map { File(it) } +
+                listOf(File(customAudioPath)) +
+                podcastRoots())
             .filterNotNull()
             .map { it.absoluteFile }
             .distinctBy { it.path }

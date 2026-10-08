@@ -998,7 +998,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             .select(SongTable.id)
             .where {
                 SongTable.lastProviderEnrichment.isNull() or
-                        (SongTable.lastProviderEnrichment less oneWeekAgo.toEpochMilliseconds())
+                    (SongTable.lastProviderEnrichment less oneWeekAgo.toEpochMilliseconds())
             }
             .orderBy(SongTable.lastProviderEnrichment, SortOrder.ASC)
             .orderBy(SongTable.id, SortOrder.ASC)
@@ -1020,7 +1020,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 otherColumn = { ProviderEnrichmentCheckTable.entityId },
                 additionalConstraint = {
                     (ProviderEnrichmentCheckTable.provider eq provider) and
-                            (ProviderEnrichmentCheckTable.type eq ProviderEnrichmentType.SONG)
+                        (ProviderEnrichmentCheckTable.type eq ProviderEnrichmentType.SONG)
                 }
             )
             .select(SongTable.id)
@@ -1032,7 +1032,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             }
             .andWhere {
                 ProviderEnrichmentCheckTable.lastCheck.isNull() or
-                        (ProviderEnrichmentCheckTable.lastCheck less threshold)
+                    (ProviderEnrichmentCheckTable.lastCheck less threshold)
             }
             .fetchBatchedResultsByIdKeyset(SongTable.id, 1000) { batch ->
                 batch.forEach {
@@ -1170,10 +1170,10 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     .select(SongProviderTable.songId)
                     .where {
                         (SongProviderTable.type eq Type.SONG.value) and (
-                                (SongProviderTable.rawUrl inList idChunk) or
-                                        (SongProviderTable.externalId inList idChunk) or
-                                        SongProviderTable.matchesAny(parsedLookups)
-                                )
+                            (SongProviderTable.rawUrl inList idChunk) or
+                                (SongProviderTable.externalId inList idChunk) or
+                                SongProviderTable.matchesAny(parsedLookups)
+                            )
                     }
 
                 where {
@@ -1206,9 +1206,9 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     )
                     .where {
                         (SongProviderTable.type eq Type.SONG.value) and (
-                                (SongProviderTable.rawUrl inList urlChunk) or
-                                        SongProviderTable.matchesAny(urlChunk.mapNotNull { parsedLookups[it] })
-                                )
+                            (SongProviderTable.rawUrl inList urlChunk) or
+                                SongProviderTable.matchesAny(urlChunk.mapNotNull { parsedLookups[it] })
+                            )
                     }
                     .map { row ->
                         ProviderUrlRow(
@@ -1385,9 +1385,9 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             where {
                 tracks.map { track ->
                     (SongTable.originalUrl eq "https://tidal.com/browse/track/${track.id}") or
-                            (if (track.isrc?.isNotBlank() == true) SongTable.isrc eq track.isrc else Op.FALSE) or
-                            ((SongTable.title eq track.title) and
-                                    (SongTable.duration eq track.duration.inWholeMilliseconds))
+                        (if (track.isrc?.isNotBlank() == true) SongTable.isrc eq track.isrc else Op.FALSE) or
+                        ((SongTable.title eq track.title) and
+                            (SongTable.duration eq track.duration.inWholeMilliseconds))
                 }.reduce { acc, op -> acc or op }
             }
         }.data
@@ -1418,31 +1418,31 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 (SongTable.id inSubQuery CollectionSongTable
                     .select(CollectionSongTable.songId)
                     .where { CollectionSongTable.collectionId eq collectionId }
-                        ) or (SongTable.albumId inSubQuery CollectionAlbumTable
+                    ) or (SongTable.albumId inSubQuery CollectionAlbumTable
                     .select(CollectionAlbumTable.albumId)
                     .where { CollectionAlbumTable.collectionId eq collectionId }
-                        ) or (SongTable.id inSubQuery SongArtistTable
+                    ) or (SongTable.id inSubQuery SongArtistTable
                     .innerJoin(
                         CollectionArtistTable,
                         onColumn = { SongArtistTable.artistId },
                         otherColumn = { CollectionArtistTable.artistId })
                     .select(SongArtistTable.songId)
                     .where { CollectionArtistTable.collectionId eq collectionId }
-                        ) or (SongTable.albumId inSubQuery AlbumArtistTable
+                    ) or (SongTable.albumId inSubQuery AlbumArtistTable
                     .innerJoin(
                         CollectionArtistTable,
                         onColumn = { AlbumArtistTable.artistId },
                         otherColumn = { CollectionArtistTable.artistId })
                     .select(AlbumArtistTable.albumId)
                     .where { CollectionArtistTable.collectionId eq collectionId }
-                        ) or (SongTable.id inSubQuery UserPlaylistSongTable
+                    ) or (SongTable.id inSubQuery UserPlaylistSongTable
                     .innerJoin(
                         CollectionPlaylistTable,
                         onColumn = { UserPlaylistSongTable.playlistId },
                         otherColumn = { CollectionPlaylistTable.playlistId })
                     .select(UserPlaylistSongTable.songId)
                     .where { CollectionPlaylistTable.collectionId eq collectionId }
-                        )
+                    )
             }
         }
 
@@ -1459,24 +1459,24 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 (SongTable.id inSubQuery RadioChannelSongTable
                     .select(RadioChannelSongTable.songId)
                     .where { RadioChannelSongTable.channelId eq channelId }
-                        ) or (SongTable.albumId inSubQuery RadioChannelAlbumTable
+                    ) or (SongTable.albumId inSubQuery RadioChannelAlbumTable
                     .select(RadioChannelAlbumTable.albumId)
                     .where { RadioChannelAlbumTable.channelId eq channelId }
-                        ) or (SongTable.id inSubQuery SongArtistTable
+                    ) or (SongTable.id inSubQuery SongArtistTable
                     .innerJoin(
                         RadioChannelArtistTable,
                         onColumn = { SongArtistTable.artistId },
                         otherColumn = { RadioChannelArtistTable.artistId })
                     .select(SongArtistTable.songId)
                     .where { RadioChannelArtistTable.channelId eq channelId }
-                        ) or (SongTable.albumId inSubQuery AlbumArtistTable
+                    ) or (SongTable.albumId inSubQuery AlbumArtistTable
                     .innerJoin(
                         RadioChannelArtistTable,
                         onColumn = { AlbumArtistTable.artistId },
                         otherColumn = { RadioChannelArtistTable.artistId })
                     .select(AlbumArtistTable.albumId)
                     .where { RadioChannelArtistTable.channelId eq channelId }
-                        )
+                    )
             }
         }
 
@@ -1958,8 +1958,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             .select(SongTable.id)
             .where {
                 SongMusicBrainzTable.songId.isNull() or
-                        (SongMusicBrainzTable.lastCheck eq 0L) or
-                        (SongMusicBrainzTable.musicBrainzId.isNull() and (SongMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
+                    (SongMusicBrainzTable.lastCheck eq 0L) or
+                    (SongMusicBrainzTable.musicBrainzId.isNull() and (SongMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
             }
             .orderBy(SongTable.inserted, SortOrder.DESC)
             .orderBy(SongTable.id, SortOrder.ASC)
@@ -2433,8 +2433,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         val stored = row[AlbumTable.name].splitAlbumTitleTags()
         val storedTags = row.albumTitleTags().mergeTitleTags(stored.tags)
         return stored.title == incoming.name &&
-                storedTags.map { it.kind to it.label.lowercase() }.toSet() ==
-                incoming.tags.map { it.kind to it.label.lowercase() }.toSet()
+            storedTags.map { it.kind to it.label.lowercase() }.toSet() ==
+            incoming.tags.map { it.kind to it.label.lowercase() }.toSet()
     }
 
     private suspend fun bulkFindExistingSongs(songs: List<InsertableSong>): Map<InsertableSong, ExistingSong> =
@@ -2493,14 +2493,14 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                         .filter { it.isNotBlank() && it.length >= 10 && it.uppercase() != "ISRC" }
 
                     (SongTable.originalUrl inList urls) or
-                            (SongProviderTable.rawUrl inList urls) or
-                            (if (isrcs.isNotEmpty()) SongTable.isrc inList isrcs else Op.FALSE) or
-                            SongProviderTable.matchesAny(parsedLookups.values)
+                        (SongProviderTable.rawUrl inList urls) or
+                        (if (isrcs.isNotEmpty()) SongTable.isrc inList isrcs else Op.FALSE) or
+                        SongProviderTable.matchesAny(parsedLookups.values)
                 }
                 .orWhere {
                     (SongTable.title inList songs.map { it.title }) and
-                            (SongTable.trackNumber inList songs.map { it.trackNumber }) and
-                            (SongTable.discNumber inList songs.map { it.discNumber })
+                        (SongTable.trackNumber inList songs.map { it.trackNumber }) and
+                        (SongTable.discNumber inList songs.map { it.discNumber })
                 }
                 .toList()
 
@@ -2521,10 +2521,10 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     val rowExternalId = row.getOrNull(SongProviderTable.externalId)
 
                     val providerMatch = song.originalUrl.isNotBlank() && (
-                            rowRawUrl == song.originalUrl || (
-                                    lookup != null && rowProvider == lookup.provider && rowExternalId == lookup.externalId
-                                    )
+                        rowRawUrl == song.originalUrl || (
+                            lookup != null && rowProvider == lookup.provider && rowExternalId == lookup.externalId
                             )
+                        )
 
                     val legacyMatch =
                         song.originalUrl.isNotBlank() && row[SongTable.originalUrl] == song.originalUrl
@@ -2532,14 +2532,14 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                         song.isrc?.isNotBlank() == true && song.isrc!!.length >= 10 && song.isrc!!.uppercase() != "ISRC" && row[SongTable.isrc] == song.isrc && sameEdition
 
                     val metadataMatch = legacyMatch || providerMatch || isrcMatch || (
-                            song.originalUrl.isBlank() &&
-                                    row[SongTable.title] == song.title &&
-                                    row.titleTags() == song.tags &&
-                                    row[SongTable.trackNumber] == song.trackNumber &&
-                                    row[SongTable.discNumber] == song.discNumber &&
-                                    row[SongTable.explicit] == song.explicit &&
-                                    sameEdition
-                            )
+                        song.originalUrl.isBlank() &&
+                            row[SongTable.title] == song.title &&
+                            row.titleTags() == song.tags &&
+                            row[SongTable.trackNumber] == song.trackNumber &&
+                            row[SongTable.discNumber] == song.discNumber &&
+                            row[SongTable.explicit] == song.explicit &&
+                            sameEdition
+                        )
 
                     if (pathMatch || metadataMatch) {
                         existingSongMap[song] = ExistingSong(
@@ -2572,7 +2572,6 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 logger.info("Batch indexing ($name) took ${(now - lastTime).milliseconds}")
                 lastTime = now
             }
-
 
             val uniqueArtistNames = songs.flatMap { it.artists }.distinct()
             val uniqueAlbums = songs.map { it.album }.distinct()
@@ -2929,7 +2928,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     .select(SongTable.id)
                     .where {
                         (SongTable.filePath like "$oldPath%") and
-                                (AlbumTable.originalId like "$originalIdPrefix%")
+                            (AlbumTable.originalId like "$originalIdPrefix%")
                     }
                     .map { it[SongTable.id].value }
             } else {

@@ -232,7 +232,7 @@ fun Route.mirrorRouting() {
                                                 classes = "w-full bg-zinc-800 border-zinc-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none transition-all text-white select-text"
                                             ) {
                                                 id = "host"; value = "localhost"; placeholder =
-                                                "e.g. synara.example.com"
+                                                    "e.g. synara.example.com"
                                             }
                                         }
 
@@ -270,27 +270,27 @@ fun Route.mirrorRouting() {
                                                         div("select-option selected") {
                                                             attributes["data-value"] =
                                                                 "-1"; attributes["onclick"] =
-                                                            "selectOption(this)"; +"Source (Original)"
+                                                                "selectOption(this)"; +"Source (Original)"
                                                         }
                                                         div("select-option") {
                                                             attributes["data-value"] =
                                                                 "510"; attributes["onclick"] =
-                                                            "selectOption(this)"; +"Opus Max (510)"
+                                                                "selectOption(this)"; +"Opus Max (510)"
                                                         }
                                                         div("select-option") {
                                                             attributes["data-value"] =
                                                                 "320"; attributes["onclick"] =
-                                                            "selectOption(this)"; +"Opus High (320)"
+                                                                "selectOption(this)"; +"Opus High (320)"
                                                         }
                                                         div("select-option") {
                                                             attributes["data-value"] =
                                                                 "256"; attributes["onclick"] =
-                                                            "selectOption(this)"; +"Opus Balanced (256)"
+                                                                "selectOption(this)"; +"Opus Balanced (256)"
                                                         }
                                                         div("select-option") {
                                                             attributes["data-value"] =
                                                                 "128"; attributes["onclick"] =
-                                                            "selectOption(this)"; +"Opus Low (128)"
+                                                                "selectOption(this)"; +"Opus Low (128)"
                                                         }
                                                     }
                                                 }
@@ -366,7 +366,7 @@ fun Route.mirrorRouting() {
                                                             div("select-option selected") {
                                                                 attributes["data-value"] =
                                                                     ""; attributes["onclick"] =
-                                                                "selectOption(this)"; +"Select an instance..."
+                                                                    "selectOption(this)"; +"Select an instance..."
                                                             }
                                                         }
                                                     }
@@ -403,7 +403,7 @@ fun Route.mirrorRouting() {
                                                     div("select-option selected") {
                                                         attributes["data-value"] =
                                                             ""; attributes["onclick"] =
-                                                        "selectOption(this)"; +"None"
+                                                            "selectOption(this)"; +"None"
                                                     }
                                                 }
                                             }

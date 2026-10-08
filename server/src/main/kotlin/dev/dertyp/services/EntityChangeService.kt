@@ -76,7 +76,7 @@ class EntityChangeService(private val config: EntityChangeConfig) {
                     .apply {
                         if (after != null) andWhere {
                             (table.changedAt greater after.first) or
-                                    ((table.changedAt eq after.first) and (table.id greater after.second))
+                                ((table.changedAt eq after.first) and (table.id greater after.second))
                         }
                     }
                     .orderBy(table.changedAt to SortOrder.ASC, table.id to SortOrder.ASC)
@@ -140,8 +140,8 @@ class EntityChangeService(private val config: EntityChangeConfig) {
             since,
             library = {
                 own(EntityChangeTable, EntityType.ARTIST, artistId) or
-                        scopedTo(EntityType.ARTIST, artistId) or
-                        related.rows(EntityChangeTable)
+                    scopedTo(EntityType.ARTIST, artistId) or
+                    related.rows(EntityChangeTable)
             },
             user = { own(UserEntityChangeTable, EntityType.ARTIST, artistId) or related.rows(UserEntityChangeTable) }
         )
@@ -162,8 +162,8 @@ class EntityChangeService(private val config: EntityChangeConfig) {
             since,
             library = {
                 own(EntityChangeTable, EntityType.ALBUM, albumId) or
-                        scopedTo(EntityType.ALBUM, albumId) or
-                        related.rows(EntityChangeTable)
+                    scopedTo(EntityType.ALBUM, albumId) or
+                    related.rows(EntityChangeTable)
             },
             user = { own(UserEntityChangeTable, EntityType.ALBUM, albumId) or related.rows(UserEntityChangeTable) }
         )
@@ -189,8 +189,8 @@ class EntityChangeService(private val config: EntityChangeConfig) {
             since,
             library = {
                 ((EntityChangeTable.entityType inList listOf(EntityType.USER_PLAYLIST, EntityType.PLAYLIST)) and
-                        (EntityChangeTable.entityId eq playlistId)) or
-                        related.rows(EntityChangeTable)
+                    (EntityChangeTable.entityId eq playlistId)) or
+                    related.rows(EntityChangeTable)
             },
             user = { related.rows(UserEntityChangeTable) }
         )
@@ -235,12 +235,12 @@ class EntityChangeService(private val config: EntityChangeConfig) {
             since,
             library = {
                 own(EntityChangeTable, EntityType.COLLECTION, collectionId) or
-                        members(EntityChangeTable, EntityType.USER_PLAYLIST, memberPlaylists) or
-                        related.rows(EntityChangeTable)
+                    members(EntityChangeTable, EntityType.USER_PLAYLIST, memberPlaylists) or
+                    related.rows(EntityChangeTable)
             },
             user = {
                 members(UserEntityChangeTable, EntityType.USER_PLAYLIST, memberPlaylists) or
-                        related.rows(UserEntityChangeTable)
+                    related.rows(UserEntityChangeTable)
             }
         )
     }
@@ -249,7 +249,7 @@ class EntityChangeService(private val config: EntityChangeConfig) {
         val cutoff = Clock.System.now().toEpochMilliseconds() - config.retentionDays.days.inWholeMilliseconds
         val (libraryRows, userRows) = dbQuery {
             EntityChangeTable.deleteWhere { EntityChangeTable.changedAt less cutoff } to
-                    UserEntityChangeTable.deleteWhere { UserEntityChangeTable.changedAt less cutoff }
+                UserEntityChangeTable.deleteWhere { UserEntityChangeTable.changedAt less cutoff }
         }
         return mapOf("deletedEntityChanges" to libraryRows, "deletedUserEntityChanges" to userRows)
     }
@@ -283,8 +283,8 @@ class EntityChangeService(private val config: EntityChangeConfig) {
     private inner class Related(val songs: List<Query>, val albums: List<Query>, val artists: List<Query>) {
         fun rows(table: EntityChangeRows): Op<Boolean> =
             (songs.map { members(table, EntityType.SONG, it) } +
-                    albums.map { members(table, EntityType.ALBUM, it) } +
-                    artists.map { members(table, EntityType.ARTIST, it) })
+                albums.map { members(table, EntityType.ALBUM, it) } +
+                artists.map { members(table, EntityType.ARTIST, it) })
                 .reduce { filter, next -> filter or next }
     }
 

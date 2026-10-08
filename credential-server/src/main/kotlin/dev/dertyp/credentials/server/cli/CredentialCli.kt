@@ -172,7 +172,7 @@ class CredentialCli(
                 ?: throw CliUsageException("Unknown OAuth preset $wanted")
         }
         val tokenUrl = args.optional("token-url") ?: preset?.tokenUrl
-        ?: throw CliUsageException("set-oauth needs --preset or --token-url")
+            ?: throw CliUsageException("set-oauth needs --preset or --token-url")
         val authStyle = args.optional("auth-style")?.let { style ->
             OAuthAuthStyle.entries.firstOrNull { it.name.equals(style, ignoreCase = true) }
                 ?: throw CliUsageException("Unknown auth style $style")

@@ -225,10 +225,10 @@ class RecommendationService : Service() {
                 }
 
                 val duplicatePlay = ts - lastTs <= ListenTable.DEDUP_WINDOW_MS && (
-                        song == lastSong ||
-                                (recordingMbid != null && recordingMbid == lastRecordingMbid) ||
-                                isrcs.any { it in lastIsrcs }
-                        )
+                    song == lastSong ||
+                        (recordingMbid != null && recordingMbid == lastRecordingMbid) ||
+                        isrcs.any { it in lastIsrcs }
+                    )
                 val play = PendingPlay(
                     song = song,
                     qualified = ListenTable.isQualifiedPlay(row[ListenTable.msPlayed], row[SongTable.duration]),

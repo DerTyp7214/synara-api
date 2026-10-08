@@ -302,8 +302,8 @@ class GamdlService(
         }
         val output = m4a.resolveSibling(m4a.nameWithoutExtension + "." + target.extension)
         val args = listOf("-y", "-i", m4a.absolutePathString()) +
-                losslessFfmpegArgs(target) +
-                listOf("-map_metadata", "0", output.absolutePathString())
+            losslessFfmpegArgs(target) +
+            listOf("-map_metadata", "0", output.absolutePathString())
         val res = ffmpeg.run(args, logger, aliveCheck, workingDirectory) { onLiveOutput(it) } ?: return null
         return if (res.exitCode == 0 && output.exists()) {
             runCatching { m4a.deleteIfExists() }

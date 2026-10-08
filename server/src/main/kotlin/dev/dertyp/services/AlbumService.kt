@@ -442,9 +442,9 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 }
                 ?: dbSongs.find {
                     mbTitle != null &&
-                            mbDuration != null &&
-                            abs(it.duration - mbDuration) < 2000 &&
-                            it.title.cleanTitle().contains(mbTitle.cleanTitle(), ignoreCase = true)
+                        mbDuration != null &&
+                        abs(it.duration - mbDuration) < 2000 &&
+                        it.title.cleanTitle().contains(mbTitle.cleanTitle(), ignoreCase = true)
                 }
 
             if (matchedSong != null) {
@@ -601,7 +601,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 .select(AlbumTable.id)
                 .where {
                     var condition: Op<Boolean> = AlbumTable.lastProviderEnrichment.isNull() or
-                            (AlbumTable.lastProviderEnrichment less oneWeekAgo.toEpochMilliseconds())
+                        (AlbumTable.lastProviderEnrichment less oneWeekAgo.toEpochMilliseconds())
 
                     if (excludeSingles) {
                         condition = condition and (AlbumTable.songCount greater 1)
@@ -631,7 +631,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 otherColumn = { ProviderEnrichmentCheckTable.entityId },
                 additionalConstraint = {
                     (ProviderEnrichmentCheckTable.provider eq provider) and
-                            (ProviderEnrichmentCheckTable.type eq ProviderEnrichmentType.ALBUM)
+                        (ProviderEnrichmentCheckTable.type eq ProviderEnrichmentType.ALBUM)
                 }
             )
             .select(AlbumTable.id)
@@ -643,7 +643,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             }
             .andWhere {
                 ProviderEnrichmentCheckTable.lastCheck.isNull() or
-                        (ProviderEnrichmentCheckTable.lastCheck less threshold)
+                    (ProviderEnrichmentCheckTable.lastCheck less threshold)
             }
             .fetchBatchedResultsByIdKeyset(AlbumTable.id, 1000) { batch ->
                 batch.forEach {
@@ -877,10 +877,10 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     .select(AlbumProviderTable.albumId)
                     .where {
                         (AlbumProviderTable.type eq Type.ALBUM.value) and (
-                                (AlbumProviderTable.rawUrl inList idChunk) or
-                                        (AlbumProviderTable.externalId inList idChunk) or
-                                        AlbumProviderTable.matchesAny(parsedLookups)
-                                )
+                            (AlbumProviderTable.rawUrl inList idChunk) or
+                                (AlbumProviderTable.externalId inList idChunk) or
+                                AlbumProviderTable.matchesAny(parsedLookups)
+                            )
                     }
                     .map { it[AlbumProviderTable.albumId].value }
             }
@@ -889,7 +889,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         return queryAlbums(0, Int.MAX_VALUE) {
             where {
                 (AlbumTable.originalId inList ids) or
-                        (AlbumTable.id inList albumIdsFromProviders)
+                    (AlbumTable.id inList albumIdsFromProviders)
             }
         }.data
     }
@@ -913,9 +913,9 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     )
                     .where {
                         (AlbumProviderTable.type eq Type.ALBUM.value) and (
-                                (AlbumProviderTable.rawUrl inList urlChunk) or
-                                        AlbumProviderTable.matchesAny(urlChunk.mapNotNull { parsedLookups[it] })
-                                )
+                            (AlbumProviderTable.rawUrl inList urlChunk) or
+                                AlbumProviderTable.matchesAny(urlChunk.mapNotNull { parsedLookups[it] })
+                            )
                     }
                     .map { row ->
                         ProviderUrlRow(
@@ -1374,8 +1374,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
             .select(AlbumTable.id)
             .where {
                 AlbumMusicBrainzTable.albumId.isNull() or
-                        (AlbumMusicBrainzTable.lastCheck eq 0L) or
-                        (AlbumMusicBrainzTable.musicBrainzId.isNull() and (AlbumMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
+                    (AlbumMusicBrainzTable.lastCheck eq 0L) or
+                    (AlbumMusicBrainzTable.musicBrainzId.isNull() and (AlbumMusicBrainzTable.lastCheck less oneWeekAgo.toEpochMilliseconds()))
             }
             .fetchBatchedResultsByIdKeyset(AlbumTable.id, 1000) { batch ->
                 for (row in batch) {
@@ -1621,8 +1621,8 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
         val albumsByIdentity = albums.groupBy { identityKey(it) }.mapValues { (_, group) ->
             group.maxByOrNull {
                 (if (it.releaseDate != null) 1 else 0) +
-                        (if (it.songCount > 0) 1 else 0) +
-                        (if (it.coverHash != null) 1 else 0)
+                    (if (it.songCount > 0) 1 else 0) +
+                    (if (it.coverHash != null) 1 else 0)
             }!!
         }
         val uniqueAlbumMetadata = albumsByIdentity.values.toList()
@@ -1649,7 +1649,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 dbQuery {
                     AlbumProviderTable.select(AlbumProviderTable.albumId).where {
                         (AlbumProviderTable.rawUrl inList idChunk) or
-                                AlbumProviderTable.matchesAny(idChunk.mapNotNull { parsedLookupsForMatching[it] })
+                            AlbumProviderTable.matchesAny(idChunk.mapNotNull { parsedLookupsForMatching[it] })
                     }.map { it[AlbumProviderTable.albumId].value }
                 }
             }
@@ -1734,9 +1734,9 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                     } else albumProviders.any { p -> p[AlbumProviderTable.rawUrl] == it.originalId }
                 } else if (row.originalId == null) {
                     it.name == row.name &&
-                            it.tags == row.tags &&
-                            getISOFromDate(it.releaseDate) == getISOFromDate(row.releaseDate) &&
-                            it.songCount == row.songCount
+                        it.tags == row.tags &&
+                        getISOFromDate(it.releaseDate) == getISOFromDate(row.releaseDate) &&
+                        it.songCount == row.songCount
                 } else {
                     false
                 }
@@ -1820,7 +1820,7 @@ class AlbumService(private val searchIndexWorker: SearchIndexWorker? = null) : A
                 AlbumMusicBrainzTable.select(AlbumMusicBrainzTable.albumId)
                     .where {
                         (AlbumMusicBrainzTable.albumId inList existingIds) and
-                                AlbumMusicBrainzTable.musicBrainzId.isNotNull()
+                            AlbumMusicBrainzTable.musicBrainzId.isNotNull()
                     }
                     .map { it[AlbumMusicBrainzTable.albumId].value }
                     .toSet()

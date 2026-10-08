@@ -200,8 +200,8 @@ class EntityChangeRecorder : EntityWriteSubscriber, HookSubscriber {
         for (chunk in entities.sorted().chunked(CHUNK_SIZE)) {
             EntityChangeTable.deleteWhere {
                 (EntityChangeTable.entityType eq type) and
-                        (EntityChangeTable.aspect neq EntityChangeAspect.DATA) and
-                        (EntityChangeTable.entityId inList chunk)
+                    (EntityChangeTable.aspect neq EntityChangeAspect.DATA) and
+                    (EntityChangeTable.entityId inList chunk)
             }
             UserEntityChangeTable.deleteWhere {
                 (UserEntityChangeTable.entityType eq type) and (UserEntityChangeTable.entityId inList chunk)
@@ -401,7 +401,7 @@ class EntityChangeRecorder : EntityWriteSubscriber, HookSubscriber {
 
         EntityType.USER_PLAYLIST -> mapOf(
             EntityType.COLLECTION to
-                    linked(CollectionPlaylistTable.playlistId, CollectionPlaylistTable.collectionId, entities)
+                linked(CollectionPlaylistTable.playlistId, CollectionPlaylistTable.collectionId, entities)
         )
 
         else -> emptyMap()

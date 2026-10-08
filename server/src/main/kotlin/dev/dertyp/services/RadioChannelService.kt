@@ -163,11 +163,11 @@ class RadioChannelService : Service() {
             .where { RadioChannelArtistTable.channelId eq id }
 
         val membership = (SongTable.id inSubQuery channelSongs) or
-                (SongTable.albumId inSubQuery channelAlbums) or
-                (SongTable.id inSubQuery SongArtistTable.select(SongArtistTable.songId)
-                    .where { SongArtistTable.artistId inSubQuery channelArtists }) or
-                (SongTable.albumId inSubQuery AlbumArtistTable.select(AlbumArtistTable.albumId)
-                    .where { AlbumArtistTable.artistId inSubQuery channelArtists })
+            (SongTable.albumId inSubQuery channelAlbums) or
+            (SongTable.id inSubQuery SongArtistTable.select(SongArtistTable.songId)
+                .where { SongArtistTable.artistId inSubQuery channelArtists }) or
+            (SongTable.albumId inSubQuery AlbumArtistTable.select(AlbumArtistTable.albumId)
+                .where { AlbumArtistTable.artistId inSubQuery channelArtists })
 
         var query = SongTable.select(SongTable.id).where { membership }
         if (exclude.isNotEmpty()) query = query.andWhere { SongTable.id notInList exclude }

@@ -959,7 +959,7 @@ class EntityChangeRecorderTest : KoinTest {
 
     private fun stamps(): List<Long> = db {
         EntityChangeTable.selectAll().map { it[EntityChangeTable.changedAt] } +
-                UserEntityChangeTable.selectAll().map { it[UserEntityChangeTable.changedAt] }
+            UserEntityChangeTable.selectAll().map { it[UserEntityChangeTable.changedAt] }
     }
 
     @ParameterizedTest
@@ -1138,14 +1138,14 @@ class EntityChangeRecorderTest : KoinTest {
         assertEquals(0, reads.count)
         assertEquals(
             songs.mapTo(mutableSetOf()) { data(EntityType.SONG, it, EntityChangeKind.CREATED) } +
-                    members(EntityType.ALBUM, album) + members(EntityType.ARTIST, artist),
+                members(EntityType.ALBUM, album) + members(EntityType.ARTIST, artist),
             libraryRows()
         )
         assertEquals(11_000L, db { EntityChangeScopeTable.selectAll().count() })
         assertEquals(5500, userRows().size)
         val stamps = db {
             EntityChangeTable.selectAll().map { it[EntityChangeTable.changedAt] } +
-                    UserEntityChangeTable.selectAll().map { it[UserEntityChangeTable.changedAt] }
+                UserEntityChangeTable.selectAll().map { it[UserEntityChangeTable.changedAt] }
         }
         assertEquals(11_002, stamps.size)
         assertEquals(1, stamps.toSet().size)
@@ -1182,14 +1182,14 @@ class EntityChangeRecorderTest : KoinTest {
 
         val stamps = db {
             EntityChangeTable.selectAll().map { it[EntityChangeTable.changedAt] } +
-                    UserEntityChangeTable.selectAll().map { it[UserEntityChangeTable.changedAt] }
+                UserEntityChangeTable.selectAll().map { it[UserEntityChangeTable.changedAt] }
         }
         assertEquals(11_002, stamps.size)
         assertEquals(1, stamps.toSet().size)
         assertTrue(stamps.first() >= held)
         assertEquals(
             songs.mapTo(mutableSetOf()) { data(EntityType.SONG, it, EntityChangeKind.CREATED) } +
-                    members(EntityType.ALBUM, album) + members(EntityType.ARTIST, artist),
+                members(EntityType.ALBUM, album) + members(EntityType.ARTIST, artist),
             libraryRows()
         )
         assertEquals(11_000L, db { EntityChangeScopeTable.selectAll().count() })
@@ -1202,7 +1202,7 @@ class EntityChangeRecorderTest : KoinTest {
 
         assertEquals(
             songs.mapTo(mutableSetOf()) { data(EntityType.SONG, it, EntityChangeKind.DELETED) } +
-                    members(EntityType.ALBUM, album) + members(EntityType.ARTIST, artist),
+                members(EntityType.ALBUM, album) + members(EntityType.ARTIST, artist),
             libraryRows()
         )
         assertEquals(11_000L, db { EntityChangeScopeTable.selectAll().count() })

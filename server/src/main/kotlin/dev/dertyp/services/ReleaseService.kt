@@ -51,7 +51,6 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private val RELEASE_REFRESH_WINDOW = 14.days
     private val REFRESH_COOLDOWN = 20.hours
 
-
     fun refreshRecentReleaseAsync(releaseId: UUID) {
         scope.launch {
             runCatchingCancellable { refreshRecentRelease(releaseId) }
@@ -220,7 +219,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             releaseArtistService.providerReleaseArtistIdsTx(providerRows.map { it[ProviderReleaseTable.id].value })
 
         val feedByType = (musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, groupArtistsMap, nowMs) } +
-                providerRows.map { providerFeedRow(it, providerLinksMap, providerArtistsMap, nowMs) })
+            providerRows.map { providerFeedRow(it, providerLinksMap, providerArtistsMap, nowMs) })
             .groupBy { it.release.type }
 
         var total = 0L
@@ -245,10 +244,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private fun Query.feedMusicBrainzFilters(followedArtistIds: List<UUID>): Query = this
         .where {
             (RecentReleaseTable.artistId inList followedArtistIds) or
-                    (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
-                        .select(ReleaseArtistTable.releaseGroupId)
-                        .where { ReleaseArtistTable.artistId inList followedArtistIds }
-                        .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
+                (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
+                    .select(ReleaseArtistTable.releaseGroupId)
+                    .where { ReleaseArtistTable.artistId inList followedArtistIds }
+                    .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
         }
         .andWhere { RecentReleaseTable.albumId.isNull() }
         .andWhere { RecentReleaseTable.songId.isNull() }
@@ -262,10 +261,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
     private fun Query.feedProviderFilters(followedArtistIds: List<UUID>): Query = this
         .where {
             (ProviderReleaseTable.artistId inList followedArtistIds) or
-                    (ProviderReleaseTable.id inSubQuery ReleaseArtistTable
-                        .select(ReleaseArtistTable.providerReleaseId)
-                        .where { ReleaseArtistTable.artistId inList followedArtistIds }
-                        .andWhere { ReleaseArtistTable.providerReleaseId.isNotNull() })
+                (ProviderReleaseTable.id inSubQuery ReleaseArtistTable
+                    .select(ReleaseArtistTable.providerReleaseId)
+                    .where { ReleaseArtistTable.artistId inList followedArtistIds }
+                    .andWhere { ReleaseArtistTable.providerReleaseId.isNotNull() })
         }
         .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
         .andWhere { ProviderReleaseTable.albumId.isNull() }
@@ -423,10 +422,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .selectAll()
             .where {
                 (RecentReleaseTable.artistId eq artistId) or
-                        (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
-                            .select(ReleaseArtistTable.releaseGroupId)
-                            .where { ReleaseArtistTable.artistId eq artistId }
-                            .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
+                    (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
+                        .select(ReleaseArtistTable.releaseGroupId)
+                        .where { ReleaseArtistTable.artistId eq artistId }
+                        .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
             }
 
         if (!includeHidden) musicBrainzQuery.andWhere { HiddenReleaseTable.releaseGroupId.isNull() }
@@ -450,10 +449,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             .selectAll()
             .where {
                 (ProviderReleaseTable.artistId eq artistId) or
-                        (ProviderReleaseTable.id inSubQuery ReleaseArtistTable
-                            .select(ReleaseArtistTable.providerReleaseId)
-                            .where { ReleaseArtistTable.artistId eq artistId }
-                            .andWhere { ReleaseArtistTable.providerReleaseId.isNotNull() })
+                    (ProviderReleaseTable.id inSubQuery ReleaseArtistTable
+                        .select(ReleaseArtistTable.providerReleaseId)
+                        .where { ReleaseArtistTable.artistId eq artistId }
+                        .andWhere { ReleaseArtistTable.providerReleaseId.isNotNull() })
             }
             .andWhere { ProviderReleaseTable.releaseGroupId.isNull() }
 
@@ -479,7 +478,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             releaseArtistService.providerReleaseArtistIdsTx(providerRows.map { it[ProviderReleaseTable.id].value })
 
         val feed = musicBrainzRows.map { musicBrainzFeedRow(it, providersMap, groupArtistsMap, nowMs) } +
-                providerRows.map { providerFeedRow(it, providerLinksMap, providerArtistsMap, nowMs) }
+            providerRows.map { providerFeedRow(it, providerLinksMap, providerArtistsMap, nowMs) }
 
         mergeFeed(feed, page, pageSize, musicBrainzTotal + providerTotal)
     }
@@ -610,10 +609,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 val (ruleKind, ruleValue) = relatedKey
                 ArtistSourceRuleTable.deleteWhere {
                     (ArtistSourceRuleTable.artistId eq targetArtistId) and
-                            (ArtistSourceRuleTable.provider eq targetProvider) and
-                            (ArtistSourceRuleTable.kind eq ruleKind) and
-                            (ArtistSourceRuleTable.value eq ruleValue) and
-                            (ArtistSourceRuleTable.rule eq ArtistSourceRulePolarity.BLOCK)
+                        (ArtistSourceRuleTable.provider eq targetProvider) and
+                        (ArtistSourceRuleTable.kind eq ruleKind) and
+                        (ArtistSourceRuleTable.value eq ruleValue) and
+                        (ArtistSourceRuleTable.rule eq ArtistSourceRulePolarity.BLOCK)
                 }
                 val siblings = relatedReleaseIds(targetProvider, ruleKind, ruleValue)
                 if (siblings.isNotEmpty()) {
@@ -982,14 +981,14 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 .where { RecentReleaseTable.imageId.isNull() }
                 .andWhere {
                     (RecentReleaseTable.artistId inSubQuery FollowedArtistTable.select(FollowedArtistTable.artistId)) or
-                            (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
-                                .select(ReleaseArtistTable.releaseGroupId)
-                                .where {
-                                    ReleaseArtistTable.artistId inSubQuery FollowedArtistTable.select(
-                                        FollowedArtistTable.artistId
-                                    )
-                                }
-                                .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
+                        (RecentReleaseTable.releaseId inSubQuery ReleaseArtistTable
+                            .select(ReleaseArtistTable.releaseGroupId)
+                            .where {
+                                ReleaseArtistTable.artistId inSubQuery FollowedArtistTable.select(
+                                    FollowedArtistTable.artistId
+                                )
+                            }
+                            .andWhere { ReleaseArtistTable.releaseGroupId.isNotNull() })
                 }
             artistId?.let { query.andWhere { RecentReleaseTable.artistId eq it } }
             query.map {
@@ -1065,7 +1064,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 .andWhere { ArtistMusicBrainzTable.musicBrainzId.isNotNull() }
                 .andWhere {
                     (ArtistMusicBrainzTable.lastReleaseCheck eq 0L) or
-                            (ArtistMusicBrainzTable.lastReleaseCheck less oneMonthAgo.toEpochMilliseconds())
+                        (ArtistMusicBrainzTable.lastReleaseCheck less oneMonthAgo.toEpochMilliseconds())
                 }
                 .groupBy(ArtistTable.id, ArtistMusicBrainzTable.musicBrainzId)
                 .orderBy(SongArtistTable.songId.count(), SortOrder.DESC)
@@ -1257,10 +1256,10 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
             val storedReleaseDate = existing[RecentReleaseTable.releaseDate]
             val nowMs = Clock.System.now().toEpochMilliseconds()
             val withinRefreshWindow = storedReleaseDate != null &&
-                    nowMs >= storedReleaseDate &&
-                    nowMs < storedReleaseDate + RELEASE_REFRESH_WINDOW.inWholeMilliseconds
+                nowMs >= storedReleaseDate &&
+                nowMs < storedReleaseDate + RELEASE_REFRESH_WINDOW.inWholeMilliseconds
             val cooldownPassed = lastUpdate == null ||
-                    (nowMs - lastUpdate) >= REFRESH_COOLDOWN.inWholeMilliseconds
+                (nowMs - lastUpdate) >= REFRESH_COOLDOWN.inWholeMilliseconds
             if (!(withinRefreshWindow && cooldownPassed)) {
                 dbSemaphore.withPermit {
                     dbQuery {
@@ -1300,7 +1299,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
 
         val isSingle =
             group.primaryType?.lowercase() == "single" || group.primaryType == null ||
-                    group.relations?.any { it.type == "single from" } == true
+                group.relations?.any { it.type == "single from" } == true
 
         val groupRecordings = if (isSingle) {
             musicBrainzService.fetchRecordingsByReleaseGroup(
@@ -1379,18 +1378,18 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                     val titleMatches =
                         album.title.cleanTitle().removeSuffix("- Single").trim()
                             .equals(cleanGroupTitle, ignoreCase = true) ||
-                                album.additionalTitles.any {
-                                    it.cleanTitle().removeSuffix("- Single").trim()
-                                        .equals(cleanGroupTitle, ignoreCase = true)
-                                } ||
-                                albumNames.any { albumName ->
-                                    album.title.cleanTitle()
-                                        .equals(albumName.cleanTitle(), ignoreCase = true) ||
-                                            album.additionalTitles.any {
-                                                it.cleanTitle()
-                                                    .equals(albumName.cleanTitle(), ignoreCase = true)
-                                            }
-                                }
+                            album.additionalTitles.any {
+                                it.cleanTitle().removeSuffix("- Single").trim()
+                                    .equals(cleanGroupTitle, ignoreCase = true)
+                            } ||
+                            albumNames.any { albumName ->
+                                album.title.cleanTitle()
+                                    .equals(albumName.cleanTitle(), ignoreCase = true) ||
+                                    album.additionalTitles.any {
+                                        it.cleanTitle()
+                                            .equals(albumName.cleanTitle(), ignoreCase = true)
+                                    }
+                            }
 
                     titleMatches && album.artists.any { it.equals(artistName, ignoreCase = true) }
                 }
@@ -1429,9 +1428,9 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 matchedAlbum = searchedTidal.firstOrNull { album ->
                     val cleanGroupTitle = group.title.cleanTitle()
                     val titleMatches = album.title.cleanTitle().equals(cleanGroupTitle, ignoreCase = true) ||
-                            albumNames.any { albumName ->
-                                album.title.cleanTitle().equals(albumName.cleanTitle(), ignoreCase = true)
-                            }
+                        albumNames.any { albumName ->
+                            album.title.cleanTitle().equals(albumName.cleanTitle(), ignoreCase = true)
+                        }
 
                     titleMatches && album.artists.any { it.equals(artistName, ignoreCase = true) }
                 }
@@ -1720,7 +1719,7 @@ class ReleaseService(private val environment: ApplicationEnvironment) : Service(
                 }
                 .andWhere {
                     (ImageTable.origin like "https://coverartarchive.org/%") or
-                            (ImageTable.origin like "https://%.mzstatic.com/%")
+                        (ImageTable.origin like "https://%.mzstatic.com/%")
                 }
                 .map { it[RecentReleaseTable.releaseId].value }
         }

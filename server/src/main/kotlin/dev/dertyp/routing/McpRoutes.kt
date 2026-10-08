@@ -59,12 +59,12 @@ fun Route.mcpRouting() {
             summary = "Model Context Protocol endpoint (read-only listen history)"
             description =
                 "Stateless Streamable HTTP transport for the Model Context Protocol. Every request carries a " +
-                        "complete JSON-RPC 2.0 message (or a batch of them) and is answered with a JSON response; no session id is " +
-                        "issued and no server-initiated stream is opened, so `initialize`, `tools/list` and `tools/call` can each be " +
-                        "sent as an independent POST. Send `Content-Type: application/json` and " +
-                        "`Accept: application/json, text/event-stream`. The exposed tools are read-only and scoped to the " +
-                        "authenticated user: search_library, get_listens, get_listening_summary, get_top, get_listen_timeline, " +
-                        "get_listening_stats and get_now_playing. $API_KEY_NOTE"
+                "complete JSON-RPC 2.0 message (or a batch of them) and is answered with a JSON response; no session id is " +
+                "issued and no server-initiated stream is opened, so `initialize`, `tools/list` and `tools/call` can each be " +
+                "sent as an independent POST. Send `Content-Type: application/json` and " +
+                "`Accept: application/json, text/event-stream`. The exposed tools are read-only and scoped to the " +
+                "authenticated user: search_library, get_listens, get_listening_summary, get_top, get_listen_timeline, " +
+                "get_listening_stats and get_now_playing. $API_KEY_NOTE"
             securitySchemeNames("ApiKeyAuth")
             request {
                 headerParameter<String>("Accept") {

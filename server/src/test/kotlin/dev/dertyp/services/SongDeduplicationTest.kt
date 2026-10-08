@@ -431,9 +431,9 @@ class SongDeduplicationTest : KoinTest {
             val songs = songsAfterImporting(
                 dialect,
                 album("The Album", code = "0602547933522", providerId = "tidal:1") to
-                        StoredAlbum("The Album", code = "0602547933522"),
+                    StoredAlbum("The Album", code = "0602547933522"),
                 album("The Album", code = "0093624814337", providerId = "tidal:2") to
-                        StoredAlbum("The Album", code = "0093624814337")
+                    StoredAlbum("The Album", code = "0093624814337")
             )
 
             assertEquals(2L, songs, "Different barcodes are different editions even with equal name and tags")

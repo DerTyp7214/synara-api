@@ -38,8 +38,8 @@ class TidalService(
 
         private fun isRetryable(status: HttpStatusCode): Boolean =
             status == HttpStatusCode.TooManyRequests ||
-                    status == HttpStatusCode.RequestTimeout ||
-                    status.value >= 500
+                status == HttpStatusCode.RequestTimeout ||
+                status.value >= 500
 
         val RETRY_POLICY = RetryPolicy(
             maxAttempts = MAX_RETRIES + 1,

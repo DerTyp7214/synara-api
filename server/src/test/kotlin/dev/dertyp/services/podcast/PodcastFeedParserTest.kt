@@ -371,8 +371,8 @@ class PodcastFeedParserTest {
             """.trimIndent()
         )
         val bytes = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) +
-                "\n   \t".toByteArray(Charsets.UTF_8) +
-                xml.toByteArray(Charsets.UTF_8)
+            "\n   \t".toByteArray(Charsets.UTF_8) +
+            xml.toByteArray(Charsets.UTF_8)
 
         val feed = PodcastFeedParser.parse(ByteArrayInputStream(bytes), now)
 

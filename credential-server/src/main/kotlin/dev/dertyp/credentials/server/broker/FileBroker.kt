@@ -25,7 +25,7 @@ class FileBroker : CredentialBroker<FileSecret> {
         request.files.forEach { FileContents.decode(it) }
         val uploaded = request.files.associateBy { it.role }
         val merged = secret.files.map { uploaded[it.role] ?: it } +
-                request.files.filter { file -> secret.files.none { it.role == file.role } }
+            request.files.filter { file -> secret.files.none { it.role == file.role } }
         val updated = FileSecret(merged)
         return updated to stateOf(updated)
     }

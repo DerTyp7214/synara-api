@@ -98,8 +98,8 @@ class EntityChangeCoverageTest {
     private val trackedWrite = Regex("\\b(${trackedTables.joinToString("|")})\\s*\\.\\s*($statements)\\b")
     private val indirectWrite = Regex(
         "\\b([a-z]\\w*(?:\\s*\\.\\s*[a-z]\\w*)*)\\s*\\.\\s*" +
-                "((?:deleteWhere|deleteIgnoreWhere|deleteAll|batchInsert|batchUpsert|batchReplace|insertIgnore|" +
-                "insertAndGetId|upsert|mergeFrom)\\b|update(?=\\s*\\(\\s*\\{)|insert(?=\\s*\\{))"
+            "((?:deleteWhere|deleteIgnoreWhere|deleteAll|batchInsert|batchUpsert|batchReplace|insertIgnore|" +
+            "insertAndGetId|upsert|mergeFrom)\\b|update(?=\\s*\\(\\s*\\{)|insert(?=\\s*\\{))"
     )
     private val rawStatement = Regex("\\b(exec)\\s*\\(")
 
@@ -128,7 +128,7 @@ class EntityChangeCoverageTest {
     fun `every write the scanner cannot attribute to a table is listed`() {
         val found = scan { code ->
             indirectWrite.findAll(code).map { Triple(it.range.first, it.groupValues[1].filterNot(Char::isWhitespace), it.groupValues[2]) } +
-                    rawStatement.findAll(code).map { Triple(it.range.first, "raw SQL", it.groupValues[1]) }
+                rawStatement.findAll(code).map { Triple(it.range.first, "raw SQL", it.groupValues[1]) }
         }
         compare(
             found,
@@ -305,7 +305,7 @@ class EntityChangeCoverageTest {
         while (last >= 0 && code[last].isWhitespace()) last--
         val after = rest(code, lineEnd)
         return (last >= 0 && code[last] in "=+-*/&|,(<:?") ||
-                listOf(".", "?.", "?:", "&&", "||", "+", "-", "*", "/", "else", "as ").any { after.startsWith(it) }
+            listOf(".", "?.", "?:", "&&", "||", "+", "-", "*", "/", "else", "as ").any { after.startsWith(it) }
     }
 
     private fun startsBody(code: String, lineEnd: Int): Boolean =

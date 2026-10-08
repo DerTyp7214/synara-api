@@ -108,7 +108,7 @@ class ProviderLinkService : Service() {
                     )
                     .map {
                         it[ProviderReleaseLinkTable.providerReleaseId].value to
-                                (it[ProviderLinkTable.provider] to it[ProviderLinkTable.externalId])
+                            (it[ProviderLinkTable.provider] to it[ProviderLinkTable.externalId])
                     }
             }.groupBy({ it.first }, { it.second })
         }

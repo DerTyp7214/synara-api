@@ -64,7 +64,7 @@ class ListenHistoryQueryService(
             if (position != null) {
                 query = query.andWhere {
                     (ListenTable.listenedAt less position.first) or
-                            ((ListenTable.listenedAt eq position.first) and (ListenTable.id less position.second))
+                        ((ListenTable.listenedAt eq position.first) and (ListenTable.id less position.second))
                 }
             }
             query
@@ -173,7 +173,7 @@ class ListenHistoryQueryService(
         val rows = window(userId, filter)
         val now = System.currentTimeMillis()
         val startMs = filter.from ?: rows.firstOrNull()?.listenedAt
-        ?: return McpTimeline(bucket = bucket.name, timezone = zone.id, buckets = emptyList())
+            ?: return McpTimeline(bucket = bucket.name, timezone = zone.id, buckets = emptyList())
         val endMs = filter.to ?: maxOf(now, rows.lastOrNull()?.listenedAt ?: now)
 
         val starts = ArrayList<Long>()

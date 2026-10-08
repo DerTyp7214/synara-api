@@ -516,7 +516,7 @@ private data class LbListen(
     fun releaseMbid(): String? = trackMetadata.additionalInfo?.releaseMbid ?: trackMetadata.mbidMapping?.releaseMbid
     fun artistMbids(): List<String> =
         trackMetadata.additionalInfo?.artistMbids?.takeIf { it.isNotEmpty() } ?: trackMetadata.mbidMapping?.artistMbids
-        ?: emptyList()
+            ?: emptyList()
 
     fun isrc(): String? = trackMetadata.additionalInfo?.isrc
     fun trackName(): String? = trackMetadata.trackName

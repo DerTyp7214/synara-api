@@ -11,7 +11,6 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimedValue
 import kotlin.time.measureTimedValue
 
-
 data class Quadruple<out A, out B, out C, out D>(
     val first: A,
     val second: B,
@@ -30,7 +29,6 @@ data class Quintuple<out A, out B, out C, out D, out E>(
 ) : Serializable {
     override fun toString(): String = "($first, $second, $third, $fourth, $fifth)"
 }
-
 
 fun <T, K> List<T>.duplicatesBy(keySelector: (T) -> K): List<T> {
     return this.groupBy(keySelector)

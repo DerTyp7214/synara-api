@@ -1380,15 +1380,15 @@ class ReleaseServiceTest : KoinTest {
 
                 ImageTable.insert {
                     it[id] = caaImage; it[path] = "caa"; it[imageHash] = "h1"; it[origin] =
-                    "https://coverartarchive.org/release-group/$caaRelease/front"
+                        "https://coverartarchive.org/release-group/$caaRelease/front"
                 }
                 ImageTable.insert {
                     it[id] = nonCaaImage; it[path] = "tidal"; it[imageHash] = "h2"; it[origin] =
-                    "https://resources.tidal.com/images/cover.jpg"
+                        "https://resources.tidal.com/images/cover.jpg"
                 }
                 ImageTable.insert {
                     it[id] = followedImage; it[path] = "caa2"; it[imageHash] = "h3"; it[origin] =
-                    "https://coverartarchive.org/release-group/$followedRelease/front"
+                        "https://coverartarchive.org/release-group/$followedRelease/front"
                 }
 
                 listOf(
@@ -1687,7 +1687,7 @@ class ReleaseServiceTest : KoinTest {
         ReleaseArtistTable.selectAll()
             .map {
                 (it[ReleaseArtistTable.releaseGroupId]?.value ?: it[ReleaseArtistTable.providerReleaseId]?.value) to
-                        it[ReleaseArtistTable.artistId].value
+                    it[ReleaseArtistTable.artistId].value
             }
             .toSet()
     }
@@ -2940,8 +2940,8 @@ class ReleaseServiceTest : KoinTest {
         coVerify {
             imageService.createBatch(match {
                 it.size == 1 &&
-                        it.single().data.contentEquals(jpeg) &&
-                        it.single().origin == "https://coverartarchive.org/release-group/$releaseGroupId/front"
+                    it.single().data.contentEquals(jpeg) &&
+                    it.single().origin == "https://coverartarchive.org/release-group/$releaseGroupId/front"
             })
         }
     }

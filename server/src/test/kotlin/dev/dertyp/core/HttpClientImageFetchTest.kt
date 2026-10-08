@@ -26,7 +26,7 @@ private const val HOST = "https://example.com"
 
 private const val NOT_FOUND_HTML =
     "<!doctype html><html lang=en><title>404 Not Found</title><h1>Not Found</h1>" +
-            "<p>The requested URL was not found on the server.</p>"
+        "<p>The requested URL was not found on the server.</p>"
 
 private val JpegBytes = byteArrayOf(
     0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(),

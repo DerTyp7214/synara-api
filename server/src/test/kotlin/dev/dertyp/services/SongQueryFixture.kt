@@ -138,7 +138,7 @@ class SongQueryFixture(
                 val songAnimated = songFrames.mapValues { uuid() }
                 val albumAnimated = albumFrames.mapValues { uuid() }
                 AnimatedImageTable.batchInsert(songAnimated.entries.map { (i, animatedId) -> animatedId to songFrames[i]!! } +
-                        albumAnimated.entries.map { (b, animatedId) -> animatedId to albumFrames[b]!! }) { (animatedId, frameId) ->
+                    albumAnimated.entries.map { (b, animatedId) -> animatedId to albumFrames[b]!! }) { (animatedId, frameId) ->
                     this[AnimatedImageTable.id] = animatedId
                     this[AnimatedImageTable.path] = "/animated/$animatedId"
                     this[AnimatedImageTable.contentHash] = animatedId.toString()

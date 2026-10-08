@@ -1038,7 +1038,6 @@ class CredentialServerContributionsTest {
     private fun actionIds(column: UiComponent.Column) =
         column.children.map { ((it as UiComponent.Button).action as UiAction.Invoke).actionId }
 
-
     @Test
     fun `the overview starts with the navigation and lists the local credentials below`() = runBlocking {
         val local = overview() as UiComponent.Column

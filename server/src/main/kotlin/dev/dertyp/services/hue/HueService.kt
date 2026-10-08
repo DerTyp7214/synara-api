@@ -351,9 +351,9 @@ class HueService : Service() {
             val areas = HueEntertainmentMap.build(configurations, services, lights)
             areaCache[bridgeId] = areas
             rooms.map { HueTarget(HueTargetType.ROOM, it.id, it.metadata?.name ?: "Room", it.groupedLightId) } +
-                    zones.map { HueTarget(HueTargetType.ZONE, it.id, it.metadata?.name ?: "Zone", it.groupedLightId) } +
-                    colorLights.map { HueTarget(HueTargetType.LIGHT, it.id, lightName(it)) } +
-                    areas.map { HueTarget(HueTargetType.ENTERTAINMENT, it.id, it.name) }
+                zones.map { HueTarget(HueTargetType.ZONE, it.id, it.metadata?.name ?: "Zone", it.groupedLightId) } +
+                colorLights.map { HueTarget(HueTargetType.LIGHT, it.id, lightName(it)) } +
+                areas.map { HueTarget(HueTargetType.ENTERTAINMENT, it.id, it.name) }
         } catch (e: Exception) {
             recordError(row.id, e)
             throw e

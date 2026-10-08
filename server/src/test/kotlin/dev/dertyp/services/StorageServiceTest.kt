@@ -80,7 +80,7 @@ class StorageServiceTest {
 
         val service = StorageService(ServerConfig(environment.config))
 
-        // expected: 
+        // expected:
         // mainParents (audioDir) size: 5 + 10 + 3 = 18
         // secondarySize: 7
         // customSize: 4

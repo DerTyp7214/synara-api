@@ -265,9 +265,9 @@ abstract class TidalBaseImporter(
 
                 val mbTrack = mbRelease?.media?.flatMap { it.tracks ?: emptyList() }?.find { track ->
                     track.recording?.isrcs?.any { it in matchIsrcs } == true ||
-                            matchTitles.any { title ->
-                                track.title?.cleanTitle()?.equals(title.cleanTitle(), true) == true
-                            }
+                        matchTitles.any { title ->
+                            track.title?.cleanTitle()?.equals(title.cleanTitle(), true) == true
+                        }
                 }
 
                 if (mbTrack != null) {
@@ -400,9 +400,9 @@ abstract class TidalBaseImporter(
                     val metadata = trackMetadataMap.values.find { meta ->
                         val filenameMatch = path.nameWithoutExtension == meta.tidalId
                         val titleArtistMatch = meta.originalTitle.equals(fileTitle, true) &&
-                                meta.originalArtists.any { artist ->
-                                    fileArtists.any { it.equals(artist, true) }
-                                }
+                            meta.originalArtists.any { artist ->
+                                fileArtists.any { it.equals(artist, true) }
+                            }
 
                         filenameMatch || titleArtistMatch
                     }

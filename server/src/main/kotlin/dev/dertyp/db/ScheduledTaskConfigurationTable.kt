@@ -10,4 +10,3 @@ object ScheduledTaskConfigurationTable : IdTable<String>("scheduled_task_configu
     val enabled = bool("enabled")
     val trigger = text("trigger")
 }
-

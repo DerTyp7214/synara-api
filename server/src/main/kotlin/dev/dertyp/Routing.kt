@@ -114,7 +114,6 @@ fun Application.configureRouting() {
         }
         route("swagger") {
             swaggerUI("/api.json") {
-
             }
         }
 
@@ -122,13 +121,13 @@ fun Application.configureRouting() {
         val jwtService by inject<JwtService>()
 
         rpc("/rpc") {
-            //withSynaraPack()
+            // withSynaraPack()
             rpcConfig { serialization { cborFor(call.clientInfo) } }
             registerPublicServices(koin)
         }
 
         rpc("/rpc/auth") {
-            //withSynaraPack()
+            // withSynaraPack()
             rpcConfig { serialization { cborFor(call.clientInfo) } }
             registerPublicServices(koin)
         }
@@ -145,7 +144,7 @@ fun Application.configureRouting() {
 
         jwtService.authenticated(this) {
             rpc("/rpc/services") {
-                //withSynaraPack()
+                // withSynaraPack()
                 rpcConfig { serialization { cborFor(call.clientInfo) } }
                 registerAuthenticatedServices(koin)
             }

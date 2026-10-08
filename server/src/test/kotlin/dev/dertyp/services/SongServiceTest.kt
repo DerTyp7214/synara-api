@@ -153,7 +153,6 @@ class SongServiceTest : KoinTest {
             *allMusicBrainzTables
         )
         transaction(database) {
-
             UserTable.insert {
                 it[id] = user.id
                 it[username] = user.username
@@ -257,7 +256,7 @@ class SongServiceTest : KoinTest {
         val song = songService.byId(songId)!!
 
         coEvery { transcoder.losslessFlacFallback(any(), wav) } returns
-                StreamInfo(flacFallback, LosslessFormat.FLAC.contentType, flacFallback.length(), flacFallback.name)
+            StreamInfo(flacFallback, LosslessFormat.FLAC.contentType, flacFallback.length(), flacFallback.name)
 
         val modern = songService.resolveRawStream(song, ClientInfo(ApiVersion.CURRENT))!!
         assertEquals(wav, modern.file)
@@ -1131,9 +1130,9 @@ class SongServiceTest : KoinTest {
                 ),
             )
             coEvery { musicBrainzService.fetchRecordingById(recordingId, any()) } returns
-                    MusicBrainzRecording(id = recordingId, title = "Duet", artistCredit = credits)
+                MusicBrainzRecording(id = recordingId, title = "Duet", artistCredit = credits)
             coEvery { musicBrainzService.fetchReleaseById(releaseId, any()) } returns
-                    MusicBrainzRelease(id = releaseId, title = "Duets", artistCredit = credits)
+                MusicBrainzRelease(id = releaseId, title = "Duets", artistCredit = credits)
 
             val tagArtists = listOf("Extra", "Guest", "Late", "Main", "Early")
             val album = InsertableAlbum("Duets", tagArtists, musicBrainzId = releaseId)

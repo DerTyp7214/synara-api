@@ -162,8 +162,8 @@ class OAuthAndAppleBrokerTest {
         val generator = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }
         val keyPair = generator.generateKeyPair()
         val pem = "-----BEGIN PRIVATE KEY-----\n" +
-                Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(keyPair.private.encoded) +
-                "\n-----END PRIVATE KEY-----\n"
+            Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(keyPair.private.encoded) +
+            "\n-----END PRIVATE KEY-----\n"
         val repository = FakeSecretRepository().apply {
             put(
                 "applemusic.developer",

@@ -45,8 +45,8 @@ fun Flow<IMetadataService.Track>.filterExisting(
                 track.addedAt?.toInstant()
                     ?.toEpochMilli() to allExistingSongs.find {
                     it.originalUrl.endsWith("/${track.id}") ||
-                            (deduplicateByIsrc && track.isrc?.isNotBlank() == true && it.isrc == track.isrc &&
-                                    it.id in isrcScopedIds)
+                        (deduplicateByIsrc && track.isrc?.isNotBlank() == true && it.isrc == track.isrc &&
+                            it.id in isrcScopedIds)
                 }?.id
             }.filterNotNull()
 

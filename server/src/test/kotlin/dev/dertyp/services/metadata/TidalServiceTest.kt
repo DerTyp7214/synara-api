@@ -89,7 +89,7 @@ class TidalServiceTest : KoinTest {
                               "type": "artists",
                               "attributes": { "name": "Artist 1", "popularity": 0.9 }
                             }
-                        """.trimIndent()
+                            """.trimIndent()
                         )
                     }
                     if (include?.contains("albums") == true) {
@@ -110,7 +110,7 @@ class TidalServiceTest : KoinTest {
                                 "type": "ALBUM"
                               }
                             }
-                        """.trimIndent()
+                            """.trimIndent()
                         )
                     }
                     if (include?.contains("tracks") == true) {
@@ -128,7 +128,7 @@ class TidalServiceTest : KoinTest {
                                 "title": "Track 1"
                               }
                             }
-                        """.trimIndent()
+                            """.trimIndent()
                         )
                     }
 

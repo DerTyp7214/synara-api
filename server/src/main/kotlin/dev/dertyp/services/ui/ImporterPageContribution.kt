@@ -393,7 +393,7 @@ class ImporterPageContribution(
             }
         }
         val manageable = state.installedImporters().any(state::canLogin) ||
-                (server != null && uiService.list(server.account, server.client, slot = UiSlots.IMPORTER).isNotEmpty())
+            (server != null && uiService.list(server.account, server.client, slot = UiSlots.IMPORTER).isNotEmpty())
         if (manageable) {
             items += UiComponent.Button(
                 scope.t("importer.settings.title"),

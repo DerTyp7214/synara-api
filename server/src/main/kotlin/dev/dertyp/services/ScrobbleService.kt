@@ -97,7 +97,7 @@ class ScrobbleService : Service() {
     fun currentNowPlaying(userId: PlatformUUID): NowPlayingSnapshot? {
         val entry = nowPlaying[userId] ?: return null
         val positionMs = entry.positionMs +
-                if (entry.playing) (System.currentTimeMillis() - entry.anchorAt).coerceAtLeast(0) else 0L
+            if (entry.playing) (System.currentTimeMillis() - entry.anchorAt).coerceAtLeast(0) else 0L
         return NowPlayingSnapshot(
             song = entry.song,
             startedAt = entry.firstStartedAt,

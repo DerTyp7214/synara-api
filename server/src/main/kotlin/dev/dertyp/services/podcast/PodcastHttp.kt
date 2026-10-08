@@ -65,7 +65,7 @@ class PodcastHttp : KoinComponent {
         require(
             addresses.none {
                 it.isLoopbackAddress || it.isSiteLocalAddress || it.isLinkLocalAddress ||
-                        it.isAnyLocalAddress || it.isMulticastAddress
+                    it.isAnyLocalAddress || it.isMulticastAddress
             }
         ) { "Host resolves to a non public address: $host" }
 

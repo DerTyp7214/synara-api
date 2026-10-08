@@ -168,7 +168,7 @@ private fun Route.subsonicBrowseRoutes() {
         val artist = artistService.byId(id.uuid, user.id)
             ?: return@subAuth respondNotFound(params, "Artist")
         val albums = albumService.byArtist(0, Int.MAX_VALUE, id.uuid, singles = false, userId = user.id).data +
-                albumService.byArtist(0, Int.MAX_VALUE, id.uuid, singles = true, userId = user.id).data
+            albumService.byArtist(0, Int.MAX_VALUE, id.uuid, singles = true, userId = user.id).data
         val stars = queryService.starredAlbumStars(user.id)
         call.respondSubsonic(
             SubsonicResponse(

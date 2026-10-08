@@ -73,9 +73,9 @@ class MarkdownDocReferencesTest {
 
         assertEquals(
             "See [ChangeTopic](MODELS.md#devdertypdatachangetopic), " +
-                    "[ChangeTopic.LISTENS](MODELS.md#devdertypdatachangetopic), " +
-                    "[Album.musicBrainzId](MODELS.md#devdertypdataalbum) and " +
-                    "[IMetadataService.searchAlbum](RPC_SERVICES.md#devdertypservicesmetadataimetadataservice-searchalbum).",
+                "[ChangeTopic.LISTENS](MODELS.md#devdertypdatachangetopic), " +
+                "[Album.musicBrainzId](MODELS.md#devdertypdataalbum) and " +
+                "[IMetadataService.searchAlbum](RPC_SERVICES.md#devdertypservicesmetadataimetadataservice-searchalbum).",
             linked,
         )
     }
@@ -91,7 +91,7 @@ class MarkdownDocReferencesTest {
 
         assertEquals(
             "[IMetadataService.Album](MODELS.md#devdertypservicesmetadataimetadataservicealbum) and " +
-                    "[QueueWriteResult.Conflict](MODELS.md#devdertypdataqueuewriteresultconflict)",
+                "[QueueWriteResult.Conflict](MODELS.md#devdertypdataqueuewriteresultconflict)",
             linked,
         )
     }
@@ -109,7 +109,7 @@ class MarkdownDocReferencesTest {
 
         assertEquals(
             "[ApiConstantsDocs] ClientFeature.X: unresolved doc reference @Nope: " +
-                    "Nope is neither a service in RPC_SERVICES.md nor a model in MODELS.md",
+                "Nope is neither a service in RPC_SERVICES.md nor a model in MODELS.md",
             error.message,
         )
     }
@@ -121,12 +121,12 @@ class MarkdownDocReferencesTest {
 
         assertEquals(
             "[ApiConstantsDocs] X: unresolved doc reference @Conflict: " +
-                    "Conflict names more than one documented service or model",
+                "Conflict names more than one documented service or model",
             conflict.message,
         )
         assertEquals(
             "[ApiConstantsDocs] X: unresolved doc reference @Image: " +
-                    "Image names more than one documented service or model",
+                "Image names more than one documented service or model",
             image.message,
         )
     }
@@ -138,12 +138,12 @@ class MarkdownDocReferencesTest {
 
         assertEquals(
             "[ApiConstantsDocs] X: unresolved doc reference @Album.title: " +
-                    "Album has no nested model, field or entry title",
+                "Album has no nested model, field or entry title",
             field.message,
         )
         assertEquals(
             "[ApiConstantsDocs] X: unresolved doc reference @IMetadataService.search: " +
-                    "IMetadataService has no method or nested model search",
+                "IMetadataService has no method or nested model search",
             method.message,
         )
     }

@@ -896,7 +896,7 @@ class HueServiceTest {
             if ((ms / 500) % 4 == 0 && ms % 500 < 150) -6f else -60f
         }
         coEvery { audioAnalysisService.getAudioTimeline(songId) } returns
-                SongAudioTimeline(songId, beatsMs = List(120) { it * 500 }, envelopeHz = 10, bassEnvelopeDb = bass)
+            SongAudioTimeline(songId, beatsMs = List(120) { it * 500 }, envelopeHz = 10, bassEnvelopeDb = bass)
 
         service.onNowPlaying(HookEvent.NowPlayingChanged(userId, songId, 1, System.currentTimeMillis()))
         awaitSent(6)

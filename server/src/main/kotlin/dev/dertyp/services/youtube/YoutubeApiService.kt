@@ -194,7 +194,7 @@ class YoutubeApiService : Service() {
         do {
             val url =
                 "$baseUrl/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=$playlistId&key=$apiKey" +
-                        (nextToken?.let { "&pageToken=$it" } ?: "")
+                    (nextToken?.let { "&pageToken=$it" } ?: "")
 
             val response = retryableQueuedGet<YoutubePlaylistResponse>(url, HttpClientPriority.HIGH)
 

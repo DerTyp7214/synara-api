@@ -124,7 +124,7 @@ inline fun <reified T : Any> T.withLogging(call: ApplicationCall? = null): T {
     val prefix = buildString {
         if (call?.isProxied == true) append("[Proxy] ")
         call?.principalUsername?.let { append("[$it] ") }
-        //if (call?.request?.header(SynaraPackHeader) != "true") append("[No-Pack] ")
+        // if (call?.request?.header(SynaraPackHeader) != "true") append("[No-Pack] ")
     }
 
     return Proxy.newProxyInstance(

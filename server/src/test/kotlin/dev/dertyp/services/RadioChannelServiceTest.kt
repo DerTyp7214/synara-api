@@ -33,11 +33,11 @@ class RadioChannelServiceTest : KoinTest {
     private val channelAlbum = UUID.randomUUID()
     private val channelArtist = UUID.randomUUID()
     private val otherAlbum = UUID.randomUUID()
-    private val songExplicit = UUID.randomUUID()    // member via SONG item
-    private val songInAlbum = UUID.randomUUID()     // member via ALBUM item
-    private val songByArtistA = UUID.randomUUID()   // member via ARTIST item
-    private val songByArtistB = UUID.randomUUID()   // member via ARTIST item
-    private val songUnrelated = UUID.randomUUID()   // not a member
+    private val songExplicit = UUID.randomUUID() // member via SONG item
+    private val songInAlbum = UUID.randomUUID() // member via ALBUM item
+    private val songByArtistA = UUID.randomUUID() // member via ARTIST item
+    private val songByArtistB = UUID.randomUUID() // member via ARTIST item
+    private val songUnrelated = UUID.randomUUID() // not a member
 
     private val members = setOf(songExplicit, songInAlbum, songByArtistA, songByArtistB)
 

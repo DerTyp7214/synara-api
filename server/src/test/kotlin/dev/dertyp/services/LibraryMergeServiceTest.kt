@@ -649,11 +649,11 @@ class LibraryMergeServiceTest : KoinTest {
             // song dedup keeps the lowest `inserted`
             val kept = SongTable.insert {
                 it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] =
-                "p"; it[inserted] = 1000L
+                    "p"; it[inserted] = 1000L
             }[SongTable.id].value
             val removed = SongTable.insert {
                 it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] =
-                "p"; it[inserted] = 2000L
+                    "p"; it[inserted] = 2000L
             }[SongTable.id].value
 
             val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
@@ -684,11 +684,11 @@ class LibraryMergeServiceTest : KoinTest {
             val albumId = AlbumTable.insert { it[name] = "Album" }[AlbumTable.id]
             val kept = SongTable.insert {
                 it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] =
-                "p"; it[inserted] = 1000L
+                    "p"; it[inserted] = 1000L
             }[SongTable.id].value
             val removed = SongTable.insert {
                 it[title] = "Dup"; it[this.albumId] = albumId; it[fileSize] = 100L; it[duration] = 60L; it[filePath] =
-                "p"; it[inserted] = 2000L
+                    "p"; it[inserted] = 2000L
             }[SongTable.id].value
 
             val userId = UserTable.insert { it[username] = "u"; it[passwordHash] = "p" }[UserTable.id]
@@ -719,7 +719,7 @@ class LibraryMergeServiceTest : KoinTest {
         every { pluginManager.getAllImporters() } returns emptyList()
 
         val removedAlbum = UUID.randomUUID() // lower songCount → merged away
-        val keptAlbum = UUID.randomUUID()    // higher songCount → kept
+        val keptAlbum = UUID.randomUUID() // higher songCount → kept
         val collectionId = UUID.randomUUID()
 
         transaction(database) {

@@ -47,5 +47,4 @@ open class TiddlService(
     private fun authFile(): File = File(System.getProperty("user.home"), ".tiddl/auth.json")
 
     override fun tokenFileExists(): Boolean = credentialPresent(authFile())
-
 }

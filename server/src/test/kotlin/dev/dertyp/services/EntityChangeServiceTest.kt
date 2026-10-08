@@ -1149,7 +1149,7 @@ class EntityChangeServiceTest : KoinTest {
 
         val stamps = db {
             EntityChangeTable.selectAll().map { it[EntityChangeTable.changedAt] } +
-                    UserEntityChangeTable.selectAll().map { it[UserEntityChangeTable.changedAt] }
+                UserEntityChangeTable.selectAll().map { it[UserEntityChangeTable.changedAt] }
         }
         assertEquals(2, stamps.size)
         assertEquals(1, stamps.toSet().size)

@@ -99,7 +99,6 @@ object MBReleaseGroupArtistCreditTable : Table("mb_release_group_artist_credit")
     override val primaryKey = PrimaryKey(releaseGroupId, artistId, position)
 }
 
-
 object MBRecordingArtistCreditTable : Table("mb_recording_artist_credit") {
     val recordingId = reference("recordingId", MBRecordingTable.id, onDelete = ReferenceOption.CASCADE)
     val artistId = reference("artistId", MBArtistTable.id, onDelete = ReferenceOption.CASCADE)

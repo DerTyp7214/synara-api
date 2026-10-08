@@ -312,11 +312,11 @@ class CoverGenerationServiceTest {
             }
             CollectionArtistTable.insert {
                 it[CollectionArtistTable.collectionId] = collectionId; it[CollectionArtistTable.artistId] =
-                artistId.value
+                    artistId.value
             }
             CollectionPlaylistTable.insert {
                 it[CollectionPlaylistTable.collectionId] = collectionId; it[CollectionPlaylistTable.playlistId] =
-                playlistId
+                    playlistId
             }
         }
         val target = CoverTarget(CoverTargetType.COLLECTION, collectionId)

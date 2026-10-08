@@ -52,7 +52,7 @@ tasks.register<JavaExec>("generateMigration") {
     group = "build setup"
     description =
         "Writes the next schema migration as one SQL file per database type from what Exposed still needs. " +
-            "Usage: -Pname=AddSomething, optionally -PpostgresUrl, -PpostgresUser and -PpostgresPassword."
+        "Usage: -Pname=AddSomething, optionally -PpostgresUrl, -PpostgresUser and -PpostgresPassword."
     mainClass.set("dev.dertyp.migrations.MigrationGeneratorKt")
     classpath = sourceSets["test"].runtimeClasspath
     workingDir = rootProject.projectDir

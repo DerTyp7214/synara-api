@@ -107,7 +107,7 @@ class AcoustIdService(
             val narrowers: List<(AcoustIdRecording) -> Boolean> = listOf(
                 { recording ->
                     recording.title?.cleanTitle()?.normalizedKey() == songTitle &&
-                            recording.artists.any { it.name?.normalizedKey() in songArtists }
+                        recording.artists.any { it.name?.normalizedKey() in songArtists }
                 },
                 { recording ->
                     songAlbum != null && recording.releasegroups.any { it.title?.normalizedKey() == songAlbum }

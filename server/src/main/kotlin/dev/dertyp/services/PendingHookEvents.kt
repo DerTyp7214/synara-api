@@ -102,8 +102,8 @@ internal class PendingHookEvents(
 
     private fun isGone(type: EntityType, id: UUID): Boolean =
         vanished[type]?.contains(id) == true ||
-                absorbed[type]?.contains(id) == true ||
-                (batches[EntitiesDeleted(type, emptySet())]?.contains(id) == true && !isCreated(type, id))
+            absorbed[type]?.contains(id) == true ||
+            (batches[EntitiesDeleted(type, emptySet())]?.contains(id) == true && !isCreated(type, id))
 
     private fun HookEvent.withIds(ids: Set<UUID>): HookEvent = when (this) {
         is EntitiesCreated -> copy(ids = ids)

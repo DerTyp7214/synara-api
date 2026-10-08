@@ -438,7 +438,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         val songsByPlaylistId = songLinkRows
             .map { row ->
                 row[UserPlaylistSongTable.playlistId].value to
-                        Pair(row[UserPlaylistSongTable.songId].value, row[UserPlaylistSongTable.addedAt])
+                    Pair(row[UserPlaylistSongTable.songId].value, row[UserPlaylistSongTable.addedAt])
             }
             .groupBy({ it.first }, { it.second })
 

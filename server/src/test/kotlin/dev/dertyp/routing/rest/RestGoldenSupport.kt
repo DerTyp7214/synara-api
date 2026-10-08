@@ -57,10 +57,10 @@ object RestGoldenSupport {
         if (expected != content) {
             fail<Unit>(
                 "Golden file $file differs from the current output; rerun with -PupdateRestGolden=true to accept.\n" +
-                        unifiedDiff(
-                            name,
-                            expected.lines().dropLastWhile { it.isEmpty() },
-                            content.lines().dropLastWhile { it.isEmpty() }),
+                    unifiedDiff(
+                        name,
+                        expected.lines().dropLastWhile { it.isEmpty() },
+                        content.lines().dropLastWhile { it.isEmpty() }),
             )
         }
     }

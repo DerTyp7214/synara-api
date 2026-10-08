@@ -65,7 +65,6 @@ val JmDNSPlugin = createApplicationPlugin(
 
             jmDNS?.registerService(serviceInfo)
             application.log.info("JmDNS Service Registered: ${config.serviceName} advertised at $host:$port (via ${localAddress.hostName}.local)")
-
         } catch (e: Exception) {
             application.log.error("Failed to start JmDNS service registration", e)
             application.log.info("Server still starts normally.")

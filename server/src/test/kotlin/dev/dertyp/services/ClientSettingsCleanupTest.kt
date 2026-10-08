@@ -68,9 +68,9 @@ class ClientSettingsCleanupTest : KoinTest {
     ) {
         ClientSettingTable.update({
             (ClientSettingTable.userId eq owner) and
-                    (ClientSettingTable.scope eq ownerScope) and
-                    (ClientSettingTable.deviceId eq ownerDeviceId) and
-                    (ClientSettingTable.key eq settingKey)
+                (ClientSettingTable.scope eq ownerScope) and
+                (ClientSettingTable.deviceId eq ownerDeviceId) and
+                (ClientSettingTable.key eq settingKey)
         }) {
             it[modifiedAt] = at
         }

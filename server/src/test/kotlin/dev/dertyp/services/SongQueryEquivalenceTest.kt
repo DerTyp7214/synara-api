@@ -162,31 +162,31 @@ class SongQueryEquivalenceTest : KoinTest {
         (SongTable.id inSubQuery CollectionSongTable
             .select(CollectionSongTable.songId)
             .where { CollectionSongTable.collectionId eq collectionId }
-                ) or (SongTable.albumId inSubQuery CollectionAlbumTable
+            ) or (SongTable.albumId inSubQuery CollectionAlbumTable
             .select(CollectionAlbumTable.albumId)
             .where { CollectionAlbumTable.collectionId eq collectionId }
-                ) or (SongTable.id inSubQuery SongArtistTable
+            ) or (SongTable.id inSubQuery SongArtistTable
             .innerJoin(
                 CollectionArtistTable,
                 onColumn = { SongArtistTable.artistId },
                 otherColumn = { CollectionArtistTable.artistId })
             .select(SongArtistTable.songId)
             .where { CollectionArtistTable.collectionId eq collectionId }
-                ) or (SongTable.albumId inSubQuery AlbumArtistTable
+            ) or (SongTable.albumId inSubQuery AlbumArtistTable
             .innerJoin(
                 CollectionArtistTable,
                 onColumn = { AlbumArtistTable.artistId },
                 otherColumn = { CollectionArtistTable.artistId })
             .select(AlbumArtistTable.albumId)
             .where { CollectionArtistTable.collectionId eq collectionId }
-                ) or (SongTable.id inSubQuery UserPlaylistSongTable
+            ) or (SongTable.id inSubQuery UserPlaylistSongTable
             .innerJoin(
                 CollectionPlaylistTable,
                 onColumn = { UserPlaylistSongTable.playlistId },
                 otherColumn = { CollectionPlaylistTable.playlistId })
             .select(UserPlaylistSongTable.songId)
             .where { CollectionPlaylistTable.collectionId eq collectionId }
-                )
+            )
     }
 
     private val searchQueries =
@@ -534,7 +534,7 @@ class SongQueryEquivalenceTest : KoinTest {
         }
 
         val originalIds = fixture.songIds.indices.filter { it % 6 == 0 }.map { "https://example.com/track/$it" } +
-                listOf("https://tidal.example/track/7", "https://tidal.com/browse/track/7", "unknown")
+            listOf("https://tidal.example/track/7", "https://tidal.com/browse/track/7", "unknown")
         cases.unordered("byOriginalIds", {
             originalIds.chunked(PROVIDER_LOOKUP_CHUNK_SIZE).flatMap { idChunk ->
                 val parsedLookups = idChunk.mapNotNull { providerLookup(it, Type.SONG) }
@@ -543,10 +543,10 @@ class SongQueryEquivalenceTest : KoinTest {
                         .select(SongProviderTable.songId)
                         .where {
                             (SongProviderTable.type eq Type.SONG.value) and (
-                                    (SongProviderTable.rawUrl inList idChunk) or
-                                            (SongProviderTable.externalId inList idChunk) or
-                                            SongProviderTable.matchesAny(parsedLookups)
-                                    )
+                                (SongProviderTable.rawUrl inList idChunk) or
+                                    (SongProviderTable.externalId inList idChunk) or
+                                    SongProviderTable.matchesAny(parsedLookups)
+                                )
                         }
                         .map { it[SongProviderTable.songId].value }
 
@@ -579,9 +579,9 @@ class SongQueryEquivalenceTest : KoinTest {
                 where {
                     tracks.map { track ->
                         (SongTable.originalUrl eq "https://tidal.com/browse/track/${track.id}") or
-                                (if (track.isrc?.isNotBlank() == true) SongTable.isrc eq track.isrc else Op.FALSE) or
-                                ((SongTable.title eq track.title) and
-                                        (SongTable.duration eq track.duration.inWholeMilliseconds))
+                            (if (track.isrc?.isNotBlank() == true) SongTable.isrc eq track.isrc else Op.FALSE) or
+                            ((SongTable.title eq track.title) and
+                                (SongTable.duration eq track.duration.inWholeMilliseconds))
                     }.reduce { acc, op -> acc or op }
                 }
             }.data

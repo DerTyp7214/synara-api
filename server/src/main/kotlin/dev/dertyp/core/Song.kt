@@ -22,7 +22,7 @@ fun Query.withArtistNames(artistNames: List<String>): Query = this.andWhere {
             .select(SongArtistTable.songId)
             .where {
                 (SongArtistTable.songId eq SongTable.id) and
-                        (ArtistTable.name inList artistNames)
+                    (ArtistTable.name inList artistNames)
             }
     )
 }
@@ -52,11 +52,11 @@ fun UserSong.omitLyrics(): UserSong = copy(
 
 fun InsertableSong.contentEquals(other: InsertableSong): Boolean {
     return title == other.title &&
-            explicit == other.explicit &&
-            trackNumber == other.trackNumber &&
-            discNumber == other.discNumber &&
-            duration == other.duration &&
-            album.name == other.album.name &&
-            album.tags == other.album.tags &&
-            releaseDate == other.releaseDate
+        explicit == other.explicit &&
+        trackNumber == other.trackNumber &&
+        discNumber == other.discNumber &&
+        duration == other.duration &&
+        album.name == other.album.name &&
+        album.tags == other.album.tags &&
+        releaseDate == other.releaseDate
 }

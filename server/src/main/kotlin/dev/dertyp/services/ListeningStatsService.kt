@@ -75,7 +75,7 @@ class ListeningStatsService : Service() {
         val unmatchedArtistMbids = (pass.unmatchedArtistCounts.keys + pass.unmatchedArtistFirstSeen.keys)
             .filterIsInstance<ArtistKey.Mbid>().map { it.mbid }.distinct()
         val unmatchedReleaseMbids = (pass.unmatchedAlbumCounts.keys.filterIsInstance<AlbumKey.Mbid>().map { it.mbid } +
-                pass.songDisplay.values.mapNotNull { it.releaseMbid }).distinct()
+            pass.songDisplay.values.mapNotNull { it.releaseMbid }).distinct()
         val library =
             dbQuery { resolveLibrary(inRangeSongIds, allSongIds, unmatchedArtistMbids, unmatchedReleaseMbids) }
 
@@ -369,10 +369,10 @@ class ListeningStatsService : Service() {
                 val isrcs = ListenTable.parseIsrcs(row[ListenTable.isrcs])
 
                 val duplicatePlay = ts - lastTs <= ListenTable.DEDUP_WINDOW_MS && (
-                        (songId != null && songId == lastSongId) ||
-                                (recordingMbid != null && recordingMbid == lastRecordingMbid) ||
-                                isrcs.any { it in lastIsrcs }
-                        )
+                    (songId != null && songId == lastSongId) ||
+                        (recordingMbid != null && recordingMbid == lastRecordingMbid) ||
+                        isrcs.any { it in lastIsrcs }
+                    )
                 lastTs = ts
                 lastSongId = songId
                 lastRecordingMbid = recordingMbid

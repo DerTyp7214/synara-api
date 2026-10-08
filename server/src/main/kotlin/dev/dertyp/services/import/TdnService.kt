@@ -64,7 +64,7 @@ class TdnService(
 
         val errorRegex = Regex(
             "FileNotFoundError:\\s+(\\[.+?])\\s+No\\s+such\\s+file\\s+or\\s+directory:\\s+'" +
-                    "(.+?)'\\s+->\\s+['\"]$pathAlternation/([^/]+?)/(.+?)['\"]"
+                "(.+?)'\\s+->\\s+['\"]$pathAlternation/([^/]+?)/(.+?)['\"]"
         )
 
         val matchResult = errorRegex.find(result.fullOutput.oneLine())

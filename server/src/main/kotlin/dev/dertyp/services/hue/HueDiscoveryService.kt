@@ -74,7 +74,7 @@ class HueDiscoveryService : Service() {
     private fun JmDNS.listHue(timeout: Duration): List<HueBridgeCandidate> =
         list(SERVICE_TYPE, timeout.inWholeMilliseconds).mapNotNull { info ->
             val ip = info.inet4Addresses.firstOrNull()?.hostAddress ?: info.hostAddresses.firstOrNull()
-            ?: return@mapNotNull null
+                ?: return@mapNotNull null
             HueBridgeCandidate(
                 bridgeId = info.getPropertyString("bridgeid")?.lowercase(),
                 ip = ip,

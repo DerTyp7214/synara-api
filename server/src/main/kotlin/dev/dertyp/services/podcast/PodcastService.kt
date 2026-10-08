@@ -249,7 +249,7 @@ class PodcastService(private val http: PodcastHttp) : Service() {
                     .where { PodcastEpisodeTable.showId eq anchor.showId }
                     .andWhere {
                         (PodcastEpisodeTable.publishedAt less anchor.publishedAt) or
-                                ((PodcastEpisodeTable.publishedAt eq anchor.publishedAt) and (PodcastEpisodeTable.id less anchor.id))
+                            ((PodcastEpisodeTable.publishedAt eq anchor.publishedAt) and (PodcastEpisodeTable.id less anchor.id))
                     }
                     .orderBy(
                         PodcastEpisodeTable.publishedAt to SortOrder.DESC,
@@ -267,7 +267,7 @@ class PodcastService(private val http: PodcastHttp) : Service() {
                     .where { PodcastEpisodeTable.showId eq anchor.showId }
                     .andWhere {
                         (PodcastEpisodeTable.publishedAt greater anchor.publishedAt) or
-                                ((PodcastEpisodeTable.publishedAt eq anchor.publishedAt) and (PodcastEpisodeTable.id greater anchor.id))
+                            ((PodcastEpisodeTable.publishedAt eq anchor.publishedAt) and (PodcastEpisodeTable.id greater anchor.id))
                     }
                     .orderBy(PodcastEpisodeTable.publishedAt to SortOrder.ASC, PodcastEpisodeTable.id to SortOrder.ASC)
                     .limit(newerCount)
@@ -1213,8 +1213,8 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         if (term.isNotBlank()) {
             shows.andWhere {
                 (PodcastShowTable.title containsTerm term) or
-                        (PodcastShowTable.author containsTerm term) or
-                        (PodcastShowTable.description containsTerm term)
+                    (PodcastShowTable.author containsTerm term) or
+                    (PodcastShowTable.description containsTerm term)
             }
         }
 
@@ -1242,8 +1242,8 @@ class PodcastService(private val http: PodcastHttp) : Service() {
         .selectAll()
         .where {
             (PodcastEpisodeTable.title containsTerm term) or
-                    (PodcastEpisodeTable.description containsTerm term) or
-                    (PodcastShowTable.title containsTerm term)
+                (PodcastEpisodeTable.description containsTerm term) or
+                (PodcastShowTable.title containsTerm term)
         }
 
     private fun subscribedEpisodes(userId: UUID): Query = episodeSource(userId)

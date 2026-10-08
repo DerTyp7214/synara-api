@@ -71,7 +71,7 @@ class FilterExistingTest {
 
         coEvery { songService.byOriginalIds(any<Collection<String>>(), any()) } returns emptyList()
         coEvery { songService.byOriginalTracks(any(), any()) } returns
-                listOf(userSong(originalUrl = "https://tidal.com/track/single-id", isrc = "DEXXX0000001"))
+            listOf(userSong(originalUrl = "https://tidal.com/track/single-id", isrc = "DEXXX0000001"))
 
         val result = filter(deduplicateByIsrc = true, songService = songService)
         assertTrue(result.isEmpty(), "ISRC match should filter the track out when dedup is on")
@@ -83,7 +83,7 @@ class FilterExistingTest {
         coEvery { songService.byOriginalIds(any<Collection<String>>(), any()) } returns emptyList()
 
         coEvery { songService.byOriginalTracks(any(), any()) } returns
-                listOf(userSong(originalUrl = "https://tidal.com/track/single-id", isrc = "DEXXX0000001"))
+            listOf(userSong(originalUrl = "https://tidal.com/track/single-id", isrc = "DEXXX0000001"))
 
         val result = filter(deduplicateByIsrc = false, songService = songService)
         assertEquals(1, result.size, "ISRC match must not filter the track when dedup is off")
@@ -161,7 +161,7 @@ class FilterExistingTest {
             val songService = mockk<SongService>()
 
             coEvery { songService.byOriginalIds(any<Collection<String>>(), any()) } returns
-                    listOf(userSong(originalUrl = "https://tidal.com/track/album-track", isrc = null))
+                listOf(userSong(originalUrl = "https://tidal.com/track/album-track", isrc = null))
             coEvery { songService.byOriginalTracks(any(), any()) } returns emptyList()
 
             val result = filter(deduplicateByIsrc = dedup, songService = songService)
