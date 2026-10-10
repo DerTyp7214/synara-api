@@ -35,13 +35,13 @@ class MigrationBaseCheckTest {
     @EnumSource(DbDialect::class)
     fun `an applied migration that this build lacks below a newer one is refused`(dialect: DbDialect) {
         val target = baseDatabase(dialect)
-        recordApplied(target, 111)
+        recordApplied(target, 9111)
         val before = history(target)
 
-        val refusal = check(target, later(112)).refusal()
+        val refusal = check(target, later(9112)).refusal()
 
         assertEquals(Reason.MISSING_MIGRATION, assertNotNull(refusal).reason)
-        assertEquals("1.111", refusal.foundVersion)
+        assertEquals("1.9111", refusal.foundVersion)
         assertEquals(before, history(target))
     }
 
@@ -49,7 +49,7 @@ class MigrationBaseCheckTest {
     @EnumSource(DbDialect::class)
     fun `an applied migration above everything this build has is accepted`(dialect: DbDialect) {
         val target = baseDatabase(dialect)
-        recordApplied(target, 111)
+        recordApplied(target, 9111)
         val before = history(target)
 
         assertNull(check(target).refusal())
@@ -60,10 +60,10 @@ class MigrationBaseCheckTest {
     @EnumSource(DbDialect::class)
     fun `an applied migration that this build has is accepted with a newer one pending`(dialect: DbDialect) {
         val target = baseDatabase(dialect)
-        recordApplied(target, 111)
+        recordApplied(target, 9111)
         val before = history(target)
 
-        assertNull(check(target, later(111, 112)).refusal())
+        assertNull(check(target, later(9111, 9112)).refusal())
         assertEquals(before, history(target))
     }
 
@@ -72,7 +72,7 @@ class MigrationBaseCheckTest {
     fun `a database at the base is accepted with a newer migration pending`(dialect: DbDialect) {
         val target = baseDatabase(dialect, upTo = MigrationBase.VERSION)
 
-        assertNull(check(target, later(111)).refusal())
+        assertNull(check(target, later(9111)).refusal())
         assertEquals(listOf(MigrationBase.VERSION), history(target))
     }
 
