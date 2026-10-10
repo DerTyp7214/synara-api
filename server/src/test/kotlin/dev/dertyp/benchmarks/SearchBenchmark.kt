@@ -105,6 +105,7 @@ object SearchBenchmark {
         SyncedLyricsTable,
         PlaylistSongTable,
         UserPlaylistSongTable,
+        UserPlaylistShareTable,
         PlaylistTable,
         UserPlaylistTable,
         PersonTable,

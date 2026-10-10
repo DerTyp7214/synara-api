@@ -240,4 +240,50 @@ class UserServiceTest : KoinTest {
             runBlocking { authService.validateUser("login", "wrong") }
         }
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allProfiles should list every user by username with the avatar and no account data`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val zoeId = UUID.randomUUID()
+            val annId = UUID.randomUUID()
+            val imageId = UUID.randomUUID()
+            transaction(database) {
+                ImageTable.insert {
+                    it[id] = imageId
+                    it[path] = "avatar.jpg"
+                    it[imageHash] = "avatar"
+                    it[origin] = "test"
+                    it[blurHash] = "avatar_blurhash"
+                }
+                UserTable.insert {
+                    it[id] = zoeId
+                    it[username] = "zoe"
+                    it[passwordHash] = "secret-hash"
+                    it[isAdmin] = true
+                }
+                UserTable.insert {
+                    it[id] = annId
+                    it[username] = "ann"
+                    it[displayName] = "Ann A"
+                    it[passwordHash] = "hash"
+                    it[profileImage] = imageId
+                }
+            }
+
+            val profiles = service.allProfiles()
+
+            assertEquals(listOf("ann", "zoe"), profiles.map { it.username })
+            val ann = profiles.first()
+            assertEquals(annId, ann.id)
+            assertEquals("Ann A", ann.displayName)
+            assertEquals(imageId, ann.profileImageId)
+            assertEquals("avatar_blurhash", ann.blurHash)
+            val zoe = profiles.last()
+            assertEquals(zoeId, zoe.id)
+            assertNull(zoe.displayName)
+            assertNull(zoe.profileImageId)
+            assertNull(zoe.blurHash)
+        }
 }

@@ -28,7 +28,7 @@ class SongQueryFixture(
             ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,
             PlaylistTable, UserSongTable, TimecodeTagTable, UserPlaylistTable,
             SongGenreTable, ArtistGenreTable, AlbumGenreTable,
-            PlaylistSongTable, UserPlaylistSongTable,
+            PlaylistSongTable, UserPlaylistSongTable, UserPlaylistShareTable,
             SyncedLyricsTable, ImageMetadataTable, RecentReleaseTable,
             FollowedArtistTable, TranscodedSongTable, CustomMigrationTable,
             ScheduledTaskLogTable, ArtistSplitAliasTable, SyncServiceTable,

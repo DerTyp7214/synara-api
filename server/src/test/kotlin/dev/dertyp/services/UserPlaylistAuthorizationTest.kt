@@ -2,6 +2,7 @@ package dev.dertyp.services
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
+import dev.dertyp.data.PlaylistAccess
 import dev.dertyp.db.*
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.mockk
@@ -27,7 +28,7 @@ class UserPlaylistAuthorizationTest : KoinTest {
         database = TestDatabase.connect(
             dialect, "playlist_auth",
             UserTable, ImageTable, UserPlaylistTable, SongTable, SongVariantTable,
-            UserPlaylistSongTable, SongMusicBrainzTable, MBReleaseTable,
+            UserPlaylistSongTable, UserPlaylistShareTable, SongMusicBrainzTable, MBReleaseTable,
             AlbumTable, ArtistTable, SongArtistTable, AlbumArtistTable
         )
 
@@ -74,6 +75,83 @@ class UserPlaylistAuthorizationTest : KoinTest {
 
         val result = service.allPlaylists(null, 0, 10)
         assertEquals(2, result.data.size, "Should return playlists from both users when creator is null")
+    }
+
+    private fun insertScopedFixture(): Triple<UUID, UUID, List<String>> {
+        val viewerId = UUID.randomUUID()
+        val otherId = UUID.randomUUID()
+        val sharedId = UUID.randomUUID()
+        transaction(database) {
+            UserTable.insert { it[id] = viewerId; it[username] = "viewer"; it[passwordHash] = "" }
+            UserTable.insert { it[id] = otherId; it[username] = "other"; it[passwordHash] = "" }
+
+            UserPlaylistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Viewer Own"
+                it[description] = ""
+                it[creator] = viewerId
+            }
+            UserPlaylistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Other Public"
+                it[description] = ""
+                it[creator] = otherId
+                it[isPublic] = true
+            }
+            UserPlaylistTable.insert {
+                it[id] = sharedId
+                it[name] = "Other Shared"
+                it[description] = ""
+                it[creator] = otherId
+            }
+            UserPlaylistTable.insert {
+                it[id] = UUID.randomUUID()
+                it[name] = "Other Private"
+                it[description] = ""
+                it[creator] = otherId
+            }
+            UserPlaylistShareTable.insert {
+                it[playlistId] = sharedId
+                it[userId] = viewerId
+                it[access] = PlaylistAccess.READ
+            }
+        }
+        return Triple(viewerId, otherId, listOf("Other Private", "Other Public", "Other Shared", "Viewer Own"))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allPlaylists with a viewer returns only public, own and shared playlists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val service = UserPlaylistService()
+        val (viewerId, otherId, allNames) = insertScopedFixture()
+
+        assertEquals(allNames, service.allPlaylists(null, 0, 10, null).data.map { it.name }.sorted())
+        assertEquals(
+            listOf("Other Public", "Other Shared", "Viewer Own"),
+            service.allPlaylists(null, 0, 10, viewerId).data.map { it.name }.sorted()
+        )
+        assertEquals(
+            listOf("Other Private", "Other Public", "Other Shared"),
+            service.allPlaylists(null, 0, 10, otherId).data.map { it.name }.sorted()
+        )
+        assertEquals(
+            listOf("Other Public", "Other Shared"),
+            service.allPlaylists(otherId, 0, 10, viewerId).data.map { it.name }.sorted()
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allPlaylists with a viewer counts only the visible playlists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val service = UserPlaylistService()
+        val (viewerId, _, _) = insertScopedFixture()
+
+        val page = service.allPlaylists(null, 0, 2, viewerId)
+        assertEquals(2, page.data.size)
+        assertEquals(3, page.total)
+        assertEquals(true, page.hasNextPage)
     }
 
     @ParameterizedTest

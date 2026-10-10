@@ -161,6 +161,7 @@ class RadioChannelServiceTest : KoinTest {
         AlbumGenreTable,
         PlaylistSongTable,
         UserPlaylistSongTable,
+        UserPlaylistShareTable,
         SyncedLyricsTable,
         RecentReleaseTable,
         FollowedArtistTable,

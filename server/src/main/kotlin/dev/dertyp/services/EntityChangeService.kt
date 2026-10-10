@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.config.EntityChangeConfig
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.data.EntityChange
+import dev.dertyp.data.EntityChangeKind
 import dev.dertyp.data.EntityChangeWindow
 import dev.dertyp.data.EntityType
 import dev.dertyp.db.AlbumArtistTable
@@ -32,6 +33,7 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.inSubQuery
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.lessEq
+import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.Query
 import org.jetbrains.exposed.v1.jdbc.andWhere
@@ -119,7 +121,12 @@ class EntityChangeService(private val config: EntityChangeConfig) {
     }
 
     fun allChanges(userId: UUID, since: Long): Flow<EntityChange> =
-        pull(userId, since, library = { Op.TRUE }, user = { Op.TRUE })
+        pull(
+            userId,
+            since,
+            library = { (EntityChangeTable.entityType neq EntityType.USER_PLAYLIST) or readablePlaylist(userId) },
+            user = { Op.TRUE }
+        )
 
     fun byArtist(userId: UUID, artistId: UUID, since: Long): Flow<EntityChange> {
         val songs = SongArtistTable.select(SongArtistTable.songId).where { SongArtistTable.artistId eq artistId }
@@ -169,11 +176,16 @@ class EntityChangeService(private val config: EntityChangeConfig) {
         )
     }
 
-    fun byPlaylist(userId: UUID, playlistId: UUID, since: Long): Flow<EntityChange> {
+    fun byPlaylist(userId: UUID, playlistId: UUID, since: Long, viewer: UUID? = null): Flow<EntityChange> {
         val songs = listOf(
             UserPlaylistSongTable
                 .select(UserPlaylistSongTable.songId)
-                .where { UserPlaylistSongTable.playlistId eq playlistId },
+                .where { UserPlaylistSongTable.playlistId eq playlistId }
+                .apply {
+                    if (viewer != null) andWhere {
+                        UserPlaylistSongTable.playlistId inSubQuery UserPlaylistService.visibleIds(viewer)
+                    }
+                },
             PlaylistSongTable
                 .select(PlaylistSongTable.songId)
                 .where { PlaylistSongTable.playlistId eq playlistId }
@@ -188,8 +200,9 @@ class EntityChangeService(private val config: EntityChangeConfig) {
             userId,
             since,
             library = {
-                ((EntityChangeTable.entityType inList listOf(EntityType.USER_PLAYLIST, EntityType.PLAYLIST)) and
-                    (EntityChangeTable.entityId eq playlistId)) or
+                own(EntityChangeTable, EntityType.PLAYLIST, playlistId) or
+                    (own(EntityChangeTable, EntityType.USER_PLAYLIST, playlistId) and
+                        (viewer?.let(::readablePlaylist) ?: Op.TRUE)) or
                     related.rows(EntityChangeTable)
             },
             user = { related.rows(UserEntityChangeTable) }
@@ -209,6 +222,7 @@ class EntityChangeService(private val config: EntityChangeConfig) {
         val memberPlaylists = CollectionPlaylistTable
             .select(CollectionPlaylistTable.playlistId)
             .where { CollectionPlaylistTable.collectionId eq collectionId }
+            .andWhere { CollectionPlaylistTable.playlistId inSubQuery UserPlaylistService.visibleIds(userId) }
 
         val expandedAlbums = listOf(
             memberAlbums,
@@ -306,6 +320,10 @@ class EntityChangeService(private val config: EntityChangeConfig) {
 
     private fun members(table: EntityChangeRows, type: EntityType, ids: Query): Op<Boolean> =
         (table.entityType eq type) and (table.entityId inSubQuery ids)
+
+    private fun readablePlaylist(viewer: UUID): Op<Boolean> =
+        (EntityChangeTable.kind eq EntityChangeKind.DELETED) or
+            (EntityChangeTable.entityId inSubQuery UserPlaylistService.visibleIds(viewer))
 
     private fun scopedTo(type: EntityType, id: UUID): Op<Boolean> =
         EntityChangeTable.id inSubQuery EntityChangeScopeTable

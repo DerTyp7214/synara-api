@@ -5,6 +5,7 @@ import dev.dertyp.data.CollectionItemType
 import dev.dertyp.data.EntityType
 import dev.dertyp.data.InsertableCollection
 import dev.dertyp.data.InsertablePlaylist
+import dev.dertyp.data.PlaylistAccess
 import dev.dertyp.data.Playlist
 import dev.dertyp.data.UserPlaylist
 import dev.dertyp.data.UserPlaylistSong
@@ -71,6 +72,49 @@ class PlaylistEntityChangeTest : EntityChangeContentTest() {
         assertFalse(userPlaylistService.delete(playlist))
         nothing()
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `making a user playlist public and sharing it is recorded`(dialect: DbDialect) = runBlocking {
+        setupContent(dialect)
+        val playlist = userPlaylistService.getOrAddPlaylist(owner, null, InsertablePlaylist("Mix"))
+        clearRecordedChanges(database)
+
+        assertTrue(userPlaylistService.setPublic(playlist, true))
+        only(updated(EntityType.USER_PLAYLIST, playlist))
+        assertTrue(userPlaylistService.setPublic(playlist, true))
+        nothing()
+        assertTrue(userPlaylistService.setPublic(playlist, false))
+        only(updated(EntityType.USER_PLAYLIST, playlist))
+        assertFalse(userPlaylistService.setPublic(UUID.randomUUID(), true))
+        nothing()
+
+        userPlaylistService.setShare(playlist, stranger, PlaylistAccess.READ)
+        only(members(EntityType.USER_PLAYLIST, playlist))
+        userPlaylistService.setShare(playlist, stranger, PlaylistAccess.READ)
+        nothing()
+        userPlaylistService.setShare(playlist, stranger, PlaylistAccess.WRITE)
+        only(members(EntityType.USER_PLAYLIST, playlist))
+
+        assertTrue(userPlaylistService.removeShare(playlist, stranger))
+        only(members(EntityType.USER_PLAYLIST, playlist))
+        assertFalse(userPlaylistService.removeShare(playlist, stranger))
+        nothing()
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `transferring a user playlist records the new owner and the share of the previous one`(dialect: DbDialect) =
+        runBlocking {
+            setupContent(dialect)
+            val playlist = userPlaylistService.getOrAddPlaylist(owner, null, InsertablePlaylist("Mix"))
+            clearRecordedChanges(database)
+
+            assertTrue(userPlaylistService.transferOwnership(playlist, stranger))
+            only(updated(EntityType.USER_PLAYLIST, playlist), members(EntityType.USER_PLAYLIST, playlist))
+            assertFalse(userPlaylistService.transferOwnership(playlist, stranger))
+            nothing()
+        }
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)

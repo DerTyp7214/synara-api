@@ -42,7 +42,7 @@ class MetadataFetchingServiceTest : KoinTest {
         ArtistAliasTable, ArtistMemberTable, AlbumArtistTable,
         PlaylistTable, UserSongTable, UserPlaylistTable,
         SongGenreTable, ArtistGenreTable, AlbumGenreTable,
-        PlaylistSongTable, UserPlaylistSongTable,
+        PlaylistSongTable, UserPlaylistSongTable, UserPlaylistShareTable,
         SyncedLyricsTable, ImageMetadataTable, RecentReleaseTable,
         FollowedArtistTable, TranscodedSongTable, CustomMigrationTable,
         ScheduledTaskLogTable, ArtistSplitAliasTable, SyncServiceTable,

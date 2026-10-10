@@ -40,6 +40,7 @@ class ServerStatsServiceTest {
             PlaylistTable,
             UserTable,
             UserPlaylistTable,
+            UserPlaylistShareTable,
             TranscodedSongTable,
             PodcastShowTable,
             PodcastEpisodeTable,

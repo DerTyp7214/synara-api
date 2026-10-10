@@ -41,6 +41,7 @@ val entityChangeTables: Array<Table> = arrayOf(
     PlaylistSongTable,
     UserPlaylistTable,
     UserPlaylistSongTable,
+    UserPlaylistShareTable,
     CollectionTable,
     CollectionSongTable,
     CollectionAlbumTable,

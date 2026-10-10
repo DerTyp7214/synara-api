@@ -6,9 +6,12 @@ import dev.dertyp.data.SongAudioData
 import dev.dertyp.db.*
 import dev.dertyp.core.db.dbQuery
 import io.mockk.coEvery
+import io.mockk.verify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.batchInsert
@@ -261,6 +264,55 @@ class DiscoveryServiceTest : KoinTest {
                 assert(song.id != seedId)
             }
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `similar songs by playlist use no seed songs for a viewer without access`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val discoveryService = DiscoveryService()
+        val songService = get<SongService>()
+
+        val playlistId = UUID.randomUUID()
+        val albumId = UUID.randomUUID()
+        val viewer = UUID.randomUUID()
+        val seedId = UUID.randomUUID()
+        val candidates = (1..3).map { UUID.randomUUID() }
+
+        dbQuery {
+            AlbumTable.insert { it[id] = albumId; it[name] = "Album" }
+            (listOf(seedId) + candidates).forEachIndexed { index, songId ->
+                SongTable.insert { it[id] = songId; it[title] = "Song $index"; it[this.albumId] = albumId }
+                SongAudioDataTable.insert {
+                    it[this.songId] = songId
+                    it[bpm] = 100.0 + index
+                    it[energy] = 0.5
+                    it[danceability] = 0.5
+                }
+            }
+        }
+        coEvery { mockAudioAnalysisService.getAudioDataBatch(any()) } coAnswers {
+            firstArg<Collection<UUID>>().associateWith { SongAudioData(bpm = 100.0, energy = 0.5, danceability = 0.5) }
+        }
+        every { songService.songIdsByUserPlaylist(playlistId, viewer) } returns emptyFlow()
+        every { songService.songIdsByUserPlaylist(playlistId, null) } returns flowOf(seedId)
+        val userId = UUID.randomUUID()
+        coEvery { songService.byIds(any(), userId) } coAnswers {
+            val ids = firstArg<Collection<UUID>>()
+            dbQuery {
+                val songMap = SongTable.selectAll().where { SongTable.id inList ids }.associate {
+                    it[SongTable.id].value to SongService.mapUserSong(it, emptyList())
+                }
+                ids.mapNotNull { songMap[it] }
+            }
+        }
+
+        val hidden = discoveryService.getSimilarSongsByPlaylist(playlistId, limit = 10, userId = userId, viewer = viewer)
+        val unscoped = discoveryService.getSimilarSongsByPlaylist(playlistId, limit = 10, userId = userId)
+
+        assertEquals(emptyList(), hidden.map { it.id })
+        assertEquals(candidates.toSet(), unscoped.map { it.id }.toSet())
+        verify(exactly = 1) { songService.songIdsByUserPlaylist(playlistId, viewer) }
     }
 
     @ParameterizedTest

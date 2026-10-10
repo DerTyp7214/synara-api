@@ -79,6 +79,7 @@ class CoverGenerationServiceTest {
             SongVariantTable,
             UserPlaylistTable,
             UserPlaylistSongTable,
+            UserPlaylistShareTable,
             GenreTable,
             SongGenreTable,
             AlbumGenreTable,

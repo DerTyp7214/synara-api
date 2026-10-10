@@ -4,6 +4,7 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.CollectionItemType
 import dev.dertyp.data.InsertableCollection
+import dev.dertyp.data.PlaylistAccess
 import dev.dertyp.db.*
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.LinkResolverService
@@ -28,6 +29,7 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -64,6 +66,7 @@ class CollectionServiceTest : KoinTest {
             AlbumArtistTable,
             UserPlaylistTable,
             UserPlaylistSongTable,
+            UserPlaylistShareTable,
             CollectionTable,
             CollectionSongTable,
             CollectionAlbumTable,
@@ -230,6 +233,135 @@ class CollectionServiceTest : KoinTest {
 
         assertTrue(service.delete(id))
         assertNull(service.byId(id))
+    }
+
+    private fun makePublic(playlist: UUID) {
+        UserPlaylistTable.update({ UserPlaylistTable.id eq playlist }) { it[UserPlaylistTable.isPublic] = true }
+    }
+
+    private fun sharePlaylist(playlist: UUID, user: UUID, grant: PlaylistAccess = PlaylistAccess.READ) {
+        UserPlaylistShareTable.insert {
+            it[playlistId] = playlist
+            it[userId] = user
+            it[access] = grant
+        }
+    }
+
+    private data class ScopedFixture(
+        val owner: UUID,
+        val viewer: UUID,
+        val hidden: UUID,
+        val public: UUID,
+        val shared: UUID,
+        val own: UUID,
+        val collection: UUID,
+    )
+
+    private suspend fun scopedFixture(): ScopedFixture {
+        val (owner, viewer) = transaction(database) { insertUser() to insertUser() }
+        val playlists = transaction(database) {
+            val hidden = insertUserPlaylist(owner, listOf(insertSong(insertAlbum(), 10)))
+            val public = insertUserPlaylist(owner, listOf(insertSong(insertAlbum(), 20))).also { makePublic(it) }
+            val shared = insertUserPlaylist(owner, listOf(insertSong(insertAlbum(), 40))).also { sharePlaylist(it, viewer) }
+            val own = insertUserPlaylist(viewer, listOf(insertSong(insertAlbum(), 80)))
+            listOf(hidden, public, shared, own)
+        }
+        val collection = service.createCollection(viewer, InsertableCollection("C"))
+        transaction(database) {
+            playlists.forEachIndexed { index, playlist -> insertItem(collection, CollectionItemType.PLAYLIST, playlist, index + 1L) }
+        }
+        return ScopedFixture(owner, viewer, playlists[0], playlists[1], playlists[2], playlists[3], collection)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `stats with a viewer count only the playlists the viewer can access`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val f = scopedFixture()
+
+        val scoped = service.byId(f.collection, f.viewer)!!
+        assertEquals(3, scoped.playlistCount)
+        assertEquals(3, scoped.songCount)
+        assertEquals(140L, scoped.totalSizeBytes)
+
+        val listed = service.allCollections(f.viewer, f.viewer).single()
+        assertEquals(3, listed.playlistCount)
+        assertEquals(3, listed.songCount)
+
+        val stranger = transaction(database) { insertUser() }
+        val strangerView = service.byId(f.collection, stranger)!!
+        assertEquals(1, strangerView.playlistCount)
+        assertEquals(1, strangerView.songCount)
+        assertEquals(20L, strangerView.totalSizeBytes)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `stats without a viewer count every playlist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val f = scopedFixture()
+
+        val unscoped = service.byId(f.collection)!!
+        assertEquals(4, unscoped.playlistCount)
+        assertEquals(4, unscoped.songCount)
+        assertEquals(150L, unscoped.totalSizeBytes)
+        assertEquals(4, service.allCollections(f.viewer).single().playlistCount)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `playlistIds with a viewer leaves out inaccessible playlists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val f = scopedFixture()
+
+        assertEquals(listOf(f.public, f.shared, f.own), service.playlistIds(f.collection, f.viewer).toList())
+        assertEquals(listOf(f.hidden, f.public, f.shared, f.own), service.playlistIds(f.collection).toList())
+        assertEquals(listOf(f.public), service.playlistIds(f.collection, UUID.randomUUID()).toList())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `addItem with a viewer refuses a private playlist and adds nothing`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (owner, viewer) = transaction(database) { insertUser() to insertUser() }
+        val hidden = transaction(database) { insertUserPlaylist(owner, emptyList()) }
+        val collection = service.createCollection(viewer, InsertableCollection("C"))
+
+        assertFalse(service.addItem(collection, CollectionItemType.PLAYLIST, hidden, viewer))
+        assertEquals(emptyList<UUID>(), service.playlistIds(collection).toList())
+        assertEquals(0, service.byId(collection)!!.playlistCount)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `addItem with a viewer accepts public, shared and own playlists`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (owner, viewer) = transaction(database) { insertUser() to insertUser() }
+        val (public, shared, own) = transaction(database) {
+            Triple(
+                insertUserPlaylist(owner, emptyList()).also { makePublic(it) },
+                insertUserPlaylist(owner, emptyList()).also { sharePlaylist(it, viewer) },
+                insertUserPlaylist(viewer, emptyList())
+            )
+        }
+        val collection = service.createCollection(viewer, InsertableCollection("C"))
+
+        assertTrue(service.addItem(collection, CollectionItemType.PLAYLIST, public, viewer))
+        assertTrue(service.addItem(collection, CollectionItemType.PLAYLIST, shared, viewer))
+        assertTrue(service.addItem(collection, CollectionItemType.PLAYLIST, own, viewer))
+        assertEquals(setOf(public, shared, own), service.playlistIds(collection).toList().toSet())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `addItem without a viewer accepts a private playlist`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (owner, viewer) = transaction(database) { insertUser() to insertUser() }
+        val hidden = transaction(database) { insertUserPlaylist(owner, emptyList()) }
+        val collection = service.createCollection(viewer, InsertableCollection("C"))
+
+        assertTrue(service.addItem(collection, CollectionItemType.PLAYLIST, hidden))
+        assertEquals(listOf(hidden), service.playlistIds(collection).toList())
     }
 
     private data class FlowFixture(
@@ -508,6 +640,7 @@ class CollectionServiceTest : KoinTest {
         AlbumGenreTable,
         PlaylistSongTable,
         UserPlaylistSongTable,
+        UserPlaylistShareTable,
         SyncedLyricsTable,
         RecentReleaseTable,
         FollowedArtistTable,
@@ -680,4 +813,45 @@ class CollectionServiceTest : KoinTest {
         assertEquals(listOf(f.playlistIn), results.playlists.data.map { it.id })
         assertTrue(results.songs.data.isEmpty())
     }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `rankedSearch returns only accessible playlists and no songs from inaccessible ones`(dialect: DbDialect) =
+        runBlocking {
+            setupSearch(dialect)
+            data class Fixture(val owner: UUID, val viewer: UUID, val hidden: UUID, val public: UUID, val shared: UUID)
+
+            val (f, songs) = transaction(database) {
+                val owner = insertUser()
+                val viewer = insertUser()
+                val hiddenSong = insertNamedSong(insertAlbum("Alpha Hidden Album"), "Alpha Hidden Song")
+                val publicSong = insertNamedSong(insertAlbum("Alpha Public Album"), "Alpha Public Song")
+                val sharedSong = insertNamedSong(insertAlbum("Alpha Shared Album"), "Alpha Shared Song")
+                val hidden = insertNamedUserPlaylist(owner, "Alpha Hidden", listOf(hiddenSong))
+                val public = insertNamedUserPlaylist(owner, "Alpha Public", listOf(publicSong)).also { makePublic(it) }
+                val shared = insertNamedUserPlaylist(owner, "Alpha Shared", listOf(sharedSong)).also { sharePlaylist(it, viewer) }
+                Fixture(owner, viewer, hidden, public, shared) to listOf(hiddenSong, publicSong, sharedSong)
+            }
+            val (hiddenSong, publicSong, sharedSong) = songs
+            val id = service.createCollection(f.owner, InsertableCollection("C"))
+            transaction(database) {
+                insertItem(id, CollectionItemType.PLAYLIST, f.hidden, 1)
+                insertItem(id, CollectionItemType.PLAYLIST, f.public, 2)
+                insertItem(id, CollectionItemType.PLAYLIST, f.shared, 3)
+            }
+
+            val scoped = service.rankedSearch(id, "Alpha", explicit = true, page = 0, pageSize = 50, userId = f.viewer)
+            assertEquals(setOf(f.public, f.shared), scoped.playlists.data.map { it.id }.toSet())
+            assertEquals(setOf(publicSong, sharedSong), scoped.songs.data.map { it.song.id }.toSet())
+            assertFalse(scoped.songs.data.any { it.song.id == hiddenSong })
+
+            val stranger = transaction(database) { insertUser() }
+            val strangerView = service.rankedSearch(id, "Alpha", explicit = true, page = 0, pageSize = 50, userId = stranger)
+            assertEquals(listOf(f.public), strangerView.playlists.data.map { it.id })
+            assertEquals(listOf(publicSong), strangerView.songs.data.map { it.song.id })
+
+            val ownerView = service.rankedSearch(id, "Alpha", explicit = true, page = 0, pageSize = 50, userId = f.owner)
+            assertEquals(setOf(f.hidden, f.public, f.shared), ownerView.playlists.data.map { it.id }.toSet())
+            assertEquals(setOf(hiddenSong, publicSong, sharedSong), ownerView.songs.data.map { it.song.id }.toSet())
+        }
 }

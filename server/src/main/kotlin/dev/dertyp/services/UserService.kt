@@ -5,6 +5,7 @@ import dev.dertyp.data.AuthenticationRequest
 import dev.dertyp.data.User
 import dev.dertyp.data.UserCapability
 import dev.dertyp.data.UserPasswordHash
+import dev.dertyp.data.UserProfile
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.UserCapabilityTable
 import dev.dertyp.db.UserTable
@@ -28,6 +29,8 @@ class RpcUserService(
     override suspend fun me() = userService.findUserById(user.id)!!
 
     override suspend fun allUsers(): List<User> = userService.queryUser()
+
+    override suspend fun allProfiles(): List<UserProfile> = userService.allProfiles()
 
     override suspend fun setProfileImage(bytes: ByteArray) {
         val imageId = imageService.createImage(bytes, "profile")
@@ -81,6 +84,22 @@ class UserService : Service() {
             .where { UserTable.isAdmin eq true }
             .map(::map)
             .firstOrNull()
+    }
+
+    suspend fun allProfiles(): List<UserProfile> = dbQuery {
+        UserTable
+            .leftJoin(ImageTable, onColumn = { UserTable.profileImage }, otherColumn = { ImageTable.id })
+            .select(UserTable.id, UserTable.username, UserTable.displayName, UserTable.profileImage, ImageTable.blurHash)
+            .orderBy(UserTable.username)
+            .map {
+                UserProfile(
+                    id = it[UserTable.id].value,
+                    username = it[UserTable.username],
+                    displayName = it[UserTable.displayName],
+                    profileImageId = it[UserTable.profileImage]?.value,
+                    blurHash = it.getOrNull(ImageTable.blurHash),
+                )
+            }
     }
 
     suspend fun updateProfileImage(id: UUID, imageId: UUID?) = dbQuery {

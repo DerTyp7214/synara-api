@@ -137,7 +137,8 @@ class SongRpcService(
         page: Int,
         pageSize: Int,
         playlistId: UUID
-    ): PaginatedResponse<UserSong> = songService.byUserPlaylist(page, pageSize, playlistId, user.id)
+    ): PaginatedResponse<UserSong> =
+        songService.byUserPlaylist(page, pageSize, playlistId, user.id, user.id.takeUnless { user.isAdmin })
 
     override suspend fun byOriginalIds(@LogParam("size") ids: Collection<PrefixedId>): List<UserSong> =
         songService.byOriginalIds(ids, user.id)
@@ -267,7 +268,7 @@ class SongRpcService(
         songService.songIdsByPlaylist(playlistId)
 
     override fun songIdsByUserPlaylist(playlistId: UUID): Flow<UUID> =
-        songService.songIdsByUserPlaylist(playlistId)
+        songService.songIdsByUserPlaylist(playlistId, user.id.takeUnless { user.isAdmin })
 
     override suspend fun moveSongs(
         oldPath: String,
@@ -1151,12 +1152,16 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         page: Int,
         pageSize: Int,
         playlistId: UUID,
-        userId: UUID
+        userId: UUID,
+        viewer: UUID? = null
     ): PaginatedResponse<UserSong> =
         querySongs(page, pageSize, true, userId, {
             leftJoin(UserPlaylistSongTable)
         }) {
             where { UserPlaylistSongTable.playlistId eq playlistId }
+            if (viewer != null) andWhere {
+                UserPlaylistSongTable.playlistId inSubQuery UserPlaylistService.visibleIds(viewer)
+            }
             orderBy(UserPlaylistSongTable.addedAt, SortOrder.ASC)
             orderBy(SongTable.id, SortOrder.ASC)
         }
@@ -1442,6 +1447,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                         otherColumn = { CollectionPlaylistTable.playlistId })
                     .select(UserPlaylistSongTable.songId)
                     .where { CollectionPlaylistTable.collectionId eq collectionId }
+                    .andWhere { UserPlaylistSongTable.playlistId inSubQuery UserPlaylistService.visibleIds(userId) }
                     )
             }
         }
@@ -1937,10 +1943,15 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             }
     }
 
-    fun songIdsByUserPlaylist(playlistId: UUID): Flow<UUID> = flow {
+    fun songIdsByUserPlaylist(playlistId: UUID, viewer: UUID? = null): Flow<UUID> = flow {
         UserPlaylistSongTable
             .select(UserPlaylistSongTable.songId)
             .where { UserPlaylistSongTable.playlistId eq playlistId }
+            .apply {
+                if (viewer != null) andWhere {
+                    UserPlaylistSongTable.playlistId inSubQuery UserPlaylistService.visibleIds(viewer)
+                }
+            }
             .orderBy(UserPlaylistSongTable.addedAt, SortOrder.ASC)
             .orderBy(UserPlaylistSongTable.songId, SortOrder.ASC)
             .fetchBatchedResults(1000) { batch ->

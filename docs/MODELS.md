@@ -123,7 +123,9 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [FromSource](#devdertypdataplaybackstatequeueentryfromsource)
 - [WithSong](#devdertypdataplaybackstatequeueentrywithsong)
 - [dev.dertyp.data.Playlist](#devdertypdataplaylist)
+- [PlaylistAccess](#devdertypdataplaylistaccess)
 - [PlaylistEntry](#devdertypdataplaylistentry)
+- [PlaylistShare](#devdertypdataplaylistshare)
 - [PodcastDeliveryMode](#devdertypdatapodcastdeliverymode)
 - [PodcastEpisode](#devdertypdatapodcastepisode)
 - [PodcastEpisodeProgress](#devdertypdatapodcastepisodeprogress)
@@ -213,6 +215,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [UserPlaylist](#devdertypdatauserplaylist)
 - [UserPlaylistBackup](#devdertypdatauserplaylistbackup)
 - [UserPlaylistSong](#devdertypdatauserplaylistsong)
+- [UserProfile](#devdertypdatauserprofile)
 - [UserSong](#devdertypdatausersong)
 - [BackupInfo](#devdertypservicesbackupinfo)
 - [BackupResult](#devdertypservicesbackupresult)
@@ -1557,6 +1560,14 @@ Represents a system-managed collection of tracks.
 | `imageId` | `PlatformUUID`? | The playlist cover image unique identifier. |
 | `blurHash` | `String`? | The blur hash of the playlist cover image. |
 
+### PlaylistAccess <a name="devdertypdataplaylistaccess"></a>
+What a user a playlist is shared with may do with it.
+
+| Value | Description |
+| :--- | :--- |
+| `READ` | The user can find, open and play the playlist. |
+| `WRITE` | The user can also add and remove songs. |
+
 ### PlaylistEntry <a name="devdertypdataplaylistentry"></a>
 A simplified representation of a track within a system playlist.
 
@@ -1565,6 +1576,14 @@ A simplified representation of a track within a system playlist.
 | `id` | `PlatformUUID` | The song unique identifier. |
 | `name` | `String` | The title of the song. |
 | `duration` | `Long` | Duration of the song in milliseconds. |
+
+### PlaylistShare <a name="devdertypdataplaylistshare"></a>
+Grants a single user access to a user playlist.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `userId` | `PlatformUUID` | The unique identifier of the user the playlist is shared with. |
+| `access` | [PlaylistAccess](#devdertypdataplaylistaccess) | What the user may do with the playlist. |
 
 ### PodcastDeliveryMode <a name="devdertypdatapodcastdeliverymode"></a>
 Decides whether the server only relays the audio of a feed show or stores its episodes on disk.
@@ -2600,6 +2619,8 @@ Represents a user-created and managed collection of tracks.
 | `origin` | `String`? | The source or platform where the playlist originated. |
 | `modifiedAt` | `PlatformDate`? | Timestamp of the last modification to the playlist. |
 | `imageSource` | [ImageSource](#devdertypdataimagesource)? | Where the cover image came from. Null when there is no cover. |
+| `isPublic` | `Boolean` | Whether every user can find and open the playlist. A playlist that is not public is visible only to its owner and the users it is shared with. |
+| `shares` | `List`<[PlaylistShare](#devdertypdataplaylistshare)> | The users the playlist is shared with. Empty for a caller who is neither the owner nor one of these users. |
 
 ### UserPlaylistBackup <a name="devdertypdatauserplaylistbackup"></a>
 A complete backup of a user's playlists and their associated images.
@@ -2618,6 +2639,17 @@ Metadata for a single song entry within a user playlist.
 | `songId` | `PlatformUUID` | The song unique identifier. |
 | `addedAt` | `Long` | Unix timestamp of when the song was added. |
 | `musicBrainzId` | `PlatformUUID`? | The MusicBrainz Recording unique identifier. |
+
+### UserProfile <a name="devdertypdatauserprofile"></a>
+The name and avatar of a user, as shown to other users.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `PlatformUUID` | The user unique identifier. |
+| `username` | `String` | The unique login name of the user. |
+| `displayName` | `String`? | Optional display name shown to other users. |
+| `profileImageId` | `PlatformUUID`? | The user's profile avatar image unique identifier. |
+| `blurHash` | `String`? | The blur hash of the profile avatar image. |
 
 ### UserSong <a name="devdertypdatausersong"></a>
 Extends track metadata with user-specific information like favorite status.

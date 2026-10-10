@@ -21,7 +21,7 @@ class RpcEntityChangeService(
         entityChangeService.byAlbum(user.id, albumId, since)
 
     override fun byPlaylist(playlistId: UUID, since: Long): Flow<EntityChange> =
-        entityChangeService.byPlaylist(user.id, playlistId, since)
+        entityChangeService.byPlaylist(user.id, playlistId, since, user.id.takeUnless { user.isAdmin })
 
     override fun byCollection(collectionId: UUID, since: Long): Flow<EntityChange> =
         entityChangeService.byCollection(user.id, collectionId, since)

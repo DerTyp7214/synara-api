@@ -8,6 +8,7 @@ import dev.dertyp.data.EntityChange
 import dev.dertyp.data.EntityChangeAspect
 import dev.dertyp.data.EntityChangeKind
 import dev.dertyp.data.EntityType
+import dev.dertyp.data.PlaylistAccess
 import dev.dertyp.db.AlbumArtistTable
 import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ArtistMemberTable
@@ -28,6 +29,7 @@ import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.UserEntityChangeTable
 import dev.dertyp.db.UserPlaylistSongTable
+import dev.dertyp.db.UserPlaylistShareTable
 import dev.dertyp.db.UserPlaylistTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.testing.insertAlbum
@@ -84,6 +86,7 @@ class EntityChangeServiceTest : KoinTest {
             PlaylistSongTable,
             UserPlaylistTable,
             UserPlaylistSongTable,
+            UserPlaylistShareTable,
             CollectionTable,
             CollectionSongTable,
             CollectionAlbumTable,
@@ -238,7 +241,7 @@ class EntityChangeServiceTest : KoinTest {
         val song = UUID.randomUUID()
         val album = UUID.randomUUID()
         val artist = UUID.randomUUID()
-        val playlist = UUID.randomUUID()
+        val playlist = db { insertUserPlaylist(caller, emptyList()) }
 
         val expected = db {
             libraryRow(EntityType.SONG, song, 99)
@@ -511,6 +514,114 @@ class EntityChangeServiceTest : KoinTest {
         assertEquals(expected, service.byCollection(caller, collection, 0).toList())
         assertEquals(expected.drop(6), service.byCollection(caller, collection, 50).toList())
         assertEquals(emptyList<EntityChange>(), service.byCollection(caller, UUID.randomUUID(), 0).toList())
+    }
+
+    private fun publish(playlist: UUID, visible: Boolean = true) {
+        UserPlaylistTable.update({ UserPlaylistTable.id eq playlist }) { it[UserPlaylistTable.isPublic] = visible }
+    }
+
+    private fun share(playlist: UUID, user: UUID) {
+        UserPlaylistShareTable.insert {
+            it[playlistId] = playlist
+            it[userId] = user
+            it[access] = PlaylistAccess.READ
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `all changes hides the rows of a stranger's private playlist, shows them once it is public or shared and keeps a deleted row`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val caller = db { insertUser() }
+        val other = db { insertUser() }
+        val playlist = db { insertUserPlaylist(other, emptyList()) }
+        val own = db { insertUserPlaylist(caller, emptyList()) }
+        val gone = UUID.randomUUID()
+
+        val hiddenRow = db { libraryRow(EntityType.USER_PLAYLIST, playlist, 100, EntityChangeAspect.MEMBERS) }
+        val ownRow = db { libraryRow(EntityType.USER_PLAYLIST, own, 110) }
+        val deletedRow = db { libraryRow(EntityType.USER_PLAYLIST, gone, 120, what = EntityChangeKind.DELETED) }
+
+        assertEquals(listOf(ownRow, deletedRow), service.allChanges(caller, 0).toList())
+
+        db { publish(playlist) }
+        assertEquals(listOf(hiddenRow, ownRow, deletedRow), service.allChanges(caller, 0).toList())
+
+        db { publish(playlist, visible = false) }
+        assertEquals(listOf(ownRow, deletedRow), service.allChanges(caller, 0).toList())
+
+        db { share(playlist, caller) }
+        assertEquals(listOf(hiddenRow, ownRow, deletedRow), service.allChanges(caller, 0).toList())
+        assertEquals(listOf(hiddenRow, deletedRow), service.allChanges(other, 0).toList())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `by playlist with a viewer without access returns neither the playlist rows nor its songs`(
+        dialect: DbDialect
+    ) = runBlocking {
+        setup(dialect)
+        val caller = db { insertUser() }
+        val other = db { insertUser() }
+        val album = db { insertAlbum() }
+        val song = db { insertSong(album, "Member") }
+        val playlist = db { insertUserPlaylist(other, listOf(song)) }
+
+        val rows = db {
+            listOf(
+                libraryRow(EntityType.USER_PLAYLIST, playlist, 10, what = EntityChangeKind.CREATED),
+                libraryRow(EntityType.SONG, song, 20),
+                userRow(caller, EntityType.SONG, song, 30),
+            )
+        }
+
+        assertEquals(emptyList<EntityChange>(), service.byPlaylist(caller, playlist, 0, caller).toList())
+        assertEquals(rows, service.byPlaylist(caller, playlist, 0).toList())
+        assertEquals(rows, service.byPlaylist(caller, playlist, 0, other).toList())
+
+        db { share(playlist, caller) }
+        assertEquals(rows, service.byPlaylist(caller, playlist, 0, caller).toList())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `by collection leaves out inaccessible member playlists and their songs`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val caller = db { insertUser() }
+        val other = db { insertUser() }
+        val album = db { insertAlbum() }
+        val visibleSong = db { insertSong(album, "Visible") }
+        val hiddenSong = db { insertSong(album, "Hidden") }
+        val visible = db { insertUserPlaylist(other, listOf(visibleSong)).also { publish(it) } }
+        val hidden = db { insertUserPlaylist(other, listOf(hiddenSong)) }
+        val collection = db { insertCollection(caller) }
+        db {
+            for (member in listOf(visible, hidden)) {
+                CollectionPlaylistTable.insert {
+                    it[collectionId] = collection
+                    it[playlistId] = member
+                }
+            }
+        }
+
+        val expected = db {
+            libraryRow(EntityType.USER_PLAYLIST, hidden, 5)
+            libraryRow(EntityType.SONG, hiddenSong, 6)
+            userRow(caller, EntityType.SONG, hiddenSong, 7)
+            listOf(
+                libraryRow(EntityType.COLLECTION, collection, 10, EntityChangeAspect.MEMBERS),
+                libraryRow(EntityType.USER_PLAYLIST, visible, 20),
+                libraryRow(EntityType.SONG, visibleSong, 30),
+                userRow(caller, EntityType.SONG, visibleSong, 40),
+            )
+        }
+
+        assertEquals(expected, service.byCollection(caller, collection, 0).toList())
+
+        db { publish(hidden) }
+        assertTrue(service.byCollection(caller, collection, 0).toList().any { it.entityId == hidden })
     }
 
     @ParameterizedTest

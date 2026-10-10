@@ -404,6 +404,7 @@ POST /ui/subscribeLiveWithContext/{contributionId} IUiService.subscribeLiveWithC
 POST /ui/subscribeWithContext/{contributionId} IUiService.subscribeWithContext [p:contributionId b:context] SSE
 PUT /ui/homeCardOrder IUiService.setHomeCardOrder [q:contributionIds] JSON
 PUT /ui/homeCardPinned/{contributionId} IUiService.setHomeCardPinned [p:contributionId q:pinned] JSON
+GET /user/allProfiles IUserService.allProfiles [] JSON
 GET /user/allUsers IUserService.allUsers [] JSON
 GET /user/byId/{id} IUserService.byId [p:id] JSON
 GET /user/byUsername IUserService.byUsername [q:username] JSON
@@ -413,12 +414,14 @@ PUT /user/capabilities/{id} IUserService.setCapabilities [p:id q:capabilities] U
 PUT /user/displayName IUserService.setDisplayName [q:name] UNIT
 PUT /user/profileImage IUserService.setProfileImage [b:bytes] UNIT
 DELETE /userPlaylist/playlist/{id} IUserPlaylistService.delete [p:id] JSON
+DELETE /userPlaylist/share/{id} IUserPlaylistService.removeShare [p:id q:userId] JSON
 DELETE /userPlaylist/songs/{id} IUserPlaylistService.removeFromPlaylist [p:id q:songIds] JSON
 GET /userPlaylist/allPlaylists IUserPlaylistService.allPlaylists [q:creator q:page? q:pageSize?] JSON
 GET /userPlaylist/byColor IUserPlaylistService.byColor [q:creator q:page? q:pageSize? q:color q:range?] JSON
 GET /userPlaylist/byId/{id} IUserPlaylistService.byId [p:id] JSON
 GET /userPlaylist/byIds IUserPlaylistService.byIds [q:ids] JSON
 GET /userPlaylist/search IUserPlaylistService.rankedSearch [q:creator q:page? q:pageSize? q:query] JSON
+GET /userPlaylist/sharedPlaylists IUserPlaylistService.sharedPlaylists [q:page? q:pageSize?] JSON
 POST /userPlaylist/addAlbumToPlaylist/{id} IUserPlaylistService.addAlbumToPlaylist [p:id q:albumId] UNIT
 POST /userPlaylist/addPlaylistToPlaylist/{id} IUserPlaylistService.addPlaylistToPlaylist [p:id q:sourcePlaylistId] UNIT
 POST /userPlaylist/addSongsToPlaylist/{id} IUserPlaylistService.addSongsToPlaylist [p:id q:songIds] UNIT
@@ -426,7 +429,10 @@ POST /userPlaylist/addToPlaylist/{id} IUserPlaylistService.addToPlaylist [p:id b
 POST /userPlaylist/addUserPlaylistToPlaylist/{id} IUserPlaylistService.addUserPlaylistToPlaylist [p:id q:sourcePlaylistId] UNIT
 POST /userPlaylist/orAddPlaylist/{userId} IUserPlaylistService.getOrAddPlaylist [p:userId q:customIdentifier b:playlist] JSON
 POST /userPlaylist/playlistFromArtists/{userId} IUserPlaylistService.createPlaylistFromArtists [p:userId q:name q:artistIds q:maxSongsPerArtist? q:sortStrategy?] JSON
+POST /userPlaylist/transferOwnership/{id} IUserPlaylistService.transferOwnership [p:id q:newOwnerId] JSON
 PUT /userPlaylist/playlistImage/{id} IUserPlaylistService.setPlaylistImage [p:id q:imageId] JSON
+PUT /userPlaylist/public/{id} IUserPlaylistService.setPublic [p:id q:isPublic] JSON
+PUT /userPlaylist/share/{id} IUserPlaylistService.setShare [p:id q:userId q:access] UNIT
 DELETE /userPlaylistBackup/backup IUserPlaylistBackupService.deleteBackup [q:fileName] UNIT
 GET /userPlaylistBackup/backupContent IUserPlaylistBackupService.getBackupContent [q:fileName] JSON
 GET /userPlaylistBackup/backups IUserPlaylistBackupService.listBackups [] JSON

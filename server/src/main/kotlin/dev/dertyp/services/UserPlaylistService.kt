@@ -28,6 +28,13 @@ import java.time.Instant
 import java.util.Date
 import java.util.UUID
 
+enum class UserPlaylistPermission(val canRead: Boolean, val canWrite: Boolean) {
+    OWNER(true, true),
+    WRITE(true, true),
+    READ(true, false),
+    NONE(false, false),
+}
+
 class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     private val imageService by inject<ImageService>()
     private val songService by inject<SongService>()
@@ -57,23 +64,57 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 description = description,
                 origin = origin,
                 imageSource = imageSource,
+                isPublic = resultRow[UserPlaylistTable.isPublic],
             )
         }
+
+        fun visibleTo(viewer: UUID): Op<Boolean> =
+            (UserPlaylistTable.isPublic eq true) or
+                (UserPlaylistTable.creator eq viewer) or
+                (UserPlaylistTable.id inSubQuery UserPlaylistShareTable
+                    .select(UserPlaylistShareTable.playlistId)
+                    .where { UserPlaylistShareTable.userId eq viewer })
+
+        fun visibleIds(viewer: UUID): Query =
+            UserPlaylistTable.select(UserPlaylistTable.id).where { visibleTo(viewer) }
     }
 
     fun map(resultRow: ResultRow) = mapPlaylist(resultRow)
 
-    override suspend fun byId(id: UUID): UserPlaylist? = querySingle {
+    override suspend fun byId(id: UUID): UserPlaylist? = byId(id, null)
+
+    suspend fun byId(id: UUID, viewer: UUID?): UserPlaylist? = querySingle(viewer) {
         where { UserPlaylistTable.id eq id }
     }
 
-    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<UserPlaylist> =
-        queryPlaylists(0, Int.MAX_VALUE) {
+    override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<UserPlaylist> = byIds(ids, null)
+
+    suspend fun byIds(@LogParam("size") ids: List<UUID>, viewer: UUID?): List<UserPlaylist> =
+        queryPlaylists(0, Int.MAX_VALUE, viewer) {
             where { UserPlaylistTable.id inList ids }
         }.let { response ->
             val playlistMap = response.data.associateBy { it.id }
             ids.mapNotNull { playlistMap[it] }
         }
+
+    suspend fun accessOf(playlistId: UUID, userId: UUID): UserPlaylistPermission? = dbQuery {
+        val playlist = UserPlaylistTable
+            .select(UserPlaylistTable.creator, UserPlaylistTable.isPublic)
+            .where { UserPlaylistTable.id eq playlistId }
+            .firstOrNull() ?: return@dbQuery null
+        if (playlist[UserPlaylistTable.creator].value == userId) return@dbQuery UserPlaylistPermission.OWNER
+        val shared = UserPlaylistShareTable
+            .select(UserPlaylistShareTable.access)
+            .where { UserPlaylistShareTable.playlistId eq playlistId }
+            .andWhere { UserPlaylistShareTable.userId eq userId }
+            .firstOrNull()
+            ?.get(UserPlaylistShareTable.access)
+        when {
+            shared == PlaylistAccess.WRITE -> UserPlaylistPermission.WRITE
+            shared == PlaylistAccess.READ || playlist[UserPlaylistTable.isPublic] -> UserPlaylistPermission.READ
+            else -> UserPlaylistPermission.NONE
+        }
+    }
 
     suspend fun byName(name: String, creator: UUID): UserPlaylist? = querySingle {
         where { (UserPlaylistTable.name eq name) and (UserPlaylistTable.creator eq creator) }
@@ -84,8 +125,16 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         page: Int,
         pageSize: Int,
         query: String
+    ): PaginatedResponse<UserPlaylist> = rankedSearch(creator, page, pageSize, query, null)
+
+    suspend fun rankedSearch(
+        creator: UUID?,
+        page: Int,
+        pageSize: Int,
+        query: String,
+        viewer: UUID?
     ): PaginatedResponse<UserPlaylist> =
-        rankedPlaylistSearch(page, pageSize, query) {
+        rankedPlaylistSearch(page, pageSize, query, viewer) {
             if (creator != null) andWhere { UserPlaylistTable.creator eq creator }
             else this
         }
@@ -94,9 +143,10 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         collectionId: UUID,
         page: Int,
         pageSize: Int,
-        query: String
+        query: String,
+        viewer: UUID? = null
     ): PaginatedResponse<UserPlaylist> =
-        rankedPlaylistSearch(page, pageSize, query) {
+        rankedPlaylistSearch(page, pageSize, query, viewer) {
             andWhere {
                 UserPlaylistTable.id inSubQuery CollectionPlaylistTable
                     .select(CollectionPlaylistTable.playlistId)
@@ -108,9 +158,10 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         page: Int,
         pageSize: Int,
         query: String,
+        viewer: UUID?,
         scope: Query.() -> Query = { this }
     ): PaginatedResponse<UserPlaylist> =
-        queryPlaylists(page, pageSize) {
+        queryPlaylists(page, pageSize, viewer) {
             rankedSearchQuery(
                 redisSearchService,
                 query,
@@ -121,9 +172,29 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         }
 
     override suspend fun allPlaylists(creator: UUID?, page: Int, pageSize: Int): PaginatedResponse<UserPlaylist> =
-        queryPlaylists(page, pageSize) {
+        allPlaylists(creator, page, pageSize, null)
+
+    suspend fun allPlaylists(
+        creator: UUID?,
+        page: Int,
+        pageSize: Int,
+        viewer: UUID?
+    ): PaginatedResponse<UserPlaylist> =
+        queryPlaylists(page, pageSize, viewer) {
             if (creator != null) where { UserPlaylistTable.creator eq creator }
             this
+        }
+
+    override suspend fun sharedPlaylists(page: Int, pageSize: Int): PaginatedResponse<UserPlaylist> =
+        throw UnsupportedOperationException("Shared playlists are listed for a user")
+
+    suspend fun sharedPlaylists(viewer: UUID, page: Int, pageSize: Int): PaginatedResponse<UserPlaylist> =
+        queryPlaylists(page, pageSize) {
+            where {
+                UserPlaylistTable.id inSubQuery UserPlaylistShareTable
+                    .select(UserPlaylistShareTable.playlistId)
+                    .where { UserPlaylistShareTable.userId eq viewer }
+            }
         }
 
     override suspend fun byColor(
@@ -132,9 +203,18 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         pageSize: Int,
         color: Int,
         range: Int
+    ): PaginatedResponse<UserPlaylist> = byColor(creator, page, pageSize, color, range, null)
+
+    suspend fun byColor(
+        creator: UUID?,
+        page: Int,
+        pageSize: Int,
+        color: Int,
+        range: Int,
+        viewer: UUID?
     ): PaginatedResponse<UserPlaylist> {
         val (l, a, b) = ColorUtils.rgbToLab((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF)
-        return queryPlaylists(page, pageSize, columnSet = {
+        return queryPlaylists(page, pageSize, viewer, columnSet = {
             leftJoin(
                 ImageMetadataTable,
                 onColumn = { UserPlaylistTable.imageId },
@@ -257,6 +337,97 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         return updated
     }
 
+    override suspend fun setPublic(id: UUID, isPublic: Boolean): Boolean = dbQuery {
+        val before = entityStates(EntityType.USER_PLAYLIST, listOf(id))
+        val updated = UserPlaylistTable.update({ UserPlaylistTable.id eq id }) {
+            it[UserPlaylistTable.isPublic] = isPublic
+        } == 1
+        entityEvents.recordChanges(before)
+        updated
+    }
+
+    override suspend fun setShare(id: UUID, userId: UUID, access: PlaylistAccess) {
+        dbQuery {
+            val owner = UserPlaylistTable
+                .select(UserPlaylistTable.creator)
+                .where { UserPlaylistTable.id eq id }
+                .firstOrNull()
+                ?.get(UserPlaylistTable.creator)?.value
+                ?: throw IllegalArgumentException("User playlist $id does not exist")
+            if (owner == userId) throw IllegalArgumentException("User playlist $id cannot be shared with its owner")
+            if (UserTable.select(UserTable.id).where { UserTable.id eq userId }.empty()) {
+                throw IllegalArgumentException("User $userId does not exist")
+            }
+            val before = entityStates(EntityType.USER_PLAYLIST, listOf(id))
+            UserPlaylistShareTable.upsert(
+                UserPlaylistShareTable.playlistId,
+                UserPlaylistShareTable.userId,
+                onUpdateExclude = listOf(UserPlaylistShareTable.createdAt)
+            ) {
+                it[playlistId] = id
+                it[UserPlaylistShareTable.userId] = userId
+                it[UserPlaylistShareTable.access] = access
+            }
+            entityEvents.recordChanges(before)
+        }
+    }
+
+    override suspend fun removeShare(id: UUID, userId: UUID): Boolean = dbQuery {
+        val before = entityStates(EntityType.USER_PLAYLIST, listOf(id))
+        val removed = UserPlaylistShareTable.deleteWhere {
+            (playlistId eq id) and (UserPlaylistShareTable.userId eq userId)
+        } == 1
+        entityEvents.recordChanges(before)
+        removed
+    }
+
+    suspend fun replaceShares(id: UUID, shares: List<PlaylistShare>) = dbQuery {
+        val owner = UserPlaylistTable
+            .select(UserPlaylistTable.creator)
+            .where { UserPlaylistTable.id eq id }
+            .firstOrNull()
+            ?.get(UserPlaylistTable.creator)?.value
+            ?: return@dbQuery
+        val before = entityStates(EntityType.USER_PLAYLIST, listOf(id))
+        val existingUsers = UserTable
+            .select(UserTable.id)
+            .where { UserTable.id inList shares.map { it.userId } }
+            .map { it[UserTable.id].value }
+            .toSet()
+        UserPlaylistShareTable.deleteWhere { playlistId eq id }
+        UserPlaylistShareTable.batchInsert(
+            shares.filter { it.userId in existingUsers && it.userId != owner }.distinctBy { it.userId }
+        ) { share ->
+            this[UserPlaylistShareTable.playlistId] = id
+            this[UserPlaylistShareTable.userId] = share.userId
+            this[UserPlaylistShareTable.access] = share.access
+        }
+        entityEvents.recordChanges(before)
+    }
+
+    override suspend fun transferOwnership(id: UUID, newOwnerId: UUID): Boolean = dbQuery {
+        val previousOwner = UserPlaylistTable
+            .select(UserPlaylistTable.creator)
+            .where { UserPlaylistTable.id eq id }
+            .firstOrNull()
+            ?.get(UserPlaylistTable.creator)?.value
+            ?: return@dbQuery false
+        if (previousOwner == newOwnerId) return@dbQuery false
+        if (UserTable.select(UserTable.id).where { UserTable.id eq newOwnerId }.empty()) return@dbQuery false
+        val before = entityStates(EntityType.USER_PLAYLIST, listOf(id))
+        UserPlaylistTable.update({ UserPlaylistTable.id eq id }) {
+            it[creator] = EntityID(newOwnerId, UserTable)
+        }
+        UserPlaylistShareTable.deleteWhere { (playlistId eq id) and (userId eq newOwnerId) }
+        UserPlaylistShareTable.insert {
+            it[playlistId] = id
+            it[userId] = previousOwner
+            it[access] = PlaylistAccess.WRITE
+        }
+        entityEvents.recordChanges(before)
+        true
+    }
+
     override suspend fun createPlaylistFromArtists(
         userId: UUID,
         name: String,
@@ -356,12 +527,13 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
         }
     }
 
-    private suspend fun querySingle(query: Query.() -> Query) =
-        queryPlaylists(0, Int.MAX_VALUE, query = query).data.singleOrNull()
+    private suspend fun querySingle(viewer: UUID? = null, query: Query.() -> Query) =
+        queryPlaylists(0, Int.MAX_VALUE, viewer, query = query).data.singleOrNull()
 
     private suspend fun queryPlaylists(
         page: Int,
         pageSize: Int,
+        viewer: UUID? = null,
         columnSet: ColumnSet.() -> ColumnSet = { this },
         query: Query.() -> Query = { this }
     ) =
@@ -372,6 +544,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 .columnSet()
                 .selectAll()
                 .query()
+                .let { scoped -> if (viewer != null) scoped.andWhere { visibleTo(viewer) } else scoped }
             val countExpression = UserPlaylistTable.id.countDistinct()
             val total = if (pageSize == Int.MAX_VALUE) null else Query(
                 Slice(mainQuery.set.source, listOf(countExpression)),
@@ -406,7 +579,18 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 emptyMap()
             }
 
-            val data = mapEagerly(mainPlaylistRows, songLinkRows, songInfoById)
+            val shareRows = UserPlaylistShareTable
+                .select(
+                    UserPlaylistShareTable.playlistId,
+                    UserPlaylistShareTable.userId,
+                    UserPlaylistShareTable.access,
+                    UserPlaylistShareTable.createdAt
+                )
+                .where { UserPlaylistShareTable.playlistId inList playlistIds }
+                .orderBy(UserPlaylistShareTable.createdAt)
+                .toList()
+
+            val data = mapEagerly(mainPlaylistRows, songLinkRows, songInfoById, shareRows)
 
             PaginatedResponse(
                 data = data.take(pageSize),
@@ -433,8 +617,14 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
     private fun mapEagerly(
         mainRows: List<ResultRow>,
         songLinkRows: List<ResultRow>,
-        songInfoById: Map<UUID, Pair<Long, UUID?>>
+        songInfoById: Map<UUID, Pair<Long, UUID?>>,
+        shareRows: List<ResultRow>
     ): List<UserPlaylist> {
+        val sharesByPlaylistId = shareRows.groupBy(
+            { it[UserPlaylistShareTable.playlistId].value },
+            { PlaylistShare(it[UserPlaylistShareTable.userId].value, it[UserPlaylistShareTable.access]) }
+        )
+
         val songsByPlaylistId = songLinkRows
             .map { row ->
                 row[UserPlaylistSongTable.playlistId].value to
@@ -459,7 +649,8 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
                 songs = songs.map { it.first },
                 songEntries = songs.map { UserPlaylistSong(it.first, it.second, songInfoById[it.first]?.second) },
                 totalDuration = totalDuration,
-                modifiedAt = songs.lastOrNull()?.second.date ?: Date.from(Instant.EPOCH)
+                modifiedAt = songs.lastOrNull()?.second.date ?: Date.from(Instant.EPOCH),
+                shares = sharesByPlaylistId[playlist.id] ?: emptyList()
             )
         }.sortedByDescending { it.modifiedAt }
     }
@@ -494,6 +685,7 @@ class UserPlaylistService : PlaylistLibrary, IUserPlaylistService, Service() {
             it[creator] = EntityID(creatorOverride ?: playlist.creator, UserTable)
             it[description] = playlist.description
             it[origin] = playlist.origin
+            it[isPublic] = playlist.isPublic
         }
 
         UserPlaylistSongTable.deleteWhere { UserPlaylistSongTable.playlistId eq playlist.id }

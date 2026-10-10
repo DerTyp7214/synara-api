@@ -146,6 +146,7 @@ class UserPlaylistBackupService(
 
         backup.playlists.forEach { playlist ->
             userPlaylistService.upsertUserPlaylist(playlist, creatorOverride = user.id)
+            userPlaylistService.replaceShares(playlist.id, playlist.shares)
         }
         logger.info("Restored ${backup.playlists.size} playlists for user: ${user.id}")
     }

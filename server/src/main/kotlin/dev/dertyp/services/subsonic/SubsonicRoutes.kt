@@ -62,6 +62,12 @@ internal fun Route.subAuth(
 internal suspend fun RoutingContext.respondNotFound(params: Parameters, what: String) =
     call.respondSubsonic(subsonicError(70, "$what not found"), params["f"], params["callback"])
 
+internal suspend fun RoutingContext.respondNotAuthorized(params: Parameters) =
+    call.respondSubsonic(
+        subsonicError(50, "User is not authorized for the given operation"),
+        params["f"], params["callback"],
+    )
+
 internal suspend fun RoutingContext.respondMissingParam(params: Parameters, name: String) =
     call.respondSubsonic(subsonicError(10, "Required parameter '$name' is missing"), params["f"], params["callback"])
 

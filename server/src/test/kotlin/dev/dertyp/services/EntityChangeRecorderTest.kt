@@ -25,6 +25,7 @@ import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.UserEntityChangeTable
 import dev.dertyp.db.UserPlaylistSongTable
+import dev.dertyp.db.UserPlaylistShareTable
 import dev.dertyp.db.UserPlaylistTable
 import dev.dertyp.db.UserTable
 import dev.dertyp.testing.insertAlbum
@@ -101,6 +102,7 @@ class EntityChangeRecorderTest : KoinTest {
             PlaylistSongTable,
             UserPlaylistTable,
             UserPlaylistSongTable,
+            UserPlaylistShareTable,
             CollectionTable,
             CollectionSongTable,
             CollectionAlbumTable,

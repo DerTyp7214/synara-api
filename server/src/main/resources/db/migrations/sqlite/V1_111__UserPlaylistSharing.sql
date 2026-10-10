@@ -1,0 +1,3 @@
+CREATE TABLE IF NOT EXISTS userPlaylistShare (playlistId BINARY(16) NOT NULL, userId BINARY(16) NOT NULL, access VARCHAR(16) NOT NULL, createdAt BIGINT NOT NULL, CONSTRAINT pk_userPlaylistShare PRIMARY KEY (playlistId, userId), CONSTRAINT fk_userPlaylistShare_playlistId__id FOREIGN KEY (playlistId) REFERENCES userPlaylist(id) ON DELETE CASCADE ON UPDATE RESTRICT, CONSTRAINT fk_userPlaylistShare_userId__id FOREIGN KEY (userId) REFERENCES "user"(id) ON DELETE CASCADE ON UPDATE RESTRICT);
+CREATE INDEX userPlaylistShare_userId ON userPlaylistShare (userId);
+ALTER TABLE userPlaylist ADD isPublic BOOLEAN DEFAULT 0 NOT NULL;

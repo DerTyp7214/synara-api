@@ -100,6 +100,7 @@ class SongServiceDeletionTest : KoinTest {
             FollowedArtistTable,
             PlaylistSongTable,
             UserPlaylistSongTable,
+            UserPlaylistShareTable,
             ImageTable,
             ImageMetadataTable,
             AnimatedImageTable,

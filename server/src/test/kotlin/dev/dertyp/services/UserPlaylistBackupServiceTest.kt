@@ -1,6 +1,8 @@
 package dev.dertyp.services
 
 import dev.dertyp.config.ServerConfig
+import dev.dertyp.data.PlaylistAccess
+import dev.dertyp.data.PlaylistShare
 import dev.dertyp.data.User
 import dev.dertyp.data.UserPlaylist
 import dev.dertyp.data.UserPlaylistBackup
@@ -9,6 +11,7 @@ import io.ktor.server.application.ApplicationEnvironment
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.asFlow
@@ -191,5 +194,77 @@ class UserPlaylistBackupServiceTest {
         val backupFiles = File(tempDir.toFile(), "user-playlists").listFiles()
         assertTrue(backupFiles?.any { it.name.contains(user1.id.toString()) } == true)
         assertTrue(backupFiles?.any { it.name.contains(user2.id.toString()) } == true)
+    }
+
+    @Test
+    fun `restoreBackup should replace the shares after the upsert`() = runBlocking {
+        val user = User(id = UUID.randomUUID(), username = "testuser")
+        val userPlaylistService = mockk<UserPlaylistService>(relaxed = true)
+        val imageService = mockk<ImageService>(relaxed = true)
+        val userService = mockk<UserService>()
+        val environment = mockk<ApplicationEnvironment>()
+        every { environment.config } returns MapApplicationConfig("backup.dir" to tempDir.toString())
+        val service =
+            UserPlaylistBackupService(userPlaylistService, imageService, userService, ServerConfig(environment.config))
+
+        val shares = listOf(
+            PlaylistShare(UUID.randomUUID(), PlaylistAccess.READ),
+            PlaylistShare(UUID.randomUUID(), PlaylistAccess.WRITE),
+        )
+        val playlist = UserPlaylist(
+            id = UUID.randomUUID(),
+            name = "Shared",
+            songs = emptyList(),
+            creator = user.id,
+            description = "",
+            isPublic = true,
+            shares = shares,
+        )
+        val backupFile = File(tempDir.toFile(), "user-playlists/playlists-${user.id}-now.json")
+        backupFile.parentFile.mkdirs()
+        backupFile.writeText(AppJson.encodeToString(UserPlaylistBackup(user.id, listOf(playlist), emptyList())))
+
+        service.restoreBackup(user, backupFile.name)
+
+        coVerifyOrder {
+            userPlaylistService.upsertUserPlaylist(match { it.id == playlist.id && it.isPublic }, user.id)
+            userPlaylistService.replaceShares(playlist.id, shares)
+        }
+    }
+
+    @Test
+    fun `createBackup should write the public flag and the shares into the json`() = runBlocking {
+        val user = User(id = UUID.randomUUID(), username = "testuser")
+        val userPlaylistService = mockk<UserPlaylistService>()
+        val environment = mockk<ApplicationEnvironment>()
+        every { environment.config } returns MapApplicationConfig("backup.dir" to tempDir.toString())
+        val shares = listOf(
+            PlaylistShare(UUID.randomUUID(), PlaylistAccess.READ),
+            PlaylistShare(UUID.randomUUID(), PlaylistAccess.WRITE),
+        )
+        val playlist = UserPlaylist(
+            id = UUID.randomUUID(),
+            name = "Shared",
+            songs = emptyList(),
+            creator = user.id,
+            description = "",
+            isPublic = true,
+            shares = shares,
+        )
+        every { userPlaylistService.allPlaylistsFlow(user.id) } returns listOf(playlist).asFlow()
+        val service = UserPlaylistBackupService(
+            userPlaylistService,
+            mockk<ImageService>(),
+            mockk<UserService>(),
+            ServerConfig(environment.config)
+        )
+
+        service.createBackup(user)
+
+        val file = File(tempDir.toFile(), "user-playlists").listFiles()!!.single()
+        val backup = AppJson.decodeFromString<UserPlaylistBackup>(file.readText())
+        assertTrue(backup.playlists.single().isPublic)
+        assertEquals(shares, backup.playlists.single().shares)
+        assertEquals(backup, service.getBackupContent(user, file.name))
     }
 }

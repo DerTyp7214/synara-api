@@ -93,6 +93,7 @@ class LibraryMergeServiceTest : KoinTest {
             UserTable,
             UserPlaylistTable,
             UserPlaylistSongTable,
+            UserPlaylistShareTable,
             PlaylistSongTable,
             SongArtistTable,
             AlbumArtistTable,

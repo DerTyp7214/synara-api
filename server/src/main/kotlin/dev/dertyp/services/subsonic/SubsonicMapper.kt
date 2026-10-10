@@ -83,6 +83,7 @@ fun UserPlaylist.toPlaylistDto(owner: String?, songCount: Int, durationMs: Long)
     name = name,
     comment = description.ifEmpty { null },
     owner = owner,
+    public = isPublic,
     songCount = songCount,
     duration = durationMs.coerceAtLeast(0) / 1000,
     created = modifiedAt?.toInstant()?.toString() ?: EPOCH_ISO,

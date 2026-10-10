@@ -56,6 +56,7 @@ class EntityChangeCoverageTest {
         "PersonTable",
         "UserPlaylistTable",
         "UserPlaylistSongTable",
+        "UserPlaylistShareTable",
         "PlaylistTable",
         "PlaylistSongTable",
         "CollectionTable",

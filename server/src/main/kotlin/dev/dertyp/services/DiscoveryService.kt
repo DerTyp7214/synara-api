@@ -26,7 +26,7 @@ class DiscoveryRpcService(
     }
 
     override suspend fun getSimilarSongsByPlaylist(playlistId: PlatformUUID, limit: Int): List<UserSong> {
-        return discoveryService.getSimilarSongsByPlaylist(playlistId, limit, user.id)
+        return discoveryService.getSimilarSongsByPlaylist(playlistId, limit, user.id, user.id.takeUnless { user.isAdmin })
     }
 
     override suspend fun getSimilarSongsByBpm(seedSongIds: List<PlatformUUID>, limit: Int): List<UserSong> {
@@ -244,9 +244,10 @@ class DiscoveryService : Service() {
     suspend fun getSimilarSongsByPlaylist(
         playlistId: PlatformUUID,
         limit: Int,
-        userId: PlatformUUID
+        userId: PlatformUUID,
+        viewer: PlatformUUID? = null
     ): List<UserSong> {
-        val songIds = songService.songIdsByUserPlaylist(playlistId).toList()
+        val songIds = songService.songIdsByUserPlaylist(playlistId, viewer).toList()
         return getSimilarSongs(songIds, limit, userId)
     }
 

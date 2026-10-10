@@ -71,6 +71,7 @@ class ImageServiceTest {
             SongVariantTable,
             PlaylistTable,
             UserPlaylistTable,
+            UserPlaylistShareTable,
             UserTable,
             MBReleaseGroupTable,
             MBReleaseGroupCoverTable,

@@ -226,7 +226,15 @@ server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | addToPlaylis
 server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | delete | UserPlaylistTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | getOrAddPlaylist | UserPlaylistTable | batchInsert | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | removeFromPlaylist | UserPlaylistSongTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | removeShare | UserPlaylistShareTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | replaceShares | UserPlaylistShareTable | batchInsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | replaceShares | UserPlaylistShareTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | setPlaylistImage | UserPlaylistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | setPublic | UserPlaylistTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | setShare | UserPlaylistShareTable | upsert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | transferOwnership | UserPlaylistShareTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | transferOwnership | UserPlaylistShareTable | insert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | transferOwnership | UserPlaylistTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | upsertUserPlaylistRows | UserPlaylistSongTable | batchInsert | 2 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | upsertUserPlaylistRows | UserPlaylistSongTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/UserPlaylistService.kt | upsertUserPlaylistRows | UserPlaylistTable | upsert | 1 | RECORDED

@@ -13,9 +13,9 @@ class RpcCollectionService(
     private val user: User,
     private val collectionService: CollectionService
 ) : ICollectionService {
-    override suspend fun byId(id: UUID): MediaCollection? = collectionService.byId(id)
+    override suspend fun byId(id: UUID): MediaCollection? = collectionService.byId(id, user.id)
 
-    override suspend fun allCollections(): List<MediaCollection> = collectionService.allCollections(user.id)
+    override suspend fun allCollections(): List<MediaCollection> = collectionService.allCollections(user.id, user.id)
 
     override suspend fun createCollection(collection: InsertableCollection): UUID =
         collectionService.createCollection(user.id, collection)
@@ -27,7 +27,7 @@ class RpcCollectionService(
 
     override suspend fun addItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean {
         requireOwner(id)
-        return collectionService.addItem(id, itemType, itemId)
+        return collectionService.addItem(id, itemType, itemId, user.id.takeUnless { user.isAdmin })
     }
 
     override suspend fun removeItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean {
@@ -57,7 +57,7 @@ class RpcCollectionService(
     override fun songIds(collectionId: UUID): Flow<UUID> = collectionService.songIds(collectionId)
     override fun albumIds(collectionId: UUID): Flow<UUID> = collectionService.albumIds(collectionId)
     override fun artistIds(collectionId: UUID): Flow<UUID> = collectionService.artistIds(collectionId)
-    override fun playlistIds(collectionId: UUID): Flow<UUID> = collectionService.playlistIds(collectionId)
+    override fun playlistIds(collectionId: UUID): Flow<UUID> = collectionService.playlistIds(collectionId, user.id)
 
     private suspend fun requireOwner(id: UUID) {
         val collection = collectionService.byId(id) ?: return

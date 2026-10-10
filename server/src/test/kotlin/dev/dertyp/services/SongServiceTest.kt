@@ -22,6 +22,9 @@ import dev.dertyp.testing.FakeCredentialProvider
 import dev.dertyp.services.metadata.*
 import dev.dertyp.testing.entityChangeTables
 import dev.dertyp.testing.RecordedEntityEvents
+import dev.dertyp.testing.insertAlbum
+import dev.dertyp.testing.insertSong
+import dev.dertyp.testing.insertUser
 import dev.dertyp.testing.entityEventsModule
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -138,6 +141,7 @@ class SongServiceTest : KoinTest {
             FollowedArtistTable,
             PlaylistSongTable,
             UserPlaylistSongTable,
+            UserPlaylistShareTable,
             ImageTable,
             ImageMetadataTable,
             AnimatedImageTable,
@@ -3336,5 +3340,99 @@ class SongServiceTest : KoinTest {
             assertEquals(listOf("2017-06-05" to false), albumsAfterFirst.map { it.second to it.third })
             assertEquals(albumsAfterFirst, storedAlbums())
             assertEquals(3L, transaction(database) { SongTable.selectAll().count() })
+        }
+
+    private data class PlaylistAccessFixture(
+        val owner: UUID,
+        val sharedUser: UUID,
+        val stranger: UUID,
+        val playlist: UUID,
+        val songs: List<UUID>,
+    )
+
+    private fun playlistAccessFixture(): PlaylistAccessFixture = transaction(database) {
+        val owner = insertUser()
+        val sharedUser = insertUser()
+        val stranger = insertUser()
+        val album = insertAlbum()
+        val songs = listOf(insertSong(album, "First"), insertSong(album, "Second"))
+        val playlist = UUID.randomUUID()
+        UserPlaylistTable.insert {
+            it[id] = playlist
+            it[name] = "Private"
+            it[description] = ""
+            it[creator] = owner
+        }
+        songs.forEachIndexed { index, song ->
+            UserPlaylistSongTable.insert {
+                it[playlistId] = playlist
+                it[songId] = song
+                it[addedAt] = 1_000L + index
+            }
+        }
+        UserPlaylistShareTable.insert {
+            it[playlistId] = playlist
+            it[userId] = sharedUser
+            it[access] = PlaylistAccess.READ
+        }
+        PlaylistAccessFixture(owner, sharedUser, stranger, playlist, songs)
+    }
+
+    private fun publishPlaylist(playlist: UUID) = transaction(database) {
+        UserPlaylistTable.update({ UserPlaylistTable.id eq playlist }) { it[UserPlaylistTable.isPublic] = true }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `byUserPlaylist with a viewer returns nothing for a private playlist of someone else`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val f = playlistAccessFixture()
+
+            val ids = { viewer: UUID? ->
+                runBlocking { songService.byUserPlaylist(0, 50, f.playlist, f.owner, viewer).data.map { it.id } }
+            }
+
+            assertEquals(f.songs, ids(f.owner))
+            assertEquals(f.songs, ids(f.sharedUser))
+            assertEquals(emptyList<UUID>(), ids(f.stranger))
+            assertEquals(f.songs, ids(null))
+            assertEquals(0, songService.byUserPlaylist(0, 50, f.playlist, f.owner, f.stranger).total)
+
+            publishPlaylist(f.playlist)
+            assertEquals(f.songs, ids(f.stranger))
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `songIdsByUserPlaylist with a viewer returns nothing for a private playlist of someone else`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val f = playlistAccessFixture()
+
+            assertEquals(f.songs, songService.songIdsByUserPlaylist(f.playlist, f.owner).toList())
+            assertEquals(f.songs, songService.songIdsByUserPlaylist(f.playlist, f.sharedUser).toList())
+            assertEquals(emptyList<UUID>(), songService.songIdsByUserPlaylist(f.playlist, f.stranger).toList())
+            assertEquals(f.songs, songService.songIdsByUserPlaylist(f.playlist).toList())
+
+            publishPlaylist(f.playlist)
+            assertEquals(f.songs, songService.songIdsByUserPlaylist(f.playlist, f.stranger).toList())
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `the rpc service hides a private playlist from a user and not from an admin`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val f = playlistAccessFixture()
+            val strangerRpc = SongRpcService(User(id = f.stranger, username = "stranger"), songService)
+            val sharedRpc = SongRpcService(User(id = f.sharedUser, username = "shared"), songService)
+
+            assertEquals(0, strangerRpc.byUserPlaylist(0, 50, f.playlist).total)
+            assertEquals(emptyList<UUID>(), strangerRpc.songIdsByUserPlaylist(f.playlist).toList())
+            assertEquals(f.songs, sharedRpc.byUserPlaylist(0, 50, f.playlist).data.map { it.id })
+            assertEquals(f.songs, sharedRpc.songIdsByUserPlaylist(f.playlist).toList())
+            assertEquals(f.songs, rpcService.byUserPlaylist(0, 50, f.playlist).data.map { it.id })
+            assertEquals(f.songs, rpcService.songIdsByUserPlaylist(f.playlist).toList())
         }
 }

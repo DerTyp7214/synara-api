@@ -25,6 +25,7 @@ import dev.dertyp.db.SongMusicBrainzTable
 import dev.dertyp.db.SongProviderTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
+import dev.dertyp.db.UserPlaylistShareTable
 import dev.dertyp.db.UserPlaylistSongTable
 import dev.dertyp.db.UserPlaylistTable
 import org.jetbrains.exposed.v1.core.Column
@@ -103,6 +104,7 @@ private val userPlaylistFields: List<Column<*>> = listOf(
     UserPlaylistTable.imageSource,
     UserPlaylistTable.coverStyle,
     UserPlaylistTable.coverSeed,
+    UserPlaylistTable.isPublic,
 )
 
 private val playlistFields: List<Column<*>> = listOf(
@@ -272,6 +274,7 @@ private fun readStates(type: EntityType, entities: Set<UUID>): Map<UUID, EntityS
         EntityType.USER_PLAYLIST -> {
             own(UserPlaylistTable.id, userPlaylistFields)
             member(UserPlaylistSongTable.playlistId, UserPlaylistSongTable.songId, UserPlaylistSongTable.addedAt)
+            member(UserPlaylistShareTable.playlistId, UserPlaylistShareTable.userId, UserPlaylistShareTable.access)
         }
 
         EntityType.PLAYLIST -> {

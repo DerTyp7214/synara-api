@@ -114,7 +114,7 @@ internal fun Route.subsonicMediaRoutes() {
             is SubsonicId.Song -> songService.byId(id.uuid, user.id)?.coverId
             is SubsonicId.Album -> albumService.byId(id.uuid, user.id)?.coverId
             is SubsonicId.Artist -> artistService.byId(id.uuid, user.id)?.imageId
-            is SubsonicId.Playlist -> playlistService.byId(id.uuid)?.imageId
+            is SubsonicId.Playlist -> playlistService.byId(id.uuid, user.id.takeUnless { user.isAdmin })?.imageId
             is SubsonicId.RadioChannel -> radioChannelService.byId(id.uuid)?.imageId
         }
         val size = params["size"]?.toIntOrNull() ?: 0

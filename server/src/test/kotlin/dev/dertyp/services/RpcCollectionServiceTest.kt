@@ -2,12 +2,16 @@ package dev.dertyp.services
 
 import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.data.CollectionItemType
+import dev.dertyp.data.CollectionSearchResults
 import dev.dertyp.data.InsertableCollection
 import dev.dertyp.data.MediaCollection
+import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.User
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -22,6 +26,12 @@ class RpcCollectionServiceTest {
     private val itemId = UUID.randomUUID()
     private val update = InsertableCollection(name = "Renamed")
     private val collectionService = mockk<CollectionService>()
+    private val emptySearch = CollectionSearchResults(
+        songs = PaginatedResponse(emptyList()),
+        artists = PaginatedResponse(emptyList()),
+        albums = PaginatedResponse(emptyList()),
+        playlists = PaginatedResponse(emptyList()),
+    )
 
     init {
         coEvery { collectionService.byId(collectionId) } returns MediaCollection(
@@ -29,8 +39,16 @@ class RpcCollectionServiceTest {
             name = "Mine",
             creator = owner.id,
         )
+        coEvery { collectionService.byId(collectionId, any()) } returns MediaCollection(
+            id = collectionId,
+            name = "Mine",
+            creator = owner.id,
+        )
+        coEvery { collectionService.allCollections(any(), any()) } returns emptyList()
+        coEvery { collectionService.playlistIds(collectionId, any()) } returns emptyFlow()
+        coEvery { collectionService.rankedSearch(any(), any(), any(), any(), any(), any()) } returns emptySearch
         coEvery { collectionService.updateCollection(collectionId, any()) } returns true
-        coEvery { collectionService.addItem(collectionId, any(), any()) } returns true
+        coEvery { collectionService.addItem(collectionId, any(), any(), any()) } returns true
         coEvery { collectionService.removeItem(collectionId, any(), any()) } returns true
         coEvery { collectionService.setCollectionImage(collectionId, any()) } returns true
         coEvery { collectionService.delete(collectionId) } returns true
@@ -64,7 +82,7 @@ class RpcCollectionServiceTest {
         }
         assertThrows(UnauthorizedException::class.java) { runBlocking { service.delete(collectionId) } }
         coVerify(exactly = 0) { collectionService.updateCollection(any(), any()) }
-        coVerify(exactly = 0) { collectionService.addItem(any(), any(), any()) }
+        coVerify(exactly = 0) { collectionService.addItem(any(), any(), any(), any()) }
         coVerify(exactly = 0) { collectionService.removeItem(any(), any(), any()) }
         coVerify(exactly = 0) { collectionService.setCollectionImage(any(), any()) }
         coVerify(exactly = 0) { collectionService.delete(any()) }
@@ -87,5 +105,31 @@ class RpcCollectionServiceTest {
 
         assertTrue(service.addItem(collectionId, CollectionItemType.ALBUM, itemId))
         assertTrue(service.delete(collectionId))
+    }
+
+    @Test
+    fun `reads pass the caller as viewer for users and admins`() = runBlocking {
+        listOf(owner, admin).forEach { caller ->
+            val service = RpcCollectionService(caller, collectionService)
+
+            service.byId(collectionId)
+            service.allCollections()
+            service.playlistIds(collectionId).toList()
+            service.rankedSearch(collectionId, "q", true, 0, 10)
+
+            coVerify(exactly = 1) { collectionService.byId(collectionId, caller.id) }
+            coVerify(exactly = 1) { collectionService.allCollections(caller.id, caller.id) }
+            coVerify(exactly = 1) { collectionService.playlistIds(collectionId, caller.id) }
+            coVerify(exactly = 1) { collectionService.rankedSearch(collectionId, "q", true, 0, 10, caller.id) }
+        }
+    }
+
+    @Test
+    fun `addItem scopes a user to what they can see and leaves an admin unscoped`() = runBlocking {
+        RpcCollectionService(owner, collectionService).addItem(collectionId, CollectionItemType.PLAYLIST, itemId)
+        RpcCollectionService(admin, collectionService).addItem(collectionId, CollectionItemType.PLAYLIST, itemId)
+
+        coVerify(exactly = 1) { collectionService.addItem(collectionId, CollectionItemType.PLAYLIST, itemId, owner.id) }
+        coVerify(exactly = 1) { collectionService.addItem(collectionId, CollectionItemType.PLAYLIST, itemId, null) }
     }
 }

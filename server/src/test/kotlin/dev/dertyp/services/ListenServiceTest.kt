@@ -115,6 +115,7 @@ class ListenServiceTest : KoinTest {
         AlbumGenreTable,
         PlaylistSongTable,
         UserPlaylistSongTable,
+        UserPlaylistShareTable,
         SyncedLyricsTable,
         RecentReleaseTable,
         FollowedArtistTable,

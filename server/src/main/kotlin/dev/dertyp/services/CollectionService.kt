@@ -45,7 +45,7 @@ class CollectionService : Service() {
         )
     }
 
-    suspend fun byId(id: UUID): MediaCollection? {
+    suspend fun byId(id: UUID, viewer: UUID? = null): MediaCollection? {
         val base = dbQuery {
             CollectionTable
                 .leftJoin(ImageTable, onColumn = { CollectionTable.imageId }, otherColumn = { ImageTable.id })
@@ -55,10 +55,10 @@ class CollectionService : Service() {
                 ?.let { mapCollection(it) }
         } ?: return null
 
-        return base.withComputedStats()
+        return base.withComputedStats(viewer)
     }
 
-    suspend fun allCollections(creator: UUID?): List<MediaCollection> {
+    suspend fun allCollections(creator: UUID?, viewer: UUID? = null): List<MediaCollection> {
         val bases = dbQuery {
             val query = CollectionTable
                 .leftJoin(ImageTable, onColumn = { CollectionTable.imageId }, otherColumn = { ImageTable.id })
@@ -67,7 +67,7 @@ class CollectionService : Service() {
             query.orderBy(CollectionTable.name).map { mapCollection(it) }
         }
 
-        return bases.map { it.withComputedStats() }
+        return bases.map { it.withComputedStats(viewer) }
     }
 
     suspend fun createCollection(userId: UUID, collection: InsertableCollection): UUID {
@@ -135,13 +135,18 @@ class CollectionService : Service() {
         return updated
     }
 
-    suspend fun addItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean {
-        val added = insertItem(id, itemType, itemId)
+    suspend fun addItem(id: UUID, itemType: CollectionItemType, itemId: UUID, viewer: UUID? = null): Boolean {
+        val added = insertItem(id, itemType, itemId, viewer)
         if (added) hooks.emit(HookEvent.CollectionChanged(id))
         return added
     }
 
-    private suspend fun insertItem(id: UUID, itemType: CollectionItemType, itemId: UUID): Boolean = dbQuery {
+    private suspend fun insertItem(
+        id: UUID,
+        itemType: CollectionItemType,
+        itemId: UUID,
+        viewer: UUID?
+    ): Boolean = dbQuery {
         val added = when (itemType) {
             CollectionItemType.SONG -> {
                 if (SongTable.select(SongTable.id).where { SongTable.id eq itemId }.empty()) return@dbQuery false
@@ -160,6 +165,7 @@ class CollectionService : Service() {
 
             CollectionItemType.PLAYLIST -> {
                 if (UserPlaylistTable.select(UserPlaylistTable.id).where { UserPlaylistTable.id eq itemId }
+                        .apply { if (viewer != null) andWhere { UserPlaylistService.visibleTo(viewer) } }
                         .empty()) return@dbQuery false
                 CollectionPlaylistTable.insertIgnore {
                     it[collectionId] = id; it[playlistId] = itemId
@@ -232,7 +238,7 @@ class CollectionService : Service() {
         val albumsDeferred =
             async { albumService.rankedSearchInCollection(collectionId, page, pageSize, query, userId) }
         val playlistsDeferred =
-            async { userPlaylistService.rankedSearchInCollection(collectionId, page, pageSize, query) }
+            async { userPlaylistService.rankedSearchInCollection(collectionId, page, pageSize, query, userId) }
 
         CollectionSearchResults(
             songs = songsDeferred.await(),
@@ -266,12 +272,13 @@ class CollectionService : Service() {
             CollectionArtistTable.addedAt
         )
 
-    fun playlistIds(collectionId: UUID): Flow<UUID> =
+    fun playlistIds(collectionId: UUID, viewer: UUID? = null): Flow<UUID> =
         linkedIdFlow(
             collectionId,
             CollectionPlaylistTable.collectionId,
             CollectionPlaylistTable.playlistId,
-            CollectionPlaylistTable.addedAt
+            CollectionPlaylistTable.addedAt,
+            viewer
         )
 
     private fun linkedIdFlow(
@@ -279,10 +286,14 @@ class CollectionService : Service() {
         collectionColumn: Column<EntityID<UUID>>,
         idColumn: Column<EntityID<UUID>>,
         addedAtColumn: Column<Long>,
+        playlistViewer: UUID? = null,
     ): Flow<UUID> = flow {
         idColumn.table
             .select(idColumn)
             .where { collectionColumn eq collectionId }
+            .apply {
+                if (playlistViewer != null) andWhere { idColumn inSubQuery UserPlaylistService.visibleIds(playlistViewer) }
+            }
             .orderBy(addedAtColumn, SortOrder.ASC)
             .orderBy(idColumn, SortOrder.ASC)
             .fetchBatchedResults(1000) { batch ->
@@ -290,11 +301,16 @@ class CollectionService : Service() {
             }
     }.flowOn(Dispatchers.IO)
 
-    private suspend fun MediaCollection.withComputedStats(): MediaCollection = dbQuery {
+    private suspend fun MediaCollection.withComputedStats(viewer: UUID?): MediaCollection = dbQuery {
         val songItemIds = linkedIds(id, CollectionSongTable.collectionId, CollectionSongTable.songId)
         val albumItemIds = linkedIds(id, CollectionAlbumTable.collectionId, CollectionAlbumTable.albumId)
         val artistItemIds = linkedIds(id, CollectionArtistTable.collectionId, CollectionArtistTable.artistId)
-        val playlistItemIds = linkedIds(id, CollectionPlaylistTable.collectionId, CollectionPlaylistTable.playlistId)
+        val playlistItemIds = linkedIds(
+            id,
+            CollectionPlaylistTable.collectionId,
+            CollectionPlaylistTable.playlistId,
+            viewer
+        )
 
         val artistSongIds = artistItemIds.chunked(maxBatchSize).flatMap { chunk ->
             SongArtistTable
@@ -350,9 +366,13 @@ class CollectionService : Service() {
         collectionId: UUID,
         collectionColumn: Column<EntityID<UUID>>,
         idColumn: Column<EntityID<UUID>>,
+        playlistViewer: UUID? = null,
     ): List<UUID> =
         idColumn.table
             .select(idColumn)
             .where { collectionColumn eq collectionId }
+            .apply {
+                if (playlistViewer != null) andWhere { idColumn inSubQuery UserPlaylistService.visibleIds(playlistViewer) }
+            }
             .map { it[idColumn].value }
 }
