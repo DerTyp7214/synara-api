@@ -1,0 +1,46 @@
+name: API or documentation problem
+description: For client and plugin developers when the docs are wrong, unclear or missing, or the API does not behave as documented.
+labels: [documentation]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Kotlin RPC
+        - REST
+        - Subsonic API
+        - MCP
+        - Plugin API
+        - Server-driven UI
+        - Hand-written docs
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: The document, service method or route.
+      placeholder: docs/CLIENT_REST.md, ISongService.byId, GET /api/...
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: false
+  - type: input
+    id: server-version
+    attributes:
+      label: Server version
+      description: Version and commit from the startup banner.
+    validations:
+      required: false

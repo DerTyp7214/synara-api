@@ -1,0 +1,58 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do and what is in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How you would like it to work.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other approaches or workarounds you considered.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Library and indexing
+        - Import (Tidal, Apple Music, YouTube, SoundCloud)
+        - Metadata (MusicBrainz, artist and album matching)
+        - Playback, streaming and transcoding
+        - Playlists and collections
+        - Search
+        - Podcasts
+        - Lyrics
+        - Listening history, ListenBrainz and stats
+        - Recommendations and radio
+        - Users, authentication and permissions
+        - RPC or REST API
+        - Subsonic API
+        - Plugins and server-driven UI
+        - Backup, restore and migrations
+        - Docker and deployment
+        - Other
+    validations:
+      required: false
+  - type: checkboxes
+    id: audience
+    attributes:
+      label: Who is this for
+      options:
+        - label: Server administrators
+        - label: Listeners
+        - label: Client developers
+        - label: Plugin developers

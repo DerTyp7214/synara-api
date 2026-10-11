@@ -1,0 +1,111 @@
+name: Bug report
+description: Something in the Synara server does not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem with the Synara server. Problems in the desktop app's UI belong in the [SynaraDesktop issues](https://github.com/DerTyp7214/SynaraDesktop/issues). Problems in the Android, iOS, macOS or tvOS apps belong in the [synara-android issues](https://github.com/DerTyp7214/synara-android/issues).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps help most.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: The part of the server that is affected.
+      options:
+        - Library and indexing
+        - Import (Tidal, Apple Music, YouTube, SoundCloud)
+        - Metadata (MusicBrainz, artist and album matching)
+        - Playback, streaming and transcoding
+        - Playlists and collections
+        - Search
+        - Podcasts
+        - Lyrics
+        - Listening history, ListenBrainz and stats
+        - Recommendations and radio
+        - Users, authentication and permissions
+        - RPC or REST API
+        - Subsonic API
+        - Plugins and server-driven UI
+        - Backup, restore and migrations
+        - Docker and deployment
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: server-version
+    attributes:
+      label: Server version
+      description: The startup log prints a banner with Version, Commit and Build. Paste the version and commit.
+      placeholder: 0.0.2 (6f263263)
+    validations:
+      required: true
+  - type: dropdown
+    id: run-method
+    attributes:
+      label: How do you run the server
+      options:
+        - Docker image from ghcr.io (`latest-dev`)
+        - Docker image from ghcr.io (other tag)
+        - Docker image built from source
+        - Fat jar
+        - "`./gradlew :server:run`"
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      options:
+        - SQLite
+        - PostgreSQL
+    validations:
+      required: true
+  - type: checkboxes
+    id: services
+    attributes:
+      label: Optional services in use
+      options:
+        - label: Redis
+        - label: Redis Search (`REDIS_USE_SEARCH`)
+        - label: Proxy
+        - label: Credential server
+        - label: Transcriber
+        - label: Recommendations (recsys / audio-embed)
+        - label: Plugins
+  - type: input
+    id: client
+    attributes:
+      label: Client
+      description: Which client and version triggered it.
+      placeholder: Synara Desktop 3.10.3, Android, a Subsonic client, curl
+    validations:
+      required: false
+  - type: textarea
+    id: log
+    attributes:
+      label: Server log
+      description: The lines around the error including the full stack trace. With Docker use `docker compose logs api`.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+    validations:
+      required: false
