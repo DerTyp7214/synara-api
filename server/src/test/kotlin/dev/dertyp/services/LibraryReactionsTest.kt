@@ -58,12 +58,13 @@ import kotlin.time.measureTime
 
 class LibraryReactionsTest : KoinTest {
     private lateinit var database: Database
-    private val quietPeriod = 200.milliseconds
-    private val maxWait = quietPeriod * 5
-    private val events =
+    private var quietPeriod = 200.milliseconds
+    private val maxWait get() = quietPeriod * 5
+    private val events by lazy {
         RecordedEntityEvents(versionGroups = VersionGroupConfig(quietPeriod, maxWait)).subscribeLibraryReactions()
-    private val publisher = events.publisher
-    private val scheduleService = events.subscribe(ScheduleService())
+    }
+    private val publisher get() = events.publisher
+    private val scheduleService by lazy { events.subscribe(ScheduleService()) }
     private val albumService = mockk<AlbumService>()
     private val libraryMergeService = mockk<LibraryMergeService>()
     private val redisSearchService = mockk<RedisSearchService>()
@@ -202,6 +203,7 @@ class LibraryReactionsTest : KoinTest {
     @EnumSource(DbDialect::class)
     fun `a steady stream of album events does not postpone the rebuild beyond the upper bound`(dialect: DbDialect) =
         runBlocking {
+            quietPeriod = 1.seconds
             setup(dialect)
             val started = TimeSource.Monotonic.markNow()
             val stream = launch(Dispatchers.IO) {
