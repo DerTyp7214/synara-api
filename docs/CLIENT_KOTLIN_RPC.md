@@ -36,7 +36,7 @@ kotlin {
 
 [common-rpc/build.gradle.kts](../common-rpc/build.gradle.kts) declares:
 
-- **Targets**: `jvm`, Android (only when an SDK is present — gated on the `synara.includeAndroid` property or a `local.properties` file), `iosX64`, `iosArm64`, `iosSimulatorArm64`, `macosArm64`, `tvosArm64`, `tvosSimulatorArm64`, `mingwX64` and `linuxX64`. Every native target also produces a static library named `common_rpc`, which is how the non-Kotlin clients link against it.
+- **Targets**: `jvm`, Android (only when an SDK is present — gated on the `synara.includeAndroid` property or a `local.properties` file), `iosX64`, `iosArm64`, `iosSimulatorArm64`, `macosArm64`, `tvosArm64`, `tvosSimulatorArm64`, `mingwX64` and `linuxX64`.
 - **Coordinates**: group `de.dertyp7214`, version `1.0.0`.
 - **Transitive API**: `kotlinx-rpc-core`, the kRPC Ktor client, `ktor-client-core` and the kotlinx-serialization core/JSON/CBOR artifacts — you do not need to declare those again.
 

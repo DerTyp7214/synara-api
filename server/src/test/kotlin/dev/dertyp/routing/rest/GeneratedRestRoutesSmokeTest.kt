@@ -53,7 +53,7 @@ import java.nio.file.Files
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
-private class StreamingPodcastService(
+internal class StreamingPodcastService(
     private val delegate: IPodcastService,
     private val file: File,
 ) : IPodcastService by delegate, RestFileProvider {

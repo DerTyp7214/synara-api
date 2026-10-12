@@ -152,6 +152,33 @@ Methods annotated `@RestFileResponse` — `streamSong`, `streamSongAtmos`, `down
 
 Details, content types and the size endpoints are in [STREAMING_AND_PLAYBACK.md](STREAMING_AND_PLAYBACK.md).
 
+## Generated Kotlin clients
+
+The Gradle module `:common-rpc:rest-client` offers the same services as the RPC stubs over this HTTP surface. For every `@Rpc` interface the build generates a class in the package `dev.dertyp.rpc.rest.client` that implements the interface and calls the routes of this page. The name is `Rest` plus the interface name without its leading `I`, so `IAlbumService` becomes `RestAlbumService`. A small hand-written runtime in the same package (`RestClientConfig`, `RestClient`, `RestRequest`, `RestException`) does the HTTP work. A Kotlin app can therefore use the `IAlbumService` type without caring whether the transport is the websocket or HTTP.
+
+```kotlin
+val config = RestClientConfig(
+    httpClient = HttpClient(),
+    baseUrl = { "http://localhost:8080" },
+    token = { forceRefresh -> tokenStore.accessToken(refresh = forceRefresh) },
+)
+val albums: IAlbumService = RestAlbumService(config)
+val album = albums.byId(albumId)
+```
+
+`baseUrl` and `token` are suspending lambdas that are read on every request. `token` receives `forceRefresh = true` when the server answered `401` and returns `null` when no token is available. `headers` is an optional block that adds further headers to every request. Every request carries `X-Api-Version` with the version the module was compiled against. Bodies and responses are JSON, and routes marked `PUBLIC` are sent without an `Authorization` header.
+
+- **Errors.** A `401` is retried once with `token(true)`. A second `401` throws `RestException(401, …)`. A `400` throws `IllegalArgumentException` with the text of the response. Every other failure throws `RestException` with the status and the response text, or the status description when the body is empty. A `404` gives `null` for a method with a nullable return type and a `RestException` otherwise.
+- **Flows.** A method returning `Flow<T>` is cold and opens one SSE request each time it is collected. There is no automatic reconnect, because the server sends no resume position. Collect again to start over, and read the current state with the regular getter first where [Server-Sent Events](#server-sent-events) says the stream stays silent until something changes. A `Flow<ByteArray>` method streams the raw response body.
+- **File methods.** `streamSong`, `streamSongAtmos`, `downloadSong` and `streamEpisode` return a flow that sends its `GET` when it is collected. It passes `offset` as the query parameter and, when `offset` is above 0, as a `Range: bytes=<offset>-` header. It emits chunks of `chunkSize` bytes, the last one shorter. A `404` throws `RestException(404, …)` at collection time.
+- **Members without a REST route** throw `UnsupportedOperationException` when called.
+
+Known limits of the parameter encoding:
+
+- A nullable query parameter whose default is not `null` cannot carry an explicit `null`. The client omits it, so the server uses the default.
+- A non-null list or set parameter with a default cannot carry an empty collection, for the same reason.
+- An empty string for a required query parameter counts as missing and answers `400`.
+
 ## Worked samples
 
 ### Log in

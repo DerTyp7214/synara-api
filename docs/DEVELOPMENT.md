@@ -62,6 +62,8 @@ REST route goldens live at `server/src/test/resources/rest/routes.golden` and `r
 
 then review the diff — this is what turns REST routing changes into an intentional, reviewed golden update instead of a silent behavior change.
 
+The generated Kotlin REST clients (see [Generated files](#generated-files)) are tested against the same golden and against the real routes. `RestClientRouteGoldenTest` checks every generated client call (verb, path and parameters) against `routes.golden`, so it fails when a client and the server disagree about a route and is refreshed together with the golden above. `RestClientRoundTripTest` runs the clients against the generated server routes. Both are in `server/src/test/kotlin/dev/dertyp/routing/rest/` and run with `./gradlew :server:test --tests 'dev.dertyp.routing.rest.RestClient*'`.
+
 `python3 scripts/test-times.py` reads the JUnit XML reports of the last run and prints the test times per module, database type and class; `--json <file>` saves them and `--compare <file>` shows the change against such a file, for the classes both have a report for. Gradle keeps only the reports of the last run of a test task, so a run with `--tests` leaves the reports of those classes alone.
 
 `python3 scripts/commit-stats.py` regenerates [STATS.html](STATS.html), an interactive page of commit statistics to open in a browser, from the git history of this repository and of the sibling checkouts `synara-android` and `SynaraComposeMultiplatform`, when they exist next to it; `-o <file>` writes it elsewhere. It only reads from git, and unchanged history gives a byte-identical page. The pages workflow checks out this repository only, so the published page covers it alone.
@@ -70,7 +72,7 @@ The build cache and the configuration cache are on (`org.gradle.caching` and `or
 
 The server reports its build time and commit through `BuildInfo`, which reads `build-info.properties` from the classpath. Only `:server:shadowJar` puts that file into the jar, written by `:server:generateBuildInfo` on every jar build with the time of the build and `git rev-parse HEAD` (`unknown` without a git checkout). A server that does not run from the fat jar (`:server:run`, `installDist`, `dev.sh`, tests) reports `dev` for both, so compiling and testing do not depend on the time or the commit. The version stays the compile-time constant `BuildConfig.VERSION`.
 
-Never verify with `./gradlew assemble`; it also builds every `common-rpc` multiplatform target (iOS, tvOS, macOS, Windows, Linux static libraries, see `common-rpc/build.gradle.kts`), which needs toolchains most machines do not have. Verify with the JVM tasks CI runs instead: `./gradlew test`, `./gradlew :server:shadowJar`.
+Never verify with `./gradlew assemble`; it also builds every `common-rpc` multiplatform target (iOS, tvOS, macOS, Windows, Linux, see `common-rpc/build.gradle.kts`), which needs toolchains most machines do not have. Verify with the JVM tasks CI runs instead: `./gradlew test`, `./gradlew :server:shadowJar`.
 
 ## Generated files
 
@@ -84,6 +86,16 @@ Never hand-edit these; regenerate them instead. CI fails the build if any of the
 | [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md), [`example.env`](../example.env) | `./gradlew generateEnvDocs` (root `build.gradle.kts`) | As part of `generateDocs`, by the pre-commit hook, and by CI's docs-drift check. |
 | [RELATION_MAP.html](RELATION_MAP.html) | `python3 scripts/relation-map/generate.py` (needs Graphviz) | By hand for the file in `docs/`, not part of `generateDocs` or the build workflow. `.github/workflows/pages.yml` regenerates it on every push to master and publishes it to the `gh-pages` branch. The system, credentials, API surface, pipelines, workers, events, startup and build views are curated data in `scripts/relation-map/curated/`, update them by hand when a flow changes. The workers view groups the workers read from the `@WorkerTask` annotations, the packages and classes come from the Kotlin sources and the database from the base schema. |
 | [STATS.html](STATS.html) | `python3 scripts/commit-stats.py` | By hand for the file in `docs/`, not part of `generateDocs` or the build workflow. `.github/workflows/pages.yml` regenerates it on every push to master and publishes it to the `gh-pages` branch. The numbers change with every commit, so regenerate the file in `docs/` when they should be current. |
+
+The Kotlin REST clients are generated too, but into a build directory and not into the repository. The Kotlin Multiplatform module `:common-rpc:rest-client` (`common-rpc/rest-client/build.gradle.kts`) holds the hand-written runtime in `common-rpc/rest-client/src/commonMain/kotlin/dev/dertyp/rpc/rest/client/` and runs the `rest-compiler` KSP processor in client mode, which writes one `Rest<Name>Service` class per `@Rpc` interface to `common-rpc/rest-client/build/generated/ksp/metadata/commonMain/kotlin/dev/dertyp/rpc/rest/client/`. Which interfaces get a client is not configured there: `:common-rpc:compiler` writes the list as `rpc-interfaces.txt` into the build output of `:common-rpc` while it generates the service registry, and the client module reads that file. The processor takes these options:
+
+| Option | Meaning |
+|---|---|
+| `rest.mode` | `server` (default) generates the server routes, `client` generates the client classes. |
+| `rest.client.package` | The package of the generated client classes, required in `client` mode. The module sets `dev.dertyp.rpc.rest.client`. |
+| `rest.interfacesFile` | A file with one fully qualified interface name per line that is processed in addition to the interfaces found by the other options. The module passes the `rpc-interfaces.txt` of `:common-rpc`. |
+
+The module compiles for the JVM and the same native targets as `common-rpc`, so verify it with `./gradlew :common-rpc:rest-client:compileKotlinJvm`. The native C bindings and static libraries of `common-rpc` no longer exist. A checkout that was built before that change must delete `common-rpc/build` once, because stale generated sources from the removed JVM KSP run break the compile.
 
 [index.html](index.html) is written by hand and links both pages. The pages workflow publishes it next to them as the start page and fills in the commit and date of the build.
 

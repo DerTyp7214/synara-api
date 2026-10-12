@@ -189,6 +189,8 @@ dependencies {
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.exposed.migration.core)
     testImplementation(libs.exposed.migration.jdbc)
+    testImplementation(project(":common-rpc:rest-client"))
+    testImplementation(project(":mock-server"))
 }
 
 val testForks: Int = (project.findProperty("testForks") as String?)?.toInt() ?: run {

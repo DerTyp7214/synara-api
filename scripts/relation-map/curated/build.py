@@ -9,7 +9,7 @@ MODULES = [
     ("common-proxy", "common-proxy/src", "libs", "The frame protocol between server and proxy.", "common-proxy/build.gradle.kts:1"),
     ("common-credentials", "common-credentials/src", "libs", "The protocol and models of the credential server.", "common-credentials/build.gradle.kts:1"),
     ("common-listen-backup", "common-listen-backup/src", "libs", "The protocol between server and listen-backup.", "common-listen-backup/build.gradle.kts:1"),
-    ("common-rpc:compiler", "common-rpc/compiler/src", "ksp", "RpcProcessor. Reads the @Rpc interfaces and writes dev.dertyp.rpc.NativeDispatchers for the native clients.", "common-rpc/compiler/src/main/kotlin/dev/dertyp/rpc/compiler/RpcProcessor.kt:17"),
+    ("common-rpc:compiler", "common-rpc/compiler/src", "ksp", "RpcProcessor. Reads the @Rpc interfaces and writes dev.dertyp.rpc.ServiceRegistry, the list of all service classes.", "common-rpc/compiler/src/main/kotlin/dev/dertyp/rpc/compiler/RpcProcessor.kt:17"),
     ("common-rpc:doc-compiler", "common-rpc/doc-compiler/src", "ksp", "DocProcessor. Reads @RpcDoc services and @ModelDoc models with their parameter, field and permission annotations and writes the API reference.", "common-rpc/doc-compiler/src/main/kotlin/dev/dertyp/rpc/doc/DocProcessor.kt:39"),
     ("common-rpc:rest-compiler", "common-rpc/rest-compiler/src", "ksp", "RestProcessor. Finds @Rpc interfaces in source, in the packages named by rest.packages and in rest.interfaces, derives routes from the function names and the @Rest annotations and emits the registration code, a route manifest and the REST reference.", "common-rpc/rest-compiler/src/main/kotlin/dev/dertyp/rpc/rest/RestProcessor.kt:45"),
 ]
@@ -26,12 +26,11 @@ DEPENDENCIES = [
     ("proxy", "common-proxy", "implementation", "the frame protocol", "proxy/build.gradle.kts:20"),
     ("listen-backup", "common-listen-backup", "implementation", "the receiver protocol", "listen-backup/build.gradle.kts:20"),
     ("credential-server", "common-credentials", "implementation", "the credential protocol and models", "credential-server/build.gradle.kts:20"),
-    ("common-rpc:doc-compiler", "common-rpc", "implementation", "reads the documentation annotations declared in common-rpc", "common-rpc/doc-compiler/build.gradle.kts:7"),
 ]
 
 KSP = [
-    ("common-rpc", "common-rpc:compiler", "kspJvm and kspCommonMainMetadata", "common-rpc/build.gradle.kts:121"),
-    ("common-rpc", "common-rpc:doc-compiler", "kspCommonMainMetadata", "common-rpc/build.gradle.kts:123"),
+    ("common-rpc", "common-rpc:compiler", "kspCommonMainMetadata", "common-rpc/build.gradle.kts:97"),
+    ("common-rpc", "common-rpc:doc-compiler", "kspCommonMainMetadata", "common-rpc/build.gradle.kts:98"),
     ("server", "common-rpc:doc-compiler", "ksp", "server/build.gradle.kts:84"),
     ("server", "common-rpc:rest-compiler", "ksp", "server/build.gradle.kts:85"),
 ]
@@ -44,7 +43,7 @@ GENERATED = [
     ("permissions-md", "docs/PERMISSIONS.md", "permission reference"),
     ("rest-api-md", "docs/REST_API.md", "REST reference"),
     ("rest-code", "register<Service>Rest", "generated REST routes"),
-    ("native-dispatchers", "NativeDispatchers", "generated native dispatchers"),
+    ("service-registry", "ServiceRegistry", "generated service registry"),
     ("api-constants-md", "docs/API_CONSTANTS.md", "versions and features"),
     ("env-docs", "ENVIRONMENT_VARIABLES.md", "and example.env"),
     ("migration-sql", "V<version>__<Name>.sql", "one file per database type"),
@@ -158,7 +157,7 @@ def build(root):
         nodes.append({"id": generated_id, "label": label, "sub": sub, "group": "generated", "desc": "Generated. Regenerate it with the task or processor linked to it.", "meta": []})
 
     outputs = [
-        ("common-rpc:compiler", "native-dispatchers", "NativeDispatchers", "Kotlin dispatchers that let native clients call the @Rpc interfaces", "common-rpc/compiler/src/main/kotlin/dev/dertyp/rpc/compiler/RpcProcessor.kt:17"),
+        ("common-rpc:compiler", "service-registry", "ServiceRegistry", "initializeServiceRegistry, which registers every @Rpc interface by name", "common-rpc/compiler/src/main/kotlin/dev/dertyp/rpc/compiler/RpcProcessor.kt:17"),
         ("common-rpc:doc-compiler", "rpc-services-md", "RPC reference", "one section per @RpcDoc service with its methods, parameters and permissions", "common-rpc/doc-compiler/src/main/kotlin/dev/dertyp/rpc/doc/DocProcessor.kt:101"),
         ("common-rpc:doc-compiler", "models-md", "Model reference", "one section per @ModelDoc model with its fields and wire names", "common-rpc/doc-compiler/src/main/kotlin/dev/dertyp/rpc/doc/DocProcessor.kt:72"),
         ("common-rpc:doc-compiler", "permissions-md", "Permission reference", "the methods that need admin or a capability", "common-rpc/doc-compiler/src/main/kotlin/dev/dertyp/rpc/doc/DocProcessor.kt:180"),
