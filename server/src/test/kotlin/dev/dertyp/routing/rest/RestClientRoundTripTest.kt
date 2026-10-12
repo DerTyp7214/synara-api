@@ -14,6 +14,10 @@ import dev.dertyp.services.`import`.ImportBackend
 import dev.dertyp.services.`import`.ImporterCredentials
 import dev.dertyp.services.metadata.IMetadataService
 import io.github.smiley4.ktoropenapi.OpenApi
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.bodyAsBytes
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -229,6 +233,37 @@ class RestClientRoundTripTest {
 
         assertArrayEquals(bytes, result)
         assertEquals(listOf<String?>(null), authorizations.toList())
+        assertEquals(emptyList<Boolean>(), tokenCalls.toList())
+    }
+
+    @Test
+    fun `a built url of a public route is fetched without any credentials`() = testApplication {
+        setUpApplication()
+        val id = UUID.randomUUID()
+        val bytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte())
+        coEvery { image.getImageData(id, 64) } returns bytes
+
+        val url = RestImageService(config()).getImageDataUrl(id, 64)
+        val response = client.get(url)
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertArrayEquals(bytes, response.bodyAsBytes())
+        assertEquals(listOf<String?>(null), authorizations.toList())
+        assertEquals(emptyList<Boolean>(), tokenCalls.toList())
+    }
+
+    @Test
+    fun `a built url with a text path parameter reaches the service decoded`() = testApplication {
+        setUpApplication()
+        val type = IMetadataService.MetadataType("tidal")
+        coEvery { metadata.albumExistsById(type, PATH_TEXT) } returns true
+
+        val url = RestMetadataService(config()).albumExistsByIdUrl(type, PATH_TEXT)
+        val response = client.get(url) { header(HttpHeaders.Authorization, "Bearer $FRESH_TOKEN") }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("true", response.bodyAsText())
+        coVerify { metadata.albumExistsById(type, PATH_TEXT) }
         assertEquals(emptyList<Boolean>(), tokenCalls.toList())
     }
 

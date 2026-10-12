@@ -171,6 +171,12 @@ val album = albums.byId(albumId)
 - **Errors.** A `401` is retried once with `token(true)`. A second `401` throws `RestException(401, …)`. A `400` throws `IllegalArgumentException` with the text of the response. Every other failure throws `RestException` with the status and the response text, or the status description when the body is empty. A `404` gives `null` for a method with a nullable return type and a `RestException` otherwise.
 - **Flows.** A method returning `Flow<T>` is cold and opens one SSE request each time it is collected. There is no automatic reconnect, because the server sends no resume position. Collect again to start over, and read the current state with the regular getter first where [Server-Sent Events](#server-sent-events) says the stream stays silent until something changes. A `Flow<ByteArray>` method streams the raw response body.
 - **File methods.** `streamSong`, `streamSongAtmos`, `downloadSong` and `streamEpisode` return a flow that sends its `GET` when it is collected. It passes `offset` as the query parameter and, when `offset` is above 0, as a `Range: bytes=<offset>-` header. It emits chunks of `chunkSize` bytes, the last one shorter. A `404` throws `RestException(404, …)` at collection time.
+- **URL builders.** Every method `foo` with a REST route has a second method `fooUrl(...)` that returns the absolute URL of the call as a `String` and sends nothing. It takes the path and query parameters of the route in route order. A parameter that has a default may be left out, and the server then applies its default. For `POST`, `PUT` and `DELETE` routes the body is not part of the URL. A route marked `PUBLIC` needs no token. For every other route the caller adds the `Authorization` header or the `synara-auth` cookie itself, as described in [Authentication](#authentication). File routes answer byte ranges, so a player that is given the URL can seek, see [File routes](#file-routes). `RestClient.url(request)` is the runtime function behind the builders and returns a Ktor `Url`.
+
+```kotlin
+val url = RestSongService(config).downloadSongUrl(songId, quality = 320)
+```
+
 - **Members without a REST route** throw `UnsupportedOperationException` when called.
 
 Known limits of the parameter encoding:
