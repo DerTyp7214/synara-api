@@ -14,6 +14,7 @@ import io.github.smiley4.ktoropenapi.delete
 import io.github.smiley4.ktoropenapi.get
 import io.github.smiley4.ktoropenapi.post
 import io.github.smiley4.ktoropenapi.route
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.auth.HttpAuthHeader
 import io.ktor.server.application.Application
@@ -112,7 +113,7 @@ class JwtService(
     }
 
     fun authenticate(route: Route) = route.apply {
-        post("/authenticate", {
+        post(PATH_AUTHENTICATE, {
             request {
                 body<AuthenticationRequest>()
             }
@@ -165,7 +166,7 @@ class JwtService(
             call.respond(HttpStatusCode.OK, token)
         }
 
-        post("/refresh-token", {
+        post(PATH_REFRESH_TOKEN, {
             request {
                 body<RefreshTokenRequest>()
             }
@@ -198,7 +199,7 @@ class JwtService(
         }
 
         authenticated(this) {
-            post("/register", {
+            post(PATH_REGISTER, {
                 request {
                     body<AuthenticationRequest>()
                 }
@@ -233,7 +234,7 @@ class JwtService(
 
                 call.respond(HttpStatusCode.OK, mapOf("userId" to newUser.id.toString()))
             }
-            get("/userInfo", {
+            get(PATH_USER_INFO, {
                 response {
                     HttpStatusCode.OK to {
                         body<UserInfo> {}
@@ -244,7 +245,7 @@ class JwtService(
 
                 call.respond(HttpStatusCode.OK, UserInfo.fromUser(user))
             }
-            get("/sessions", {
+            get(PATH_SESSIONS, {
                 response {
                     HttpStatusCode.OK to {
                         body<List<Session>> {}
@@ -255,7 +256,7 @@ class JwtService(
                 val sessions = sessionService.getSessions(user.id)
                 call.respond(HttpStatusCode.OK, sessions)
             }
-            delete("/sessions/{sessionId}", {
+            delete(PATH_SESSION, {
                 request {
                     pathParameter<String>("sessionId") {
                         description = "The session id to deactivate."
@@ -320,5 +321,21 @@ class JwtService(
         const val AUTH_COOKIE = "synara-auth"
         const val CLAIM_USERNAME = "usr"
         const val CLAIM_SESSION = "ses"
+
+        const val PATH_AUTHENTICATE = "/authenticate"
+        const val PATH_REFRESH_TOKEN = "/refresh-token"
+        const val PATH_REGISTER = "/register"
+        const val PATH_USER_INFO = "/userInfo"
+        const val PATH_SESSIONS = "/sessions"
+        const val PATH_SESSION = "/sessions/{sessionId}"
+
+        val HTTP_ROUTES: List<Pair<HttpMethod, String>> = listOf(
+            HttpMethod.Post to PATH_AUTHENTICATE,
+            HttpMethod.Post to PATH_REFRESH_TOKEN,
+            HttpMethod.Post to PATH_REGISTER,
+            HttpMethod.Get to PATH_USER_INFO,
+            HttpMethod.Get to PATH_SESSIONS,
+            HttpMethod.Delete to PATH_SESSION,
+        )
     }
 }

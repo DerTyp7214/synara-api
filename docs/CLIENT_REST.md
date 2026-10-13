@@ -15,16 +15,43 @@ Every route is mounted at the root of the server — there is no `/api` prefix. 
 
 The OpenAPI document is the authority for the server you are actually talking to; `REST_API.md` is the authority for the version in this repository.
 
+### Through the proxy
+
+A server that dials out to the standalone proxy is reached at `http(s)://<proxyHost>:<port>/<instanceId>/<path>`. `<path>` is the path the server itself uses, so `GET /song/search` becomes `GET /<instanceId>/song/search`. The proxy host, port, TLS flag and instance id are served by `GET /serverStats/proxyInfo` (`IServerStatsService.getProxyInfo()`, model `ProxyInfo` with `host`, `controlPort`, `ssl` and `id`). The websocket for the Kotlin RPC stays at `ws(s)://<proxyHost>:<port>/<instanceId>/rpc`.
+
+Authentication, request and response bodies, `Range` requests, `HEAD`, Server-Sent Events and compression behave as with direct access. Only these paths are reachable:
+
+- every generated route from [REST_API.md](REST_API.md)
+- the hand-written `POST /authenticate`, `POST /refresh-token`, `POST /register`, `GET /userInfo`, `GET /sessions` and `DELETE /sessions/{sessionId}`
+- `OPTIONS` for those paths, which answers the CORS preflight
+
+Everything else answers `404` through the proxy: `/swagger`, `/api.json`, `/static`, the web UI, `/mcp`, the hand-written `/radio/**` stream routes and the Subsonic API at `/rest/**`. A path with a trailing slash is refused as it is on the server itself. A malformed request target answers `400`.
+
+The proxy itself answers these statuses, with `Access-Control-Allow-Origin: *` when the request has an `Origin` header:
+
+| Status | When |
+|---|---|
+| `404` | the instance id is `proxy` or `instances`, which the proxy reserves |
+| `503` | no server is connected under the id, or the instance already has 128 requests open |
+| `501` | the connected server does not support HTTP through the proxy |
+| `431` | the request headers are larger than 65536 bytes |
+| `400` | the request method is longer than 255 characters |
+| `502` | the server or the connection to it failed before a response started |
+
+The proxy closes the connection of a client that reads nothing for 10 seconds while response data is waiting. A reverse proxy in front of the Synara proxy must not buffer responses, or Server-Sent Events arrive late.
+
 ## Authentication
 
 Two credentials exist. Details, lifetimes and the API-key scopes are in [AUTHENTICATION.md](AUTHENTICATION.md); the summary a client needs:
 
 - **JWT.** `POST /authenticate` with `{"username": …, "password": …}` returns `{token, refreshToken, expiresAt}` (`expiresAt` is epoch milliseconds; see [API_CONSTANTS.md#authentication](API_CONSTANTS.md#authentication) for the access token's lifetime). `POST /refresh-token` with `{"refreshToken": …}` returns a fresh pair. Use these two hand-written routes.
 - The generated `POST /auth/authenticate?username=&password=` reaches the same service but is **not** equivalent: the credentials travel in the query string (and therefore into logs and proxies), and a wrong password comes back as `400 Invalid username or password` — the RPC method throws `IllegalArgumentException`, which the REST layer maps to `400` — where `/authenticate` answers `401`. Handle both codes if you must call it.
-- Send the token as `Authorization: Bearer <jwt>` **or** as the cookie `synara-auth=<jwt>`. The cookie is checked first and wins if both are present. The server never sets that cookie itself — a web client writes it (`document.cookie`) after logging in.
+- Send the token as `Authorization: Bearer <jwt>` **or** as the cookie `synara-auth=<jwt>`. The cookie is checked first and wins if both are present. The server never sets that cookie itself — a web client writes it (`document.cookie`) after logging in. Behind the proxy, scope the cookie with `Path=/<instanceId>/`, see [Through the proxy](#through-the-proxy).
 - **API keys** (`?apiKey=`, header `X-API-Key`, or `Authorization: Bearer <key>`) are accepted only by `/radio/**` and `/mcp`, plus the Subsonic API at `/rest/**`, which takes a key with the `subsonic` scope in its `apiKey` parameter. They do not work for the generated services.
 
 Routes marked `PUBLIC` in the route table need no credential at all: the handshake, the `/auth/*` and `/serverStats/*` routes, `GET /image/imageData/{id}`, `GET /animatedImage/imageData/{id}` and `GET /release/releaseImage/{releaseId}`.
+
+Behind the proxy several instances share one origin. A cookie written with `path=/` is sent to every instance on that proxy, so the token of one server reaches the others. Write it with `Path=/<instanceId>/` instead, so the cookie string is `synara-auth=<jwt>; path=/<instanceId>/; SameSite=Strict`.
 
 CORS allows any origin and any method, but **not** credentials, so a browser cannot send the cookie cross-origin. Serve a web client from the same origin as the server (or put both behind one reverse proxy) whenever you need cookie authentication — which you do for `<audio>`, `<img>` and `EventSource`, none of which can set a header.
 
@@ -144,7 +171,7 @@ for try await line in stream.lines where line.hasPrefix("data: ") {
 
 ## File routes
 
-Methods annotated `@RestFileResponse` — `streamSong`, `streamSongAtmos`, `downloadSong`, `streamEpisode` — are registered for both **GET and HEAD**, answer with `Accept-Ranges: bytes` and `Content-Disposition: inline; filename="…"`, and run through Ktor's `PartialContent` (at most 10 ranges per request), so an ordinary `Range: bytes=…` request yields `206` with `Content-Range`. That is what makes seeking work in `<audio>`, `AVPlayer` and ExoPlayer.
+Methods annotated `@RestFileResponse` — `streamSong`, `streamSongAtmos`, `downloadSong`, `streamEpisode` — are registered for both **GET and HEAD**, answer with `Accept-Ranges: bytes` and `Content-Disposition: inline; filename="…"`, and run through Ktor's `PartialContent` (at most 10 ranges per request), so an ordinary `Range: bytes=…` request yields `206` with `Content-Range`. That is what makes seeking work in `<audio>`, `AVPlayer` and ExoPlayer. The header is always plain ASCII. `filename` holds the file name, and when the name has non-ASCII characters each of them is replaced by `_` there and a second parameter `filename*` holds the exact name, percent-encoded as UTF-8 (`filename*=utf-8''s%C3%A4nger.mp3`). A client that wants the exact name reads `filename*` when it is present and `filename` otherwise.
 
 - `HEAD` returns the `Content-Length` and the content type the server resolved for the file, without a body; it is the cheapest way to learn a stream's size *and* its type.
 - **The GET body's content type is not necessarily that type.** Only the HEAD response carries the resolved one; the GET (and ranged `206`) response is typed from the file extension by a generic table. MP3, M4A, OGG, WAV and AIFF files do arrive with an `audio/*` type, but FLAC and `.opus` files arrive as `application/octet-stream`. The same holds for podcast episodes: the server computes `audio/mpeg`, `audio/mp4`, `audio/aac`, `audio/ogg`, `audio/flac` or `audio/wav` from the extension, but that value reaches the HEAD response only, and a FLAC or Opus episode is `application/octet-stream` on GET. Learn the type from `HEAD`, or from the song's `audio.codec` — never from the streamed response.
@@ -166,7 +193,7 @@ val albums: IAlbumService = RestAlbumService(config)
 val album = albums.byId(albumId)
 ```
 
-`baseUrl` and `token` are suspending lambdas that are read on every request. `token` receives `forceRefresh = true` when the server answered `401` and returns `null` when no token is available. `headers` is an optional block that adds further headers to every request. Every request carries `X-Api-Version` with the version the module was compiled against. Bodies and responses are JSON, and routes marked `PUBLIC` are sent without an `Authorization` header.
+`baseUrl` and `token` are suspending lambdas that are read on every request. `baseUrl` may carry a path prefix. To reach a server through the proxy, return `"https://<proxyHost>:<port>/<instanceId>"` built from `ProxyInfo`. Every call, flow, file method and `<method>Url` builder then goes through the proxy, see [Through the proxy](#through-the-proxy). `token` receives `forceRefresh = true` when the server answered `401` and returns `null` when no token is available. `headers` is an optional block that adds further headers to every request. Every request carries `X-Api-Version` with the version the module was compiled against. Bodies and responses are JSON, and routes marked `PUBLIC` are sent without an `Authorization` header.
 
 - **Errors.** A `401` is retried once with `token(true)`. A second `401` throws `RestException(401, …)`. A `400` throws `IllegalArgumentException` with the text of the response. Every other failure throws `RestException` with the status and the response text, or the status description when the body is empty. A `404` gives `null` for a method with a nullable return type and a `RestException` otherwise.
 - **Flows.** A method returning `Flow<T>` is cold and opens one SSE request each time it is collected. There is no automatic reconnect, because the server sends no resume position. Collect again to start over, and read the current state with the regular getter first where [Server-Sent Events](#server-sent-events) says the stream stays silent until something changes. A `Flow<ByteArray>` method streams the raw response body.
@@ -310,7 +337,7 @@ For actual playback the player element does the fetching and cannot carry the he
 - **Forgetting `X-Api-Version`.** Without it the server treats you as a version-1 client: `streamSongAtmos` resolves to nothing (`404`) while songs still carry `atmos`, WAV and AIFF files are transcoded to FLAC before streaming, title tags are folded back into the song title and album edition tags into the album name, release and album editions arrive as separate entries, and server-driven UI arrives as `Fallback`. The complete list is the feature table in [API_CONSTANTS.md#features](API_CONSTANTS.md#features).
 - **Sending a bare object where a multi-body route expects a wrapper.** Two `b:` parameters mean one JSON object with a field per parameter.
 - **Expecting JSON error bodies.** Failures are plain text.
-- **Using the header for media.** `<audio>`, `<img>`, `EventSource` and `AVPlayer` cannot set `Authorization`; use the `synara-auth` cookie on the same origin, or a `PUBLIC` image route. There is no signed-URL or token-in-query mechanism for the generated services — API keys only open `/radio/**`, `/mcp` and the Subsonic API at `/rest/**`.
+- **Using the header for media.** `<audio>`, `<img>`, `EventSource` and `AVPlayer` cannot set `Authorization`; use the `synara-auth` cookie on the same origin (behind the proxy with `Path=/<instanceId>/`), or a `PUBLIC` image route. There is no signed-URL or token-in-query mechanism for the generated services — API keys only open `/radio/**`, `/mcp` and the Subsonic API at `/rest/**`.
 - **Assuming `404` means the route is wrong.** It usually means the method returned `null`.
 
 ## Next

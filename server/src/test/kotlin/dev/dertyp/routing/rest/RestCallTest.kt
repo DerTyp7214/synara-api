@@ -65,7 +65,10 @@ private object ProbeDefaults : ProbeApi {
     override fun stream(probeId: UUID, offset: Long): Flow<ByteArray>? = throw CapturedArguments(probeId, offset)
 }
 
-private class FakeProbeService(private val file: File?) : ProbeApi, RestFileProvider {
+private class FakeProbeService(
+    private val file: File?,
+    private val fileName: String? = null,
+) : ProbeApi, RestFileProvider {
     var touched = 0
 
     override suspend fun find(id: UUID): Probe? = if (id == KNOWN) Probe("known", 7) else null
@@ -82,7 +85,7 @@ private class FakeProbeService(private val file: File?) : ProbeApi, RestFileProv
     override suspend fun getFile(methodName: String, args: List<Any?>): StreamInfo? {
         if (methodName != "stream") return null
         val target = file ?: return null
-        return StreamInfo(target, ContentType.Application.OctetStream, target.length(), target.name)
+        return StreamInfo(target, ContentType.Application.OctetStream, target.length(), fileName ?: target.name)
     }
 
     companion object {
@@ -376,6 +379,36 @@ class RestCallTest {
         assertEquals("bytes", get.headers[HttpHeaders.AcceptRanges])
         assertEquals("inline; filename=probe.bin", get.headers[HttpHeaders.ContentDisposition])
         assertArrayEquals(fileBytes, get.readRawBytes())
+    }
+
+    @Test
+    fun `file names are sent as ascii with the exact name percent encoded beside it`() = testApplication {
+        setUpProbeApplication()
+        val expected = mapOf(
+            "song.mp3" to "inline; filename=song.mp3",
+            "my song.mp3" to "inline; filename=\"my song.mp3\"",
+            "a;b.mp3" to "inline; filename=\"a;b.mp3\"",
+            "a\"b\\c%.mp3" to "inline; filename=\"a\\\"b\\\\c%.mp3\"",
+            "s\u00E4nger.mp3" to "inline; filename=s_nger.mp3; filename*=utf-8''s%C3%A4nger.mp3",
+            "\u0142\u00F3d\u017A.mp3" to "inline; filename=__d_.mp3; filename*=utf-8''%C5%82%C3%B3d%C5%BA.mp3",
+            "\u4E2D\u6587.mp3" to "inline; filename=__.mp3; filename*=utf-8''%E4%B8%AD%E6%96%87.mp3",
+            "a\uD83D\uDE00b.mp3" to "inline; filename=a_b.mp3; filename*=utf-8''a%F0%9F%98%80b.mp3",
+            "\u00E9 \"50%\".mp3" to
+                "inline; filename=\"_ \\\"50%\\\".mp3\"; filename*=utf-8''%C3%A9%20%2250%25%22.mp3",
+            "\u00E9!#$&+-.^_`|~'()*.mp3" to
+                "inline; filename=\"_!#$&+-.^_`|~'()*.mp3\"; filename*=utf-8''%C3%A9!#$&+-.^_`|~%27%28%29%2A.mp3",
+        )
+        for ((name, header) in expected) {
+            fake = FakeProbeService(file, name)
+            val get = client.get("/probe/stream/${UUID.randomUUID()}")
+            assertEquals(HttpStatusCode.OK, get.status, name)
+            assertEquals(header, get.headers[HttpHeaders.ContentDisposition], name)
+            assertArrayEquals(fileBytes, get.readRawBytes(), name)
+
+            val head = client.head("/probe/stream/${UUID.randomUUID()}")
+            assertEquals(HttpStatusCode.OK, head.status, name)
+            assertNull(head.headers[HttpHeaders.ContentDisposition], name)
+        }
     }
 
     @Test

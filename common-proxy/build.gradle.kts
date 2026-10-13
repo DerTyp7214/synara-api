@@ -10,4 +10,12 @@ version = "0.0.1"
 dependencies {
     api(libs.ktor.server.websockets)
     api(libs.kotlinx.serialization.json)
+
+    testImplementation(libs.junit.jupiter.api)
+    testImplementation(libs.kotlin.test)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }

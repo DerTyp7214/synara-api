@@ -268,17 +268,24 @@ class RestCall<S : Any>(
                 ),
             )
         } else {
-            call.response.header(
-                HttpHeaders.ContentDisposition,
-                ContentDisposition.Inline.withParameter(
-                    ContentDisposition.Parameters.FileName,
-                    streamInfo.fileName,
-                ).toString(),
-            )
+            call.response.header(HttpHeaders.ContentDisposition, inlineFileDisposition(streamInfo.fileName))
             call.respondFile(streamInfo.file)
         }
         return true
     }
+}
+
+private fun inlineFileDisposition(fileName: String): String {
+    if (fileName.all { it.code < 0x80 }) {
+        return ContentDisposition.Inline.withParameter(ContentDisposition.Parameters.FileName, fileName).toString()
+    }
+    val ascii = buildString {
+        fileName.codePoints().forEach { appendCodePoint(if (it < 0x80) it else '_'.code) }
+    }
+    return ContentDisposition.Inline
+        .withParameter(ContentDisposition.Parameters.FileName, ascii)
+        .withParameter(ContentDisposition.Parameters.FileNameAsterisk, fileName)
+        .toString()
 }
 
 suspend fun <S : Any> RoutingContext.restRoute(

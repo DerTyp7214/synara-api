@@ -191,6 +191,7 @@ dependencies {
     testImplementation(libs.exposed.migration.jdbc)
     testImplementation(project(":common-rpc:rest-client"))
     testImplementation(project(":mock-server"))
+    testImplementation(project(":proxy"))
 }
 
 val testForks: Int = (project.findProperty("testForks") as String?)?.toInt() ?: run {

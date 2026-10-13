@@ -21,6 +21,7 @@ val systemModule = module {
     singleOf(::MirrorService)
     singleOf(::RemoteMirrorService)
     singleOf(::ReverseProxyService)
+    singleOf(::ReverseProxyHttpGateway)
     singleOf(::ServerStatsService)
     singleOf(::RpcMetricsCollector)
     singleOf(::RpcMetricsService)

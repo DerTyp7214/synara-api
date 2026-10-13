@@ -11,7 +11,7 @@ How the Synara server is put together: modules, request flow, package layout, an
 | `:common-rpc:compiler` | KSP processor that generates the client-side service registry from the `common-rpc` interfaces. |
 | `:common-rpc:doc-compiler` | KSP processor that reads the doc annotations and writes [RPC_SERVICES.md](RPC_SERVICES.md) and [MODELS.md](MODELS.md). |
 | `:common-rpc:rest-compiler` | KSP processor that generates the REST route registration functions (`register<Service>Rest`) into `dev.dertyp.routing.rest` during `:server:kspKotlin`, and writes [REST_API.md](REST_API.md). |
-| `:proxy` + `:common-proxy` | Standalone reverse proxy in front of one or more Synara servers; see `docker-compose.proxy.yml` and `Dockerfile.proxy`. |
+| `:proxy` + `:common-proxy` | Standalone reverse proxy in front of one or more Synara servers, which dial out to it and receive kRPC websockets and plain HTTP (the REST API) through that connection; see [Reverse proxy](#reverse-proxy), [Tunnel protocol](DEVELOPMENT.md#proxy-tunnel-protocol), `docker-compose.proxy.yml` and `Dockerfile.proxy`. |
 | `:listen-backup` + `:common-listen-backup` | Standalone receiver that stores a copy of listening history; see [LISTEN_BACKUP.md](LISTEN_BACKUP.md). |
 | `:credential-server` + `:common-credentials` | Standalone server that holds secrets (importer logins, API keys, plugin credentials) for one or more Synara servers. See [CREDENTIAL_SERVER.md](CREDENTIAL_SERVER.md), `docker-compose.credentials.yml` and `Dockerfile.credentials`. |
 | `:plugin-api` | Interfaces (`ISynaraPlugin`, `IImporter`, ...) third-party plugins implement; see [PLUGINS.md](PLUGINS.md). |
@@ -23,8 +23,8 @@ Three Python sidecars run alongside the server (see `docker-compose.yml`): `tran
 
 ```mermaid
 flowchart LR
-    Client -->|optional| Proxy[":proxy"]
-    Proxy --> Ktor
+    Client -->|"optional: kRPC and REST"| Proxy[":proxy"]
+    Proxy -.->|"tunnel opened by the server"| Ktor
     Client --> Ktor["Ktor Application\n(Routing.kt)"]
     Ktor -->|"/rpc/services"| RpcRegistry["RpcRegistry.kt\nregisterAuthenticatedServices"]
     Ktor -->|"generated REST route"| RestRegistry["RestRegistry.kt\n+ generated dev.dertyp.routing.rest"]
@@ -37,6 +37,12 @@ flowchart LR
 ```
 
 Both `/rpc/services` (kRPC over CBOR, see `Routing.kt`) and the generated REST routes reach the same service instances and go through the same wrapper chain, so behavior (caching, metrics, client compatibility, authorization, logging) is identical regardless of transport. `/rpc` and `/rpc/auth` (`registerPublicServices` in `routing/RpcRegistry.kt`) are unauthenticated: stats, auth/login, and the handshake. Their REST counterpart, `registerPublicRestServices` (`routing/RestRegistry.kt`), is mounted inside an optional `synara-auth` scope (`authenticate("synara-auth", optional = true) { ... }` in `Routing.kt`): a bearer token is honoured when present, but only functions annotated `@RestPublic` (for example the image/cover-data endpoints) work without one — the rest of that block still requires a user to resolve. Everything under `jwtService.authenticated { ... }` (`registerAuthenticatedServices`/`registerAuthenticatedRestServices`) requires a valid JWT.
+
+### Reverse proxy
+
+The standalone `:proxy` does not connect to the servers behind it. Each server dials out to `/proxy/server` and keeps that websocket open (`services/ReverseProxyService.kt`), and the proxy assigns it an instance id. Clients reach the instance at `<proxyHost>:<port>/<instanceId>/...`. A websocket upgrade is relayed as kRPC. A plain HTTP request is tunnelled over the same connection (`HttpTunnelRoute.kt` in `:proxy`) when the server registered with `http=1`, the frame format is in [Tunnel protocol](DEVELOPMENT.md#proxy-tunnel-protocol).
+
+The server replays every tunnelled request against its own HTTP port on 127.0.0.1 (`services/ReverseProxyHttpGateway.kt`), so it passes through the same authentication, wrapper chain, `Range` handling, SSE and compression as a direct request. Sessions created this way record the address 127.0.0.1, as they do over proxied kRPC. Before it replays a request, `ReverseProxyRouteAllowlist` checks the method and path against the routes the generated code registers (`GeneratedRestRoutes.manifest`) plus the hand-written auth routes (`JwtService.HTTP_ROUTES`). `OPTIONS` is allowed for any of those paths. Anything else, such as Swagger, `/api.json`, `/static`, the mirror, MCP, the radio stream routes and the Subsonic API, is answered with `404` and never reaches the router. A path with a trailing slash, a `?` or `#` inside the path, or a `.` or `..` segment after decoding is not allowed.
 
 ### Wrapper chain
 

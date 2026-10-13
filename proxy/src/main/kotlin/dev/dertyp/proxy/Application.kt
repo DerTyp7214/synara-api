@@ -15,6 +15,8 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
@@ -32,16 +34,24 @@ private val logger = LoggerFactory.getLogger("Proxy")
 class ServerTunnel(
     val id: String,
     val name: String?,
-    val session: WebSocketServerSession
+    val session: WebSocketServerSession,
+    val http: Boolean
 ) {
     val clients = ConcurrentHashMap<UUID, WebSocketServerSession>()
     val sendChannel = Channel<ProxyMessage>(Channel.UNLIMITED)
+    val httpStreams = HttpStreams(sendChannel)
 
     init {
         session.launch {
             for (msg in sendChannel) {
+                val frame = try {
+                    msg.toFrame()
+                } catch (e: IllegalArgumentException) {
+                    logger.error("[{}] Dropping a message that cannot be encoded", id, e)
+                    continue
+                }
                 try {
-                    session.send(msg.toFrame())
+                    session.send(frame)
                 } catch (e: Exception) {
                     logger.error("[{}] Failed to send message to server tunnel", id, e)
                     break
@@ -85,6 +95,13 @@ fun Application.module() {
 
             val requestedId = call.request.queryParameters["id"]
             val serverName = call.request.queryParameters["name"]
+            val http = call.request.queryParameters[HttpTunnel.CAPABILITY_PARAMETER] == HttpTunnel.CAPABILITY_VALUE
+
+            if (requestedId in reservedInstanceIds) {
+                logger.warn("Server connection rejected: ID {} is reserved", requestedId)
+                close(CloseReason(CloseReason.Codes.CANNOT_ACCEPT, "Requested ID is reserved"))
+                return@webSocket
+            }
 
             var assignedId = requestedId ?: UUID.randomUUID().toString().take(8)
 
@@ -98,8 +115,8 @@ fun Application.module() {
                 }
             }
 
-            logger.info("Server connected: ID={}, Name={}", assignedId, serverName)
-            val tunnel = ServerTunnel(assignedId, serverName, this)
+            logger.info("Server connected: ID={}, Name={}, HTTP={}", assignedId, serverName, http)
+            val tunnel = ServerTunnel(assignedId, serverName, this, http)
             tunnels[assignedId] = tunnel
 
             send(ProxyMessage.AssignedId(assignedId).toFrame())
@@ -113,7 +130,15 @@ fun Application.module() {
                             if (client != null) {
                                 val outFrame =
                                     if (msg.isBinary) Frame.Binary(true, msg.data) else Frame.Text(String(msg.data))
-                                client.send(outFrame)
+                                try {
+                                    client.send(outFrame)
+                                } catch (e: Exception) {
+                                    currentCoroutineContext().ensureActive()
+                                    logger.info("[{}] Client {} is gone: {}", assignedId, msg.clientId, e.toString())
+                                    tunnel.clients.remove(msg.clientId)
+                                    tunnel.sendChannel.send(ProxyMessage.ClientDisconnected(msg.clientId))
+                                    client.close()
+                                }
                             } else {
                                 logger.debug("[{}] Dropping frame for unknown client {}", assignedId, msg.clientId)
                             }
@@ -128,6 +153,11 @@ fun Application.module() {
                             tunnel.sendChannel.send(ProxyMessage.Pong)
                         }
 
+                        is ProxyMessage.HttpResponse,
+                        is ProxyMessage.HttpBody,
+                        is ProxyMessage.HttpWindow,
+                        is ProxyMessage.HttpReset -> tunnel.httpStreams.dispatch(msg)
+
                         else -> {}
                     }
                 }
@@ -137,6 +167,7 @@ fun Application.module() {
                 }
             } finally {
                 tunnels.remove(assignedId)
+                tunnel.httpStreams.close()
                 tunnel.clients.values.forEach {
                     it.close(CloseReason(CloseReason.Codes.SERVICE_RESTART, "Server disconnected"))
                 }
@@ -148,7 +179,7 @@ fun Application.module() {
             val id = call.parameters["id"] ?: return@webSocket
             val uri = call.request.uri.removePrefix("/$id")
 
-            if (id == "proxy" || id == "instances") return@webSocket
+            if (id in reservedInstanceIds) return@webSocket
 
             if (!uri.startsWith("/rpc")) {
                 logger.warn("Rejecting non-RPC path request for ID {}: {}", id, uri)
@@ -182,5 +213,7 @@ fun Application.module() {
                 tunnel.sendChannel.send(ProxyMessage.ClientDisconnected(clientId))
             }
         }
+
+        httpTunnel(tunnels)
     }
 }

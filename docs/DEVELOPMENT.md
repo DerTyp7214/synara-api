@@ -64,6 +64,8 @@ then review the diff — this is what turns REST routing changes into an intenti
 
 The generated Kotlin REST clients (see [Generated files](#generated-files)) are tested against the same golden and against the real routes. `RestClientRouteGoldenTest` checks every generated client call (verb, path and parameters) against `routes.golden` and every URL builder against the request of its call, so it fails when a client and the server disagree about a route and is refreshed together with the golden above. `RestClientRoundTripTest` runs the clients against the generated server routes. It also fetches URLs that the builders returned. Both are in `server/src/test/kotlin/dev/dertyp/routing/rest/` and run with `./gradlew :server:test --tests 'dev.dertyp.routing.rest.RestClient*'`.
 
+The reverse proxy tunnel is covered on three levels. `ProtocolTest` and `HttpTunnelCreditTest` in `common-proxy` check the frame encoding and the credit windows. `ProxyHttpTunnelTest` in `proxy`, next to `ProxyApplicationTest`, runs the proxy routes against a fake server connection. In `server`, `ReverseProxyRouteAllowlistTest` checks which method and path pairs the tunnel lets through, `ReverseProxyHttpGatewayTest` the replay against the loopback port, and `ReverseProxyRestEndToEndTest` runs the real proxy against the real generated routes. `RestClientRouteGoldenTest` also checks the generated clients with a base URL that has a path prefix, as used behind the proxy. They run with `./gradlew :common-proxy:test :proxy:test` and `./gradlew :server:test --tests 'dev.dertyp.services.ReverseProxy*'`.
+
 `python3 scripts/test-times.py` reads the JUnit XML reports of the last run and prints the test times per module, database type and class; `--json <file>` saves them and `--compare <file>` shows the change against such a file, for the classes both have a report for. Gradle keeps only the reports of the last run of a test task, so a run with `--tests` leaves the reports of those classes alone.
 
 `python3 scripts/commit-stats.py` regenerates [STATS.html](STATS.html), an interactive page of commit statistics to open in a browser, from the git history of this repository and of the sibling checkouts `synara-android` and `SynaraComposeMultiplatform`, when they exist next to it; `-o <file>` writes it elsewhere. It only reads from git, and unchanged history gives a byte-identical page. The pages workflow checks out this repository only, so the published page covers it alone.
@@ -147,6 +149,50 @@ The generator writes what Exposed proposes, and three kinds of change need a cor
 `SchemaDriftTest` fails for a table change without a migration, and `MigrationFilesTest` for a file that exists for only one database type or for a Flyway Kotlin class. Data changes stay custom migrations in the package `dev.dertyp.migrations.custom`, which is created again with the next one.
 
 At startup `MigrationBaseCheck` refuses a database that is not at the base (see [ARCHITECTURE.md](ARCHITECTURE.md#migrations)), and the message names the `0.0.1-dev` image to start first, see [Updating from 0.0.1](../README.md#updating-from-001). Backups carry the schema version they were made at, and a restore applies the same rule before it changes anything, so a new migration needs no change to the backup code.
+
+## Proxy tunnel protocol
+
+The standalone `:proxy` and the server share one binary protocol on the websocket that the server opens to `/proxy/server`. The code is in `common-proxy/src/main/kotlin/dev/dertyp/proxy/` (`Protocol.kt`, `HttpTunnel.kt`) and is used by `:proxy` (`Application.kt`, `HttpTunnelRoute.kt`) and by the server (`services/ReverseProxyService.kt`, `services/ReverseProxyHttpGateway.kt`). The request flow and the path scope are in [ARCHITECTURE.md](ARCHITECTURE.md#reverse-proxy).
+
+Every frame is binary: `[u8 type][16-byte id][u8 subType][payload]`. The id is the client id of a kRPC connection or the stream id of an HTTP request. Numbers are big endian.
+
+| Type | Message | subType | Payload |
+|---|---|---|---|
+| 0 | `NewClient` | 0 | JSON `{uri, headers}` |
+| 1 | `ClientFrame` | 1 for a binary websocket frame, else 0 | the frame bytes |
+| 2 | `ClientDisconnected` | 0 | none |
+| 3 | `AssignedId` | 0 | the instance id as UTF-8 text |
+| 4 | `Ping` | 0 | none |
+| 5 | `Pong` | 0 | none |
+| 6 | `HttpRequest` | bit 0 set when the request has no body | `[u8 methodLength][method, ASCII][u32 uriLength][uri, UTF-8][headers]` |
+| 7 | `HttpResponse` | bit 0 set when the response has no body | `[u16 status][headers]` |
+| 8 | `HttpBody` | bit 0 set on the last chunk | up to 65536 bytes of body |
+| 9 | `HttpReset` | the reason | none |
+| 10 | `HttpWindow` | 0 | `[u32 increment]` |
+
+`headers` is `[u16 count]` followed by `count` entries of `[u16 nameLength][name][u32 valueLength][value]`. A name with several values is sent as several entries. The proxy removes hop-by-hop headers (`Connection` and the headers it names, `Keep-Alive`, `Transfer-Encoding`, `Upgrade` and the like) in both directions, and `Host`, `Expect` and `HTTP2-Settings` from requests. The `uri` is the request target without the instance id prefix. A frame that cannot be decoded is dropped.
+
+A header value travels in the frame as text with one character per byte of the header line, written as UTF-8. Netty reads header bytes that way, and the gateway converts on both sides of its loopback client, which reads and writes header text as UTF-8. A value whose bytes are valid UTF-8, plain ASCII included, therefore has the same bytes with and without the proxy, in requests and in responses. A value whose bytes are not valid UTF-8 is not byte-exact: in a request every byte from `0x80` on arrives at the server as the two bytes of its UTF-8 form, and in a response the bytes that are not UTF-8 reach the client as `?`. The file name in the `Content-Disposition` header of the file routes is not such a value: the header is plain ASCII, with the exact name percent-encoded in `filename*`, so it has the same bytes with and without the proxy. `ReverseProxyRestEndToEndTest` compares request header values and that file name header with direct access.
+
+`HttpReset` reasons: `CANCEL` (0), `REFUSED` (1, no free stream), `INTERNAL` (2), `PROTOCOL` (3, a peer broke the rules of the protocol) and `HEAD_TOO_LARGE` (4). An unknown code reads as `INTERNAL`. The proxy turns `REFUSED` into `503`, `HEAD_TOO_LARGE` into `431` and every other reset before the response head into `502`.
+
+| Limit | Value | Constant in `HttpTunnel` |
+|---|---|---|
+| Body chunk | 65536 bytes | `BODY_CHUNK_SIZE` |
+| Initial window per stream and direction | 262144 bytes | `INITIAL_WINDOW` |
+| Window grant threshold | 65536 bytes | `WINDOW_GRANT_THRESHOLD` |
+| Request head or response head | 65536 bytes | `MAX_HEAD_SIZE` |
+| Open HTTP streams per tunnel | 128 | `MAX_CONCURRENT_STREAMS` |
+
+Flow control is a credit per stream and per direction, so a slow reader of one response holds back only that stream. The sender of body bytes may send as many bytes as it has credit, starting with the initial window (`HttpSendWindow`). The receiver counts the bytes that arrived against its window (`HttpReceiveWindow`). A frame that exceeds the window is a protocol violation and resets the stream with `PROTOCOL`. Once the receiver has handed at least the grant threshold of bytes on to its consumer, it sends an `HttpWindow` frame with that number. A grant that would overflow the credit is a violation too. The head, the empty last `HttpBody` and the reset frames cost no credit. `kRPC` frames (`ClientFrame`) have no credit. The proxy queues them per client without a bound, so a kRPC client that stops reading costs memory on the proxy and does not delay the HTTP streams of the same instance.
+
+Capability: the server adds `http=1` to the query of its `/proxy/server` registration. A proxy that does not know the parameter ignores it and tunnels kRPC only. A proxy that knows it and receives a registration without it answers HTTP requests for that instance with `501`. A server never sends an HTTP frame unless the proxy sent one first, so an older server that does not know the types is not affected.
+
+Operational notes:
+
+- A reverse proxy in front of the Synara proxy (nginx and similar) must not buffer responses, or SSE events are delayed.
+- The proxy disconnects a client that reads nothing for 10 seconds while data is pending (the response write timeout of Netty).
+- There is no environment variable for any of this.
 
 ## Dependency updates
 

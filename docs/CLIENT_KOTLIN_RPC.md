@@ -67,7 +67,7 @@ Create it once and keep it for the lifetime of the app.
 
 | Member | Contract |
 |---|---|
-| `suspend fun getRpcUrl(): String?` | Base URL with a `ws://` or `wss://` scheme, without a trailing slash — the manager appends `/rpc`, `/rpc/auth` and `/rpc/services` to it. A path prefix is allowed (that is how a proxy id is carried). `null` means "not configured yet". |
+| `suspend fun getRpcUrl(): String?` | Base URL with a `ws://` or `wss://` scheme, without a trailing slash — the manager appends `/rpc`, `/rpc/auth` and `/rpc/services` to it. A path prefix is allowed (that is how a proxy id is carried), the REST counterpart is described in [Through the proxy](CLIENT_REST.md#through-the-proxy). `null` means "not configured yet". |
 | `suspend fun setRpcUrl(host: String, port: Int, ssl: Boolean, path: String)` | Called by the manager when it demotes a `wss://` URL to `ws://` after a TLS failure. Persist the change. |
 | `fun getAuthToken(): String?` | The current JWT access token. |
 | `fun getRefreshToken(): String?` | The current refresh token, or `null` if there is none. |

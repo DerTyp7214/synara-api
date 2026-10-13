@@ -96,6 +96,10 @@ The cookie exists for contexts that cannot set headers: `<img>`, `<audio>` and `
 
 Two path families skip JWT authentication entirely: anything ending in `/callback` (OAuth returns) and anything containing `/proxy/`.
 
+## Through the proxy
+
+REST requests that reach the server through the standalone proxy authenticate exactly like direct requests: the server replays them against its own HTTP port, so the `Authorization` header and the cookie are checked by the same code, see [ARCHITECTURE.md](ARCHITECTURE.md#reverse-proxy). A session created through the proxy records the address 127.0.0.1, the same as a session created over proxied kRPC. Several instances share the origin of the proxy, so a web client scopes the cookie with `path=/<instanceId>/` instead of `path=/`, see [CLIENT_REST.md](CLIENT_REST.md#through-the-proxy).
+
 ## Admin and capabilities
 
 Authorization has two levels. `isAdmin` is a flag on the user; capabilities are a list. **An admin implicitly has every capability** — `hasCapability` returns true for an admin regardless of the list ([User.kt](../common-rpc/src/commonMain/kotlin/dev/dertyp/data/User.kt)). The current user's own flags come from `IUserService.me()` (`GET /user/me`) or `GET /userInfo`; use them to hide actions the user cannot perform, and still handle the failure, because the server checks independently. The two return different models — `me()` answers [`User`](MODELS.md#devdertypdatauser), `GET /userInfo` answers [`UserInfo`](MODELS.md#devdertypdatauserinfo) — but both carry the same fields today, and neither contains the password hash.

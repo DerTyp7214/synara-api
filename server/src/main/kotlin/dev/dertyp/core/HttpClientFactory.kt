@@ -74,6 +74,7 @@ class HttpClientFactory : Service() {
         const val LISTEN_BACKUP = "listen-backup"
         const val MIRROR = "mirror"
         const val REVERSE_PROXY = "reverse-proxy"
+        const val REVERSE_PROXY_LOOPBACK = "reverse-proxy-loopback"
         const val PODCAST_FEED = "podcast-feed"
         const val PODCAST_MEDIA = "podcast-media"
         const val PODCAST_INDEX = "podcast-index"

@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.UnsynchronizedAppenderBase
@@ -31,7 +32,9 @@ import org.koin.dsl.module
 import org.koin.test.KoinTest
 import org.slf4j.LoggerFactory
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -43,6 +46,14 @@ class ReverseProxyServiceTest : KoinTest {
 
         override fun append(event: ILoggingEvent) {
             if (event.formattedMessage.startsWith("Attempting to connect") && attempts.getAndIncrement() == 0) action()
+        }
+    }
+
+    class ErrorMessages : UnsynchronizedAppenderBase<ILoggingEvent>() {
+        val messages = CopyOnWriteArrayList<String>()
+
+        override fun append(event: ILoggingEvent) {
+            if (event.level == Level.ERROR) messages.add(event.formattedMessage)
         }
     }
 
@@ -81,6 +92,7 @@ class ReverseProxyServiceTest : KoinTest {
                 single { mockk<ReleaseService>(relaxed = true) }
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { HttpClientFactory() }
+                single { ReverseProxyHttpGateway() }
             })
         }
     }
@@ -242,6 +254,74 @@ class ReverseProxyServiceTest : KoinTest {
             assertEquals("ok", service.proxyId)
             job.cancelAndJoin()
         } finally {
+            server.stop(500, 500)
+            tearDown()
+        }
+    }
+
+    @Test
+    fun `a registration rejected before an ID was assigned is retried after the delay`() = runBlocking {
+        val attempts = AtomicInteger(0)
+        val accepting = AtomicBoolean(false)
+
+        val server = embeddedServer(Netty, port = 0) {
+            install(WebSockets)
+            routing {
+                webSocket("/proxy/server") {
+                    attempts.incrementAndGet()
+                    if (accepting.get()) {
+                        send(ProxyMessage.AssignedId("accepted").toFrame())
+                        delay(2.seconds)
+                    } else {
+                        close(CloseReason(CloseReason.Codes.CANNOT_ACCEPT, "Requested ID already in use"))
+                    }
+                }
+            }
+        }.start(wait = false)
+
+        val port = server.engine.resolvedConnectors().first().port
+
+        val config = MapApplicationConfig(
+            "proxy.hostname" to "127.0.0.1",
+            "proxy.controlPort" to port.toString(),
+            "proxy.id" to "synara-server"
+        )
+
+        val mockApp = mockk<Application>(relaxed = true)
+        setupKoin(mockApp)
+
+        val serviceLogger = LoggerFactory.getLogger(ReverseProxyService::class.simpleName) as Logger
+        val errors = ErrorMessages()
+        errors.context = serviceLogger.loggerContext
+        errors.start()
+        serviceLogger.addAppender(errors)
+        val service = ReverseProxyService(ServerConfig(config))
+        val job = launch {
+            service.startService()
+        }
+
+        try {
+            withTimeout(10.seconds) {
+                while (attempts.get() == 0) delay(10.milliseconds)
+            }
+            delay(2.seconds)
+
+            assertEquals(1, attempts.get())
+            assertNull(service.proxyId)
+            assertEquals(1, errors.messages.size)
+            assertTrue(errors.messages.single().contains("CANNOT_ACCEPT Requested ID already in use"))
+
+            accepting.set(true)
+
+            withTimeout(10.seconds) {
+                while (service.proxyId == null) delay(10.milliseconds)
+            }
+
+            assertEquals("accepted", service.proxyId)
+            assertEquals(2, attempts.get())
+        } finally {
+            serviceLogger.detachAppender(errors)
+            job.cancelAndJoin()
             server.stop(500, 500)
             tearDown()
         }

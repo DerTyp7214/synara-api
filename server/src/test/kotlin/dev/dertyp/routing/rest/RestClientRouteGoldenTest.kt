@@ -146,7 +146,12 @@ class RestClientRouteGoldenTest {
         return found
     }
 
-    private suspend fun problems(route: GoldenRoute): List<String> {
+    private suspend fun problems(
+        route: GoldenRoute,
+        baseUrl: String = BASE_URL,
+        prefix: List<String> = emptyList(),
+        requests: MutableList<HttpRequestData> = mutableListOf(),
+    ): List<String> {
         val type = clientClass(route.interfaceName) ?: return listOf("no generated client for ${route.interfaceName}")
         val function = type.memberFunctions.singleOrNull { it.name == route.functionName }
             ?: return listOf("the client has no single function named ${route.functionName}")
@@ -168,7 +173,6 @@ class RestClientRouteGoldenTest {
         }
         var builtUrl: String? = null
 
-        val requests = mutableListOf<HttpRequestData>()
         val tokenCalls = mutableListOf<Boolean>()
         val failure = HttpClient(
             MockEngine { request ->
@@ -178,7 +182,7 @@ class RestClientRouteGoldenTest {
         ).use { httpClient ->
             val config = RestClientConfig(
                 httpClient = httpClient,
-                baseUrl = { BASE_URL },
+                baseUrl = { baseUrl },
                 token = { forceRefresh ->
                     tokenCalls += forceRefresh
                     TOKEN
@@ -222,7 +226,7 @@ class RestClientRouteGoldenTest {
 
         if (request.method.value != route.method) found += "method is ${request.method.value}"
 
-        val mappedPath = mappedPath(route, request.url.segments, arguments)
+        val mappedPath = mappedPath(route, request.url.segments.drop(prefix.size), arguments)
         if (mappedPath != route.path) found += "path is $mappedPath (sent as ${request.url.encodedPath})"
         if (builtUrl != null && builtUrl != request.url.toString()) {
             found += "the URL builder returned $builtUrl, the call sent ${request.url}"
@@ -330,7 +334,51 @@ class RestClientRouteGoldenTest {
         }
     }
 
+    private suspend fun prefixedProblems(route: GoldenRoute, baseUrl: String): List<String> {
+        val requests = mutableListOf<HttpRequestData>()
+        val found = problems(route, baseUrl, listOf(PREFIX), requests).toMutableList()
+        val url = requests.singleOrNull()?.url ?: return found
+        val expectedStart = "/$PREFIX/"
+        if (url.host != Url(BASE_URL).host) found += "host is ${url.host}"
+        if (url.port != Url(BASE_URL).port) found += "port is ${url.port}"
+        if (url.segments.firstOrNull() != PREFIX) found += "the path ${url.encodedPath} does not start with the prefix"
+        if (!url.encodedPath.startsWith(expectedStart) || url.encodedPath.startsWith("$expectedStart/")) {
+            found += "the path ${url.encodedPath} does not continue /$PREFIX with exactly one slash"
+        }
+        val goldenStart = route.path.split('/').first { it.isNotEmpty() }
+        if (url.encodedPath.removePrefix(expectedStart).substringBefore('/') != goldenStart) {
+            found += "the path ${url.encodedPath} does not continue /$PREFIX with /$goldenStart"
+        }
+        return found
+    }
+
+    private suspend fun prefixedFailures(baseUrl: String) {
+        val routes = goldenRoutes().filterNot { it.method == HEAD }
+        assertTrue(routes.isNotEmpty(), "the golden lists no routes")
+        val failures = routes.mapNotNull { route ->
+            prefixedProblems(route, baseUrl).takeIf { it.isNotEmpty() }
+                ?.joinToString("\n", prefix = "${route.line}\n") { "    $it" }
+        }
+        if (failures.isNotEmpty()) {
+            fail<Unit>(
+                "${failures.size} of ${routes.size} client calls with the base url $baseUrl differ from " +
+                    "routes.golden:\n" + failures.joinToString("\n")
+            )
+        }
+    }
+
+    @Test
+    fun `every client call and URL builder keeps the path prefix of its base url`() = runTest {
+        prefixedFailures("$BASE_URL/$PREFIX")
+    }
+
+    @Test
+    fun `every client call and URL builder keeps a path prefix that ends with a slash`() = runTest {
+        prefixedFailures("$BASE_URL/$PREFIX/")
+    }
+
     private companion object {
+        const val PREFIX = "prefix-id"
         const val BASE_URL = "http://synara.test"
         const val TOKEN = "golden-token"
         const val HEAD = "HEAD"

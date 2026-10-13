@@ -5,6 +5,7 @@ import dev.dertyp.core.HttpClientFactory
 import dev.dertyp.core.ProxiedKey
 import dev.dertyp.core.cborFor
 import dev.dertyp.core.clientInfo
+import dev.dertyp.proxy.HttpTunnel
 import dev.dertyp.proxy.ProxyMessage
 import dev.dertyp.routing.registerAuthenticatedServices
 import dev.dertyp.routing.registerPublicServices
@@ -49,6 +50,7 @@ class ReverseProxyService(
     config: ServerConfig
 ) : Service() {
     private val httpClientFactory by inject<HttpClientFactory>()
+    private val httpGateway by inject<ReverseProxyHttpGateway>()
 
     private val client: HttpClient
         get() = httpClientFactory.sharedWithDefaultEngine(HttpClientFactory.REVERSE_PROXY) {
@@ -131,13 +133,16 @@ class ReverseProxyService(
                     parameters.append("id", requestedId)
                     serverName?.let { parameters.append("name", it) }
                     proxyKey?.let { parameters.append("key", it) }
+                    parameters.append(HttpTunnel.CAPABILITY_PARAMETER, HttpTunnel.CAPABILITY_VALUE)
                 }
             }
         ) {
             val activeServers = ConcurrentHashMap<UUID, ProxyKrpcServer>()
+            val httpStreams = httpGateway.connect(this) { send(it.toFrame()) }
             logger.info("Connected to reverse proxy control at $proxyHost:$controlPort")
             _isConnected.store(true)
             lastInteraction = TimeSource.Monotonic.markNow()
+            var idAssigned = false
 
             try {
                 launch {
@@ -197,6 +202,7 @@ class ReverseProxyService(
 
                         is ProxyMessage.AssignedId -> {
                             this@ReverseProxyService.proxyId = msg.id
+                            idAssigned = true
                             logger.info("Proxy assigned ID: ${msg.id}")
                         }
 
@@ -204,11 +210,25 @@ class ReverseProxyService(
                         is ProxyMessage.Ping -> {
                             send(ProxyMessage.Pong.toFrame())
                         }
+
+                        is ProxyMessage.HttpRequest,
+                        is ProxyMessage.HttpBody,
+                        is ProxyMessage.HttpWindow,
+                        is ProxyMessage.HttpReset -> httpStreams.handle(msg)
+
+                        is ProxyMessage.HttpResponse -> {}
                     }
+                }
+
+                if (!idAssigned) {
+                    val reason = withTimeoutOrNull(1.seconds) { closeReason.await() }
+                    val detail = reason?.let { "${it.knownReason ?: it.code} ${it.message}" } ?: "no close reason"
+                    throw IllegalStateException("Reverse proxy closed the connection before assigning an ID ($detail)")
                 }
             } finally {
                 _isConnected.store(false)
                 activeServers.values.forEach { it.close() }
+                httpStreams.close()
                 logger.info("Disconnected from reverse proxy control")
             }
         }
