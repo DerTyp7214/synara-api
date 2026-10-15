@@ -184,6 +184,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [SongAudioBand](#devdertypdatasongaudioband)
 - [SongAudioData](#devdertypdatasongaudiodata)
 - [SongAudioTimeline](#devdertypdatasongaudiotimeline)
+- [SongDownloadSize](#devdertypdatasongdownloadsize)
 - [SongExtendedMetadata](#devdertypdatasongextendedmetadata)
 - [SongTag](#devdertypdatasongtag)
 - [SplitArtist](#devdertypdatasplitartist)
@@ -2302,6 +2303,14 @@ Time-based analysis data of a song: beat grid, loudness envelope, bass envelope 
 | `dynamicComplexity` | `Double`? | Dynamic complexity of the loudness. |
 | `source` | `String` | Where the beat grid came from: essentia, rms or none. |
 | `version` | `Int` | Encoding version of the stored data. |
+
+### SongDownloadSize <a name="devdertypdatasongdownloadsize"></a>
+The download size of a song for a requested quality and format.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `songId` | `PlatformUUID` | The song unique identifier. |
+| `size` | `Long` | The size of the download in bytes. |
 
 ### SongExtendedMetadata <a name="devdertypdatasongextendedmetadata"></a>
 Extended metadata for a song.

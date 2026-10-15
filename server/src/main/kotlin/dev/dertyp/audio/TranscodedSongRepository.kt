@@ -10,6 +10,7 @@ import dev.dertyp.db.SongTable
 import dev.dertyp.db.TranscodedSongTable
 import dev.dertyp.db.fullSongTitle
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.select
 import java.io.File
@@ -92,4 +93,16 @@ class TranscodedSongRepository {
                 it[TranscodedSongTable.fileSize] = file.length()
             }
         }
+
+    suspend fun transcodedPaths(songIds: Collection<UUID>, bitrate: Int, format: AudioFormat): Map<UUID, String> {
+        if (songIds.isEmpty()) return emptyMap()
+        return dbQuery {
+            TranscodedSongTable
+                .select(TranscodedSongTable.songId, TranscodedSongTable.path)
+                .where { TranscodedSongTable.songId inList songIds }
+                .andWhere { TranscodedSongTable.bitrate eq bitrate }
+                .andWhere { TranscodedSongTable.format eq format }
+                .associate { it[TranscodedSongTable.songId].value to it[TranscodedSongTable.path] }
+        }
+    }
 }

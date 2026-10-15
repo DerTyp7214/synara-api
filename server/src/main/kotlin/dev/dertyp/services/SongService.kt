@@ -239,6 +239,12 @@ class SongRpcService(
         format: AudioFormat
     ): Long = songService.getDownloadSize(id, quality, force, format, client)
 
+    override suspend fun getDownloadSizes(
+        ids: List<UUID>,
+        quality: Int,
+        format: AudioFormat
+    ): List<SongDownloadSize> = songService.getDownloadSizes(ids, quality, format, client)
+
     override fun allSongIds(
         explicit: Boolean,
         tags: List<SongTag>,
@@ -1789,6 +1795,40 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         if (quality <= 0) return resolveRawStream(song, client)?.contentLength ?: 0
         val streamInfo = transcodeAndRecord(id, file, quality, force, format)
         return streamInfo.file.length()
+    }
+
+    suspend fun getDownloadSizes(
+        ids: List<UUID>,
+        quality: Int,
+        format: AudioFormat = AudioFormat.OPUS,
+        client: ClientInfo = ClientInfo.LEGACY,
+    ): List<SongDownloadSize> {
+        val distinctIds = ids.distinct()
+        if (distinctIds.isEmpty()) return emptyList()
+        val paths = if (quality > 0) {
+            transcodedSongRepository.transcodedPaths(distinctIds, quality, format)
+        } else {
+            dbQuery {
+                SongTable
+                    .select(SongTable.id, SongTable.filePath)
+                    .where { SongTable.id inList distinctIds }
+                    .associate { it[SongTable.id].value to it[SongTable.filePath] }
+            }
+        }
+        return withContext(Dispatchers.IO) {
+            distinctIds.mapNotNull { id ->
+                val file = paths[id]?.let(::File) ?: return@mapNotNull null
+                if (!file.exists()) return@mapNotNull null
+                if (quality <= 0) {
+                    val losslessFormat = file.losslessFormat
+                    if ((losslessFormat == LosslessFormat.WAV || losslessFormat == LosslessFormat.AIFF) &&
+                        !client.supports(ClientFeature.LOSSLESS_WAV_AIFF)
+                    ) return@mapNotNull null
+                }
+                val size = file.length()
+                if (quality > 0 && size <= 0) null else SongDownloadSize(id, size)
+            }
+        }
     }
 
     fun allSongIds(

@@ -353,6 +353,7 @@ GET /song/byPlaylist/{playlistId} ISongService.byPlaylist [q:page? q:pageSize? p
 GET /song/byTitle ISongService.byTitle [q:page? q:pageSize? q:title] JSON
 GET /song/byUserPlaylist/{playlistId} ISongService.byUserPlaylist [q:page? q:pageSize? p:playlistId] JSON
 GET /song/downloadSize/{id} ISongService.getDownloadSize [p:id q:quality q:force? q:format?] JSON
+GET /song/downloadSizes ISongService.getDownloadSizes [q:ids q:quality q:format?] JSON
 GET /song/downloadSong/{id} ISongService.downloadSong [p:id q:quality q:offset? q:chunkSize? q:force? q:format?] FILE
 GET /song/exportFavouritesAsCsv ISongService.exportFavouritesAsCsv [] JSON
 GET /song/extendedMetadata/{id} ISongService.extendedMetadata [p:id] JSON

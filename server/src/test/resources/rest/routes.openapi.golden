@@ -353,6 +353,7 @@ GET /song/byPlaylist/{playlistId} ISongService.byPlaylist | List songs in a syst
 GET /song/byTitle ISongService.byTitle | Search for songs by title. | song | UserAuth | page:query,pageSize:query,title:query | body:no
 GET /song/byUserPlaylist/{playlistId} ISongService.byUserPlaylist | List songs in a user playlist. | song | UserAuth | page:query,pageSize:query,playlistId:path | body:no
 GET /song/downloadSize/{id} ISongService.getDownloadSize | Get the size of the song audio for a specific quality. | song | UserAuth | id:path,quality:query,force:query,format:query | body:no
+GET /song/downloadSizes ISongService.getDownloadSizes | Get the recorded download sizes of songs for a quality and format, without transcoding. Songs without a recorded size are left out. | song | UserAuth | ids:query,quality:query,format:query | body:no
 GET /song/downloadSong/{id} ISongService.downloadSong | Download song audio in specific quality. | song | UserAuth | id:path,quality:query,offset:query,chunkSize:query,force:query,format:query | body:no
 HEAD /song/downloadSong/{id} ISongService.downloadSong | Download song audio in specific quality. | song | UserAuth | id:path,quality:query,offset:query,chunkSize:query,force:query,format:query | body:no
 GET /song/exportFavouritesAsCsv ISongService.exportFavouritesAsCsv | Export all favorited songs as a CSV string. | song | UserAuth | - | body:no
