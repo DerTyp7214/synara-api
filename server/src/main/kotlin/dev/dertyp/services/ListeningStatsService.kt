@@ -10,6 +10,7 @@ import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.select
 import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -18,6 +19,7 @@ import java.time.temporal.TemporalAdjusters
 class ListeningStatsService : Service() {
     private val listenService by inject<ListenService>()
     private val listenBrainzService by inject<ListenBrainzService>()
+    private val songService by inject<SongService>()
 
     suspend fun linkUnmatched(userId: PlatformUUID, request: LinkUnmatchedTrackRequest): LinkUnmatchedTrackResult {
         val link = listenService.linkUnmatched(userId, request.songId, request.recordingMsid, request.recordingMbid)
@@ -35,6 +37,39 @@ class ListeningStatsService : Service() {
         return LinkUnmatchedTrackResult(linkedListens = link.linkedListens, submittedToListenBrainz = submitted)
     }
 
+    suspend fun topSongs(
+        userId: PlatformUUID,
+        range: StatsRange,
+        timezone: String,
+        limit: Int,
+        order: TopOrder = TopOrder.LISTENED_MS,
+        nowMs: Long = System.currentTimeMillis(),
+    ): List<UserSong> {
+        val (zone, rangeStart, rangeEnd, previousStart) = rangeWindow(range, timezone, nowMs)
+        val pass = dbQuery { runPass(userId, rangeStart, rangeEnd, previousStart, zone) }
+
+        val (metric, secondary) = when (order) {
+            TopOrder.LISTENED_MS -> pass.songPlayed to pass.songCounts
+            TopOrder.LISTEN_COUNT -> pass.songCounts to pass.songPlayed
+        }
+        val rankedIds = metric.entries
+            .filter { (key, value) -> key is SongKey.Matched && value > 0 }
+            .map { (key, value) -> Triple((key as SongKey.Matched).songId, value, secondary[key] ?: 0L) }
+            .sortedWith(
+                compareByDescending<Triple<PlatformUUID, Long, Long>> { it.second }
+                    .thenByDescending { it.third }
+                    .thenBy { it.first.toString() }
+            )
+            .map { it.first }
+
+        val songs = ArrayList<UserSong>()
+        for (chunk in rankedIds.chunked(CHUNK_SIZE)) {
+            if (songs.size >= limit) break
+            songs += songService.byIds(chunk, userId)
+        }
+        return songs.take(limit)
+    }
+
     suspend fun stats(
         userId: PlatformUUID,
         range: StatsRange,
@@ -43,27 +78,7 @@ class ListeningStatsService : Service() {
         topOrder: TopOrder = TopOrder.LISTEN_COUNT,
         nowMs: Long = System.currentTimeMillis(),
     ): ListeningStats {
-        val zone = runCatching { ZoneId.of(timezone) }.getOrElse { ZoneOffset.UTC }
-        val now = ZonedDateTime.ofInstant(Instant.ofEpochMilli(nowMs), zone)
-        val today = now.toLocalDate()
-        val dayStart = today.atStartOfDay(zone)
-        val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay(zone)
-        val monthStart = today.withDayOfMonth(1).atStartOfDay(zone)
-        val yearStart = today.withDayOfYear(1).atStartOfDay(zone)
-        val (rangeStartZdt, rangeEndZdt, previousStartZdt) = when (range) {
-            StatsRange.DAY -> Triple(dayStart, null, dayStart.minusDays(1))
-            StatsRange.WEEK -> Triple(weekStart, null, weekStart.minusWeeks(1))
-            StatsRange.LAST_WEEK -> Triple(weekStart.minusWeeks(1), weekStart, weekStart.minusWeeks(2))
-            StatsRange.MONTH -> Triple(monthStart, null, monthStart.minusMonths(1))
-            StatsRange.LAST_MONTH -> Triple(monthStart.minusMonths(1), monthStart, monthStart.minusMonths(2))
-            StatsRange.YEAR -> Triple(yearStart, null, yearStart.minusYears(1))
-            StatsRange.LAST_YEAR -> Triple(yearStart.minusYears(1), yearStart, yearStart.minusYears(2))
-            StatsRange.ALL_TIME -> Triple(null, null, null)
-        }
-        val rangeStart = rangeStartZdt?.toInstant()?.toEpochMilli() ?: 0L
-        val rangeEnd = rangeEndZdt?.toInstant()?.toEpochMilli() ?: nowMs
-        val previousStart = previousStartZdt?.toInstant()?.toEpochMilli()
-
+        val (zone, rangeStart, rangeEnd, previousStart, today) = rangeWindow(range, timezone, nowMs)
         val pass = dbQuery { runPass(userId, rangeStart, rangeEnd, previousStart, zone) }
 
         val inRangeSongIds =
@@ -245,7 +260,7 @@ class ListeningStatsService : Service() {
                 hourOfDay = pass.hourBuckets.toList(),
                 dayOfWeek = pass.dayBuckets.toList(),
             ),
-            streaks = streaks(pass.daysWithListens, now.toLocalDate().toEpochDay()),
+            streaks = streaks(pass.daysWithListens, today.toEpochDay()),
             discoveries = Discoveries(
                 songs = discoverySongs.map { (key, count) -> songEntry(key, count) },
                 artists = discoveryArtists.map { (key, count) -> artistEntry(key, count) },
@@ -588,6 +603,41 @@ class ListeningStatsService : Service() {
         data class Named(val name: String) : AlbumKey
     }
 
+    private fun rangeWindow(range: StatsRange, timezone: String, nowMs: Long): RangeWindow {
+        val zone = runCatching { ZoneId.of(timezone) }.getOrElse { ZoneOffset.UTC }
+        val now = ZonedDateTime.ofInstant(Instant.ofEpochMilli(nowMs), zone)
+        val today = now.toLocalDate()
+        val dayStart = today.atStartOfDay(zone)
+        val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay(zone)
+        val monthStart = today.withDayOfMonth(1).atStartOfDay(zone)
+        val yearStart = today.withDayOfYear(1).atStartOfDay(zone)
+        val (rangeStartZdt, rangeEndZdt, previousStartZdt) = when (range) {
+            StatsRange.DAY -> Triple(dayStart, null, dayStart.minusDays(1))
+            StatsRange.WEEK -> Triple(weekStart, null, weekStart.minusWeeks(1))
+            StatsRange.LAST_WEEK -> Triple(weekStart.minusWeeks(1), weekStart, weekStart.minusWeeks(2))
+            StatsRange.MONTH -> Triple(monthStart, null, monthStart.minusMonths(1))
+            StatsRange.LAST_MONTH -> Triple(monthStart.minusMonths(1), monthStart, monthStart.minusMonths(2))
+            StatsRange.YEAR -> Triple(yearStart, null, yearStart.minusYears(1))
+            StatsRange.LAST_YEAR -> Triple(yearStart.minusYears(1), yearStart, yearStart.minusYears(2))
+            StatsRange.ALL_TIME -> Triple(null, null, null)
+        }
+        return RangeWindow(
+            zone = zone,
+            rangeStart = rangeStartZdt?.toInstant()?.toEpochMilli() ?: 0L,
+            rangeEnd = rangeEndZdt?.toInstant()?.toEpochMilli() ?: nowMs,
+            previousStart = previousStartZdt?.toInstant()?.toEpochMilli(),
+            today = today,
+        )
+    }
+
+    private data class RangeWindow(
+        val zone: ZoneId,
+        val rangeStart: Long,
+        val rangeEnd: Long,
+        val previousStart: Long?,
+        val today: LocalDate,
+    )
+
     private data class UnmatchedDisplay(
         val title: String,
         val artistName: String?,
@@ -637,6 +687,8 @@ class ListeningStatsService : Service() {
     }
 }
 
+private const val MAX_TOP_SONGS = 500
+
 class RpcListeningStatsService(
     private val user: User,
     private val service: ListeningStatsService,
@@ -648,6 +700,14 @@ class RpcListeningStatsService(
         topOrder: TopOrder
     ): ListeningStats =
         service.stats(user.id, range, timezone, topLimit.coerceIn(1, 100), topOrder)
+
+    override suspend fun getTopSongs(
+        range: StatsRange,
+        timezone: String,
+        limit: Int,
+        order: TopOrder
+    ): List<UserSong> =
+        service.topSongs(user.id, range, timezone, limit.coerceIn(1, MAX_TOP_SONGS), order)
 
     override suspend fun linkUnmatchedTrack(request: LinkUnmatchedTrackRequest): LinkUnmatchedTrackResult =
         service.linkUnmatched(user.id, request)
