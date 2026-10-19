@@ -155,6 +155,7 @@ POST /import/syncFavourites IImportService.syncFavourites [] UNIT
 PUT /import/importCredentials IImportService.setImportCredentials [b:backend b:credentials] UNIT
 PUT /import/importService IImportService.setImportService [b:service] UNIT
 POST /indexer/start IIndexer.start [] SSE
+GET /linkResolver/resolvePlatformLinks ILinkResolverService.resolvePlatformLinks [q:urls? q:isrc? q:upc?] JSON
 GET /listenBackup/observeState IListenBackupService.observeState [] SSE
 GET /listenBackup/state IListenBackupService.getState [] JSON
 POST /listenBackup/resetCursor IListenBackupService.resetCursor [] JSON

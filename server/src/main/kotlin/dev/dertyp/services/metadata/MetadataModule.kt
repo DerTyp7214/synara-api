@@ -15,5 +15,6 @@ val metadataModule = module {
     singleOf(::AcoustIdCredentialSource)
     singleOf(::AcoustIdService)
     singleOf(::LinkResolverService)
+    singleOf(::RpcLinkResolverService) { bind<ILinkResolverService>() }
     singleOf(::AppleMusicArtistResolver)
 }

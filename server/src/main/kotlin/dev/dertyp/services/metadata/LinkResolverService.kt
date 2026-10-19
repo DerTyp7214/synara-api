@@ -180,3 +180,17 @@ class LinkResolverService : Service() {
         )
     }
 }
+
+class RpcLinkResolverService(private val linkResolverService: LinkResolverService) : ILinkResolverService {
+    override suspend fun resolvePlatformLinks(urls: List<String>, isrc: String?, upc: String?): List<String> =
+        linkResolverService.batchResolve(
+            urls = urls.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(MAX_URLS),
+            isrc = isrc?.trim()?.takeIf { it.isNotEmpty() },
+            upc = upc?.trim()?.takeIf { it.isNotEmpty() },
+            priority = HttpClientPriority.HIGH
+        )
+
+    companion object {
+        const val MAX_URLS = 20
+    }
+}

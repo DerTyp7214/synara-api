@@ -12,9 +12,11 @@ import dev.dertyp.services.hue.RpcHueService
 import dev.dertyp.services.import.IImportService
 import dev.dertyp.services.import.ImportRpcService
 import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.services.metadata.ILinkResolverService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
+import dev.dertyp.services.metadata.RpcLinkResolverService
 import dev.dertyp.services.podcast.RpcPodcastService
 import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
 import dev.dertyp.services.subsonic.RpcSubsonicCredentialService
@@ -210,6 +212,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     registerIMetadataServiceRest(authenticated = true) {
         val user = call.getUser()
         koin.get<MetadataDispatcherService>().withAuthorization<IMetadataService>(user)
+    }
+    registerILinkResolverServiceRest(authenticated = true) {
+        val user = call.getUser()
+        koin.get<RpcLinkResolverService>().withAuthorization<ILinkResolverService>(user)
     }
     registerIListenBrainzServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")

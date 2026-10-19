@@ -16,9 +16,11 @@ import dev.dertyp.services.import.ImportRpcService
 import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.ImporterProxy
 import dev.dertyp.services.metadata.CachedMusicBrainzService
+import dev.dertyp.services.metadata.ILinkResolverService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.IMusicBrainzService
 import dev.dertyp.services.metadata.MetadataDispatcherService
+import dev.dertyp.services.metadata.RpcLinkResolverService
 import dev.dertyp.services.podcast.RpcPodcastService
 import dev.dertyp.services.schedule.RpcScheduledTaskConfigurationService
 import dev.dertyp.services.schedule.ScheduleService
@@ -167,6 +169,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val discoveryService = koin.get<DiscoveryService>()
     val cachedMusicBrainzService = koin.get<CachedMusicBrainzService>()
     val metadataDispatcherService = koin.get<MetadataDispatcherService>()
+    val rpcLinkResolverService = koin.get<RpcLinkResolverService>()
     val rpcMetricsService = koin.get<RpcMetricsService>()
     val listenBrainzService = koin.get<ListenBrainzService>()
     val listenBackupService = koin.get<ListenBackupService>()
@@ -397,6 +400,9 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     }
     registrar.register(IMetadataService::class) {
         metadataDispatcherService.withAuthorization<IMetadataService>(user).withLogging<IMetadataService>(call)
+    }
+    registrar.register(ILinkResolverService::class) {
+        rpcLinkResolverService.withAuthorization<ILinkResolverService>(user).withLogging<ILinkResolverService>(call)
     }
     registrar.register(IRpcMetricsService::class) {
         rpcMetricsService.withAuthorization<IRpcMetricsService>(user).withLogging<IRpcMetricsService>(call)

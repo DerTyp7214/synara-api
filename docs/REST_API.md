@@ -124,6 +124,7 @@ Nothing on this page is written by hand: every route below is derived from one f
 - [/userPlaylist (IUserPlaylistService)](#devdertypservicesiuserplaylistservice)
 - [/user (IUserService)](#devdertypservicesiuserservice)
 - [/import (IImportService)](#devdertypservicesimportiimportservice)
+- [/linkResolver (ILinkResolverService)](#devdertypservicesmetadatailinkresolverservice)
 - [/metadata (IMetadataService)](#devdertypservicesmetadataimetadataservice)
 - [/musicBrainz (IMusicBrainzService)](#devdertypservicesmetadataimusicbrainzservice)
 
@@ -1001,6 +1002,16 @@ RPC reference: [IImportService](RPC_SERVICES.md#devdertypservicesimportiimportse
 | GET | `/import/syncFavouritesAvailable` <a name="devdertypservicesimportiimportservice-syncfavouritesavailable"></a> | - | JSON `Boolean` | JWT | Check if favorite synchronization is available. ([syncFavouritesAvailable](RPC_SERVICES.md#devdertypservicesimportiimportservice)) |
 | GET | `/import/tidalSyncAuthorized` <a name="devdertypservicesimportiimportservice-tidalsyncauthorized"></a> | - | JSON `Boolean` | JWT | Check if Tidal favorite synchronization is authorized. ([tidalSyncAuthorized](RPC_SERVICES.md#devdertypservicesimportiimportservice)) |
 | GET | `/import/tracks` <a name="devdertypservicesimportiimportservice-search"></a> | `query` (query, `String`?, optional): General search query.<br>`title` (query, `String`?, optional): Filter by track title.<br>`artist` (query, `String`?, optional): Filter by artist name.<br>`count` (query, `Int`, optional): Maximum number of results. | JSON `List`&lt;[ImportSong](MODELS.md#devdertypservicesimportimportsong)&gt; | JWT | Search for tracks directly. ([search](RPC_SERVICES.md#devdertypservicesimportiimportservice)) |
+
+### /linkResolver — ILinkResolverService <a name="devdertypservicesmetadatailinkresolverservice"></a>
+
+Find links to a song or album on other streaming platforms.
+
+RPC reference: [ILinkResolverService](RPC_SERVICES.md#devdertypservicesmetadatailinkresolverservice)
+
+| Method | Path | Parameters | Response | Auth | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| GET | `/linkResolver/resolvePlatformLinks` <a name="devdertypservicesmetadatailinkresolverservice-resolveplatformlinks"></a> | `urls` (query, repeated, `List`&lt;`String`&gt;, optional): Links to the song or album on a streaming platform.<br>`isrc` (query, `String`?, optional): The ISRC of the song.<br>`upc` (query, `String`?, optional): The UPC or EAN barcode of the album. | JSON `List`&lt;`String`&gt; | JWT | Resolve links to the same song or album on other platforms without touching the library. The ISRC is tried first, then the UPC, then each seed URL in order. Returns an empty list when nothing resolves. ([resolvePlatformLinks](RPC_SERVICES.md#devdertypservicesmetadatailinkresolverservice)) |
 
 ### /metadata — IMetadataService <a name="devdertypservicesmetadataimetadataservice"></a>
 

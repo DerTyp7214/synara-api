@@ -57,6 +57,7 @@ Models: [MODELS.md](MODELS.md) · REST routes: [REST_API.md](REST_API.md) · Per
 - [IUserPlaylistService](#devdertypservicesiuserplaylistservice)
 - [IUserService](#devdertypservicesiuserservice)
 - [IImportService](#devdertypservicesimportiimportservice)
+- [ILinkResolverService](#devdertypservicesmetadatailinkresolverservice)
 - [IMetadataService](#devdertypservicesmetadataimetadataservice)
 - [IMusicBrainzService](#devdertypservicesmetadataimusicbrainzservice)
 
@@ -781,6 +782,13 @@ Management of the integrated media importer.
 | `getAuthUrl` <a name="devdertypservicesimportiimportservice-getauthurl"></a> | - | `String` | **Admin** | IllegalArgumentException | Get the Tidal OAuth authorization URL. |
 | `killAllChildProcesses` <a name="devdertypservicesimportiimportservice-killallchildprocesses"></a> | - | `Unit` | **Admin** |  | Immediately stop all active importer processes. |
 | `search` <a name="devdertypservicesimportiimportservice-search"></a> | `query` (`String`?): General search query.<br>`title` (`String`?): Filter by track title.<br>`artist` (`String`?): Filter by artist name.<br>`count` (`Int`): Maximum number of results. | `List`<[ImportSong](MODELS.md#devdertypservicesimportimportsong)> | - | IllegalStateException | Search for tracks directly. |
+
+### ILinkResolverService <a name="devdertypservicesmetadatailinkresolverservice"></a>
+Find links to a song or album on other streaming platforms.
+
+| Function | Parameters | Returns | Permissions | Errors | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `resolvePlatformLinks` <a name="devdertypservicesmetadatailinkresolverservice-resolveplatformlinks"></a> | `urls` (`List`<`String`>): Links to the song or album on a streaming platform.<br>`isrc` (`String`?): The ISRC of the song.<br>`upc` (`String`?): The UPC or EAN barcode of the album. | `List`<`String`> | - |  | Resolve links to the same song or album on other platforms without touching the library. The ISRC is tried first, then the UPC, then each seed URL in order. Returns an empty list when nothing resolves. |
 
 ### IMetadataService <a name="devdertypservicesmetadataimetadataservice"></a>
 Service for fetching metadata from external sources.

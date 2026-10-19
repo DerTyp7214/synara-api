@@ -155,6 +155,7 @@ GET /import/syncFavouritesAvailable IImportService.syncFavouritesAvailable | Che
 GET /import/tidalSyncAuthorized IImportService.tidalSyncAuthorized | Check if Tidal favorite synchronization is authorized. | import | UserAuth | - | body:no
 GET /import/tracks IImportService.search | Search for tracks directly. | import | UserAuth | query:query,title:query,artist:query,count:query | body:no
 POST /indexer/start IIndexer.start | Start indexing files in the media library and stream progress updates. | indexer | UserAuth | - | body:no
+GET /linkResolver/resolvePlatformLinks ILinkResolverService.resolvePlatformLinks | Resolve links to the same song or album on other platforms without touching the library. The ISRC is tried first, then the UPC, then each seed URL in order. Returns an empty list when nothing resolves. | linkResolver | UserAuth | urls:query,isrc:query,upc:query | body:no
 PUT /listenBackup/config IListenBackupService.updateConfig | Update the backup configuration. | listenBackup | UserAuth | - | body:yes
 GET /listenBackup/observeState IListenBackupService.observeState | Stream the backup state, re-emitting whenever the configuration or sync progress changes. | listenBackup | UserAuth | - | body:no
 POST /listenBackup/resetCursor IListenBackupService.resetCursor | Reset the sync cursor so the next run re-pushes every local listen. | listenBackup | UserAuth | - | body:no
