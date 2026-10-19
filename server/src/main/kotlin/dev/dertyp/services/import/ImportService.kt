@@ -651,6 +651,7 @@ class ImportService(
                 title = it.title,
                 artists = it.artists,
                 cover = it.images.associate { image -> image.width to image.url },
+                explicit = it.explicit,
             )
         }
     }

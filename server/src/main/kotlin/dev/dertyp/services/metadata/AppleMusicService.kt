@@ -75,7 +75,8 @@ class AppleMusicService(
                         height = 600
                     )
                 ),
-                isrc = track.primaryIsrc
+                isrc = track.primaryIsrc,
+                explicit = explicitFromRating(track.trackExplicitness)
             )
         }
     }
@@ -133,7 +134,8 @@ class AppleMusicService(
                         images = if (artworkUrl.isNotBlank()) listOf(
                             IMetadataService.Image(url = artworkUrl, width = 600, height = 600)
                         ) else emptyList(),
-                        isrc = isrc
+                        isrc = isrc,
+                        explicit = explicitFromRating(attributes?.get("contentRating")?.jsonPrimitive?.contentOrNull)
                     )
                 }
             }
@@ -158,7 +160,8 @@ class AppleMusicService(
                     height = 600
                 )
             ),
-            isrc = track.primaryIsrc
+            isrc = track.primaryIsrc,
+            explicit = explicitFromRating(track.trackExplicitness)
         )
     }
 
@@ -313,6 +316,12 @@ class AppleMusicService(
             if (size <= 0) maxArtworkUrl(templateOrUrl)
             else templateOrUrl.replace(ARTWORK_SIZE_TAIL, "/${size}x${size}bb.jpg")
 
+        internal fun explicitFromRating(value: String?): Boolean? = when (value) {
+            "explicit" -> true
+            "clean", "cleaned", "notExplicit" -> false
+            else -> null
+        }
+
         internal fun parseReleaseDate(value: String?): LocalDate? = value?.let {
             runCatching { LocalDate.parse(it) }.getOrNull()
                 ?: runCatching { OffsetDateTime.parse(it).toLocalDate() }.getOrNull()
@@ -372,7 +381,8 @@ class AppleMusicService(
                 discNumber = attr?.get("discNumber")?.jsonPrimitive?.contentOrNull?.toIntOrNull(),
                 images = catalogArtwork(attr)?.let { listOf(it) } ?: emptyList(),
                 albumTitle = attr?.get("albumName")?.jsonPrimitive?.contentOrNull,
-                isrc = attr?.get("isrc")?.jsonPrimitive?.contentOrNull
+                isrc = attr?.get("isrc")?.jsonPrimitive?.contentOrNull,
+                explicit = explicitFromRating(attr?.get("contentRating")?.jsonPrimitive?.contentOrNull)
             )
         } ?: emptyList()
 
@@ -639,6 +649,7 @@ class AppleMusicService(
         val discNumber: Int? = null,
         val trackTimeMillis: Long? = null,
         val releaseDate: String? = null,
-        val primaryIsrc: String? = null
+        val primaryIsrc: String? = null,
+        val trackExplicitness: String? = null
     )
 }

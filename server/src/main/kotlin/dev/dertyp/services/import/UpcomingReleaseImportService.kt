@@ -337,7 +337,8 @@ class UpcomingReleaseImportService(
                                 images = emptyList(),
                                 albumId = album.id,
                                 albumTitle = album.title,
-                                isrc = isrc
+                                isrc = isrc,
+                                explicit = hit.explicit
                             ),
                             null
                         )

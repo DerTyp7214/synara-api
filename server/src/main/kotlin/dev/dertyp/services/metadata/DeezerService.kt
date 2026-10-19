@@ -7,7 +7,7 @@ import io.ktor.client.request.parameter
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class DeezerService(
     environment: ApplicationEnvironment
@@ -50,7 +50,7 @@ class DeezerService(
             id = track.id.toString(),
             title = track.title,
             artists = listOf(track.artist.name),
-            duration = track.duration.toLong().milliseconds,
+            duration = track.duration.seconds,
             images = listOfNotNull(
                 track.album?.coverSmall?.let { IMetadataService.Image(it, 56, 56) },
                 track.album?.coverMedium?.let { IMetadataService.Image(it, 250, 250) },
@@ -59,7 +59,8 @@ class DeezerService(
             ),
             isrc = track.isrc,
             albumId = track.album?.id?.toString(),
-            albumTitle = track.album?.title
+            albumTitle = track.album?.title,
+            explicit = track.explicitLyrics
         )
     }
 
@@ -113,7 +114,8 @@ class DeezerService(
         val duration: Int,
         val isrc: String? = null,
         val artist: Artist,
-        val album: Album? = null
+        val album: Album? = null,
+        @SerialName("explicit_lyrics") val explicitLyrics: Boolean? = null
     )
 
     @Serializable

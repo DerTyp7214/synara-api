@@ -25,6 +25,7 @@ fun PlaylistsResourceObject<*, *>.tracks(tracks: Map<String, TracksAttributes>) 
                 duration = track.duration,
                 createdAt = track.createdAt,
                 images = emptyList(),
+                explicit = track.explicit,
             )
         }
     } ?: emptyList()

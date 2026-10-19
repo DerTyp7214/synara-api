@@ -408,7 +408,8 @@ class TidalService(
                     images = imageUrls,
                     albumId = albumId,
                     albumTitle = albumId?.let { albums[it]?.title },
-                    isrc = track.isrc
+                    isrc = track.isrc,
+                    explicit = track.explicit
                 )
             }?.also { writeToJedis(it) }
         } catch (e: CancellationException) {
@@ -459,7 +460,8 @@ class TidalService(
                     images = trackObj.images(imageUrls),
                     albumId = albumId,
                     albumTitle = albumId?.let { albums[it]?.title },
-                    isrc = track.isrc
+                    isrc = track.isrc,
+                    explicit = track.explicit
                 )
             }?.also { writeToJedis(it) }
         } catch (e: CancellationException) {
@@ -520,7 +522,8 @@ class TidalService(
                         images = trackObj.images(imageUrls),
                         albumId = albumId,
                         albumTitle = albumId?.let { albums[it]?.title },
-                        isrc = track.isrc
+                        isrc = track.isrc,
+                        explicit = track.explicit
                     )
                 }
             }.cacheTracks() + getTracksFromCache(existing)
@@ -734,7 +737,8 @@ class TidalService(
                         artists = emptyList(),
                         images = emptyList(),
                         albumId = it.relationships?.albums?.data?.firstOrNull()?.id,
-                        isrc = track.isrc
+                        isrc = track.isrc,
+                        explicit = track.explicit
                     )
                 } ?: emptyList()
 
@@ -795,7 +799,8 @@ class TidalService(
                         artists = emptyList(),
                         images = emptyList(),
                         albumId = albumId,
-                        isrc = track.isrc
+                        isrc = track.isrc,
+                        explicit = track.explicit
                     )
                 }.asFlow())
 
@@ -846,7 +851,8 @@ class TidalService(
                     addedAt = meta[id]?.addedAt,
                     artists = emptyList(),
                     images = emptyList(),
-                    isrc = track.isrc
+                    isrc = track.isrc,
+                    explicit = track.explicit
                 )
             }.asFlow())
             if (nextCursor != null) {

@@ -214,7 +214,8 @@ class SpotifyServiceTest : KoinTest {
                                     "href": "https://api.spotify.com/v1/tracks/track-id-1",
                                     "artists": [{ "id": "a1", "name": "Test Artist", "href": "h", "uri": "u" }],
                                     "album": { "id": "al1", "name": "Test Album", "href": "h", "total_tracks": 1, "artists": [], "images": [{ "url": "https://example.com/cover.jpg", "width": 640, "height": 640 }] },
-                                    "external_ids": { "isrc": "$isrc" }
+                                    "external_ids": { "isrc": "$isrc" },
+                                    "explicit": true
                                   }
                                 ]
                               }
@@ -237,5 +238,6 @@ class SpotifyServiceTest : KoinTest {
         assertEquals("track-id-1", track?.id)
         assertEquals("Test Track", track?.title)
         assertEquals(isrc, track?.isrc)
+        assertEquals(true, track?.explicit)
     }
 }

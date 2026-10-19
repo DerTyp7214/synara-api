@@ -331,6 +331,7 @@ class TidalServiceTest : KoinTest {
         assertEquals("Track 1", track?.title)
         assertEquals(listOf("Artist 1"), track?.artists)
         assertEquals("Album 1", track?.albumTitle)
+        assertEquals(false, track?.explicit)
     }
 
     @Test
@@ -364,7 +365,7 @@ class TidalServiceTest : KoinTest {
                                     "title": "Test Track ISRC",
                                     "duration": "PT3M",
                                     "isrc": "$isrc",
-                                    "explicit": false,
+                                    "explicit": true,
                                     "mediaTags": [],
                                     "popularity": 0.5
                                   },
@@ -404,5 +405,6 @@ class TidalServiceTest : KoinTest {
         assertEquals("track-isrc-1", track?.id)
         assertEquals("Test Track ISRC", track?.title)
         assertEquals(isrc, track?.isrc)
+        assertEquals(true, track?.explicit)
     }
 }

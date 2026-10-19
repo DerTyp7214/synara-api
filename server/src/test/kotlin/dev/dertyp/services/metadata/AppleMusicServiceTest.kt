@@ -130,7 +130,8 @@ class AppleMusicServiceTest : KoinTest {
                                   "trackName": "Test Song",
                                   "artworkUrl100": "https://example.com/100x100bb.jpg",
                                   "trackCount": 1,
-                                  "trackTimeMillis": 180000
+                                  "trackTimeMillis": 180000,
+                                  "trackExplicitness": "explicit"
                                 }
                               ]
                             }
@@ -647,6 +648,7 @@ class AppleMusicServiceTest : KoinTest {
         assertEquals("67890", tracks[0].id)
         assertEquals("Test Song", tracks[0].title)
         assertEquals(listOf("Test Artist"), tracks[0].artists)
+        assertEquals(true, tracks[0].explicit)
     }
 
     @Test
@@ -731,6 +733,7 @@ class AppleMusicServiceTest : KoinTest {
                                 "name": "Lover",
                                 "artistName": "Taylor Swift",
                                 "durationInMillis": 221000,
+                                "contentRating": "explicit",
                                 "artwork": {
                                   "url": "https://example.com/image-{w}x{h}-{f}.jpg"
                                 }
@@ -755,6 +758,7 @@ class AppleMusicServiceTest : KoinTest {
         assertEquals("1471758375", track?.id)
         assertEquals("Lover", track?.title)
         assertEquals("https://example.com/image-600x600-jpg.jpg", track?.images?.firstOrNull()?.url)
+        assertEquals(true, track?.explicit)
     }
 
     @Test
@@ -780,7 +784,8 @@ class AppleMusicServiceTest : KoinTest {
                           "artworkUrl100": "https://example.com/100x100bb.jpg",
                           "trackCount": 18,
                           "trackTimeMillis": 221000,
-                          "primaryIsrc": "$isrc"
+                          "primaryIsrc": "$isrc",
+                          "trackExplicitness": "notExplicit"
                         }
                       ]
                     }
@@ -798,6 +803,7 @@ class AppleMusicServiceTest : KoinTest {
         assertEquals("1471758375", track?.id)
         assertEquals("Lover", track?.title)
         assertEquals(isrc, track?.isrc)
+        assertEquals(false, track?.explicit)
     }
 
     @Test

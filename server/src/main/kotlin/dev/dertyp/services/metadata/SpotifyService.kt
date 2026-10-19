@@ -46,7 +46,8 @@ class SpotifyService(
                         height = image.height,
                     )
                 },
-                isrc = track.externalIds?.isrc
+                isrc = track.externalIds?.isrc,
+                explicit = track.explicit
             )
         } ?: emptyList()
     }
@@ -79,7 +80,8 @@ class SpotifyService(
                     height = image.height,
                 )
             },
-            isrc = track.externalIds?.isrc
+            isrc = track.externalIds?.isrc,
+            explicit = track.explicit
         )
     }
 
@@ -209,7 +211,8 @@ class SpotifyService(
         val durationMs: Int,
         val href: String,
         @SerialName("external_ids")
-        val externalIds: ExternalIds? = null
+        val externalIds: ExternalIds? = null,
+        val explicit: Boolean? = null
     )
 
     @Serializable

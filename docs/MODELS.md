@@ -2805,6 +2805,7 @@ Metadata for a track found.
 | `title` | `String` | The title of the track. |
 | `artists` | `List`<`String`> | Collection of artist names. |
 | `cover` | `Map`<`Int`, `String`> | Map of cover image sizes to URLs. |
+| `explicit` | `Boolean`? | Whether the track is marked explicit. Null when unknown. |
 
 ### ImporterCapability <a name="devdertypservicesimportimportercapability"></a>
 A capability an importer backend supports, so clients can discover what each backend can do.
@@ -2990,6 +2991,7 @@ External metadata for a music track.
 | `albumId` | `String`? | The external album ID. |
 | `albumTitle` | `String`? | The title of the album. |
 | `isrc` | `String`? | The International Standard Recording Code. |
+| `explicit` | `Boolean`? | Whether the track is marked explicit. Null when unknown. |
 
 ### FollowedArtist <a name="devdertypservicesmodelsfollowedartist"></a>
 Represents an artist that a user is following for release tracking.
