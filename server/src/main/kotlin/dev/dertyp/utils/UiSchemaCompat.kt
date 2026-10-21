@@ -13,6 +13,7 @@ import dev.dertyp.ui.UiIconName
 import dev.dertyp.ui.UiInvokePayload
 import dev.dertyp.ui.UiInvokeResult
 import dev.dertyp.ui.UiInvokeStatus
+import dev.dertyp.ui.UiOption
 import dev.dertyp.ui.UiSchema
 import dev.dertyp.ui.UiSchemaVersion
 import org.koin.core.component.KoinComponent
@@ -21,13 +22,34 @@ import kotlin.reflect.KClass
 
 class UiSchemaCompat(
     private val introducedIn: Map<KClass<out UiComponent>, Int> = UiSchema.introducedIn,
+    private val fieldIntroducedIn: Map<KClass<*>, Map<String, Int>> = UiSchema.fieldIntroducedIn,
 ) : CompatRule, KoinComponent {
     override val feature = ClientFeature.SERVER_DRIVEN_UI
 
     private val uiService by inject<UiService>()
     private val translations by inject<TranslationService>()
 
-    private val latestVersion = introducedIn.values.maxOrNull() ?: UiSchemaVersion.CURRENT
+    private val latestVersion = (introducedIn.values + fieldIntroducedIn.values.flatMap { it.values }).maxOrNull()
+        ?: UiSchemaVersion.CURRENT
+
+    private val replacements = listOf(
+        replacement<UiComponent.FileField> { field, _, _ -> asTextField(field) },
+        replacement<UiComponent.SearchField> { field, scope, formId ->
+            if (scope != null && formId != null) asSearchColumn(field, scope, formId) else null
+        },
+    ).associate { it.type to it }
+
+    private val fieldDowngrades = listOf(
+        stripField<UiComponent.ListItem>(IMAGE_FIELD) { it.copy(image = null) },
+        stripField<UiComponent.Card>(IMAGE_FIELD) { it.copy(image = null) },
+        stripField<UiOption>(IMAGE_FIELD) { it.copy(image = null) },
+    )
+
+    init {
+        val missing = fieldIntroducedIn.flatMap { (owner, fields) -> fields.keys.map { owner to it } }
+            .filter { (owner, field) -> fieldDowngrades.none { it.owner == owner && it.field == field } }
+        require(missing.isEmpty()) { "Versioned UI fields without a downgrade: $missing" }
+    }
 
     override fun isActive(client: ClientInfo): Boolean = client.uiSchemaVersion < latestVersion
 
@@ -54,20 +76,37 @@ class UiSchemaCompat(
 
     private fun versionOf(component: UiComponent): Int = introducedIn[component::class] ?: UiSchemaVersion.CURRENT
 
+    private fun versionOf(field: FieldDowngrade): Int =
+        fieldIntroducedIn[field.owner]?.get(field.field) ?: UiSchemaVersion.CURRENT
+
     suspend fun downgrade(component: UiComponent, version: Int, scope: CompatScope? = null, formId: String? = null): UiComponent {
-        if (component is UiComponent.FileField && versionOf(component) > version) return downgrade(
-            asTextField(component),
-            version,
-            scope,
-            formId,
-        )
-        if (component is UiComponent.SearchField && versionOf(component) > version && scope != null && formId != null) {
-            asSearchColumn(component, scope, formId)?.let { return downgrade(it, version, scope, formId) }
+        if (versionOf(component) > version) {
+            val legacy = replacements[component::class]?.build(component, scope, formId)
+            return legacy?.let { downgrade(it, version, scope, formId) } ?: UiComponent.Fallback()
         }
-        if (versionOf(component) > version) return UiComponent.Fallback()
         val enclosingForm = (component as? UiComponent.Form)?.id ?: formId
-        return component.mapChildren { downgrade(it, version, scope, enclosingForm) }
+        return (withoutUnknownFields(component, version) as UiComponent)
+            .mapOptions { withoutUnknownFields(it, version) as UiOption }
+            .mapChildren { downgrade(it, version, scope, enclosingForm) }
     }
+
+    private fun withoutUnknownFields(value: Any, version: Int): Any = fieldDowngrades.fold(value) { current, field ->
+        if (field.owner == current::class && versionOf(field) > version) field.strip(current) else current
+    }
+
+    private class Replacement(
+        val type: KClass<out UiComponent>,
+        val build: suspend (UiComponent, CompatScope?, String?) -> UiComponent?,
+    )
+
+    private class FieldDowngrade(val owner: KClass<*>, val field: String, val strip: (Any) -> Any)
+
+    private inline fun <reified T : UiComponent> replacement(
+        noinline build: suspend (T, CompatScope?, String?) -> UiComponent?,
+    ) = Replacement(T::class) { component, scope, formId -> build(component as T, scope, formId) }
+
+    private inline fun <reified T : Any> stripField(field: String, noinline strip: (T) -> T) =
+        FieldDowngrade(T::class, field) { strip(it as T) }
 
     private fun asTextField(field: UiComponent.FileField): UiComponent.TextField = UiComponent.TextField(
         key = field.key,
@@ -131,6 +170,7 @@ class UiSchemaCompat(
     }
 
     companion object {
+        const val IMAGE_FIELD = "image"
         const val BASE64_HINT = "Paste the file content as base64."
         const val SEARCH_ACTION_PREFIX = "ui.search."
 

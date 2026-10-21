@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.UUID
 import kotlin.reflect.full.findAnnotation
+import kotlin.reflect.full.memberProperties
 
 @OptIn(ExperimentalSerializationApi::class)
 class UiSerializationTest {
@@ -281,6 +282,22 @@ class UiSerializationTest {
     }
 
     @Test
+    fun `images round trip on list items and options and are introduced in schema version 3`() {
+        val image = UiImageRef(UUID.fromString("00000000-0000-0000-0000-000000000042"), "hash", rounded = false)
+        val item = UiComponent.ListItem("Alice", icon = UiIcon(UiIconName.USER), image = image)
+        val select = UiComponent.Select("s", "S", options = listOf(UiOption("u1", "Alice", image = image)))
+        val card = UiComponent.Card(emptyList(), title = "Alice", icon = UiIcon(UiIconName.USER), image = image)
+        for (component in listOf(item, select, card)) {
+            assertEquals(component, AppJson.decodeFromString(UiComponent.serializer(), AppJson.encodeToString(UiComponent.serializer(), component)))
+        }
+        val json = Json.parseToJsonElement(AppJson.encodeToString(UiComponent.serializer(), item)).jsonObject
+        assertEquals("hash", json["image"]!!.jsonObject["blurHash"]!!.jsonPrimitive.content)
+        assertEquals(3, UiSchema.fieldVersionOf(UiComponent.ListItem::class, "image"))
+        assertEquals(3, UiSchema.fieldVersionOf(UiOption::class, "image"))
+        assertEquals(3, UiSchema.fieldVersionOf(UiComponent.Card::class, "image"))
+    }
+
+    @Test
     fun `component and action serial names are frozen`() {
         val componentNames =
             UiComponent::class.sealedSubclasses.map { it.findAnnotation<kotlinx.serialization.SerialName>()!!.value }
@@ -346,6 +363,12 @@ class UiSerializationTest {
         assertTrue(
             UiComponent::class.sealedSubclasses.all { it in UiSchema.introducedIn.keys },
             "every component must declare the schema version it was introduced in"
+        )
+        assertTrue(
+            UiSchema.fieldIntroducedIn.all { (owner, fields) ->
+                fields.keys.all { field -> owner.memberProperties.any { it.name == field } }
+            },
+            "every versioned field must exist on its owner"
         )
     }
 }

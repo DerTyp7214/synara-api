@@ -35,6 +35,9 @@ private fun uuidOf(values: Map<String, UiValue>, key: String): PlatformUUID? =
 
 private fun UserProfile.title(): String = displayName?.takeIf { it.isNotBlank() } ?: username
 
+private fun imageOf(imageId: PlatformUUID?, blurHash: String?): UiImageRef? =
+    imageId?.let { UiImageRef(it, blurHash) }
+
 private fun UserProfile.subtitle(): String? = if (title() == username) null else username
 
 private fun linkEditor(
@@ -145,6 +148,7 @@ class ListenShareSettingsContribution(private val listenShare: ListenShareServic
                         title = candidate.title(),
                         subtitle = candidate.subtitle(),
                         icon = UiIcon(UiIconName.USER),
+                        image = imageOf(candidate.profileImageId, candidate.blurHash),
                         children = emptyList(),
                         actions = listOf(
                             UiComponent.Button(
@@ -173,6 +177,7 @@ class ListenShareSettingsContribution(private val listenShare: ListenShareServic
             title = link.partner.title(),
             subtitle = link.partner.subtitle(),
             icon = UiIcon(UiIconName.USER),
+            image = imageOf(link.partner.profileImageId, link.partner.blurHash),
         ),
         link.useForRecommendations,
     )
@@ -282,7 +287,7 @@ class ListenShareAdminContribution(
             andWhere { UserTable.username ilike "%$term%" }
                 .orderBy(UserTable.username)
                 .limit(SEARCH_LIMIT)
-        }.map { UiOption(it.id.toString(), it.username, UiIcon(UiIconName.USER)) }
+        }.map { UiOption(it.id.toString(), it.username, UiIcon(UiIconName.USER), imageOf(it.profileImageId, it.blurHash)) }
     }
 
     override suspend fun invoke(scope: UiRenderScope, actionId: String, values: Map<String, UiValue>): UiInvokeResult =

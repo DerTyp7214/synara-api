@@ -21,6 +21,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -29,6 +30,8 @@ import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import java.util.UUID
+
+private val avatar = UiImageRef(UUID.fromString("00000000-0000-0000-0000-000000000042"), "hash")
 
 class UiSchemaCompatTest {
 
@@ -71,6 +74,43 @@ class UiSchemaCompatTest {
         assertEquals(listOf(UiComponent.Fallback()), (form.children.single() as UiComponent.TextField).toolbar)
         assertEquals(listOf(UiComponent.Fallback()), shaped.actions)
         assertEquals(tree, rule.downgrade(tree, 2))
+    }
+
+    @Test
+    fun `a versioned field without a downgrade is rejected`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            UiSchemaCompat(fieldIntroducedIn = UiSchema.fieldIntroducedIn + (UiComponent.Text::class to mapOf("tone" to 4)))
+        }
+    }
+
+    @Test
+    fun `images are removed for clients below the image version and icons stay`() = runBlocking {
+        val icon = UiIcon(UiIconName.USER)
+        val item = UiComponent.ListItem("Alice", icon = icon, image = avatar)
+        val select = UiComponent.Select("s", "S", options = listOf(UiOption("u1", "Alice", icon, avatar)))
+        val card = UiComponent.Card(listOf(item), title = "Alice", icon = icon, image = avatar)
+        val nested = UiComponent.Column(
+            listOf(
+                UiComponent.Section(title = "s", children = listOf(item)),
+                UiComponent.Form("f", listOf(select), UiAction.Invoke("c", "a"), "Save"),
+                card,
+            ),
+        )
+
+        val shaped = rule.downgrade(nested, 2) as UiComponent.Column
+        assertEquals(item.copy(image = null), (shaped.children[0] as UiComponent.Section).children.single())
+        val shapedSelect = (shaped.children[1] as UiComponent.Form).children.single() as UiComponent.Select
+        assertEquals(listOf(UiOption("u1", "Alice", icon)), shapedSelect.options)
+        assertEquals(UiComponent.Card(listOf(item.copy(image = null)), title = "Alice", icon = icon), shaped.children[2])
+    }
+
+    @Test
+    fun `images are kept for clients with the image version`() = runBlocking {
+        val item = UiComponent.ListItem("Alice", icon = UiIcon(UiIconName.USER), image = avatar)
+        val select = UiComponent.Select("s", "S", options = listOf(UiOption("u1", "Alice", image = avatar)))
+        val search = UiComponent.SearchField("u", "U", UiOption("u1", "Alice", image = avatar))
+        val column = UiComponent.Column(listOf(item, select, search))
+        assertEquals(column, rule.downgrade(column, 3))
     }
 
     @Test
@@ -226,14 +266,14 @@ class UiSchemaCompatTest {
         val invoked = mutableListOf<String>()
 
         override suspend fun render(scope: UiRenderScope): UiComponent {
-            val field = UiComponent.SearchField("user", "User", scope.context.params["selected"]?.let { UiOption(it, "Alice") })
+            val field = UiComponent.SearchField("user", "User", scope.context.params["selected"]?.let { UiOption(it, "Alice", image = avatar) })
             return if (inForm) UiComponent.Form("link", listOf(field), UiAction.Invoke(id, "save", formId = "link"), "Save")
             else UiComponent.Column(listOf(field))
         }
 
         override suspend fun search(scope: UiRenderScope, key: String, query: String): List<UiOption> {
             searches += Triple(key, query, scope.context)
-            return listOf(UiOption("u2", "Bob"), UiOption("u1", "Alice"), UiOption("u3", "Bobby")).filter {
+            return listOf(UiOption("u2", "Bob", image = avatar), UiOption("u1", "Alice", image = avatar), UiOption("u3", "Bobby")).filter {
                 it.label.lowercase().startsWith(query.lowercase())
             }
         }
@@ -358,7 +398,7 @@ class UiSchemaCompatTest {
         val render = api(current).render("test.picker", UiContext(params = mapOf("selected" to "u1")))
 
         val field = (render.root as UiComponent.Form).children.single() as UiComponent.SearchField
-        assertEquals(alice, field.value)
+        assertEquals(alice.copy(image = avatar), field.value)
         assertEquals(1, field.toolbar.size)
 
         val result = api(current).invoke("test.picker", "ui.search.user", UiInvokePayload())

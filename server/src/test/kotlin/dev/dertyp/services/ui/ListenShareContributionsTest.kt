@@ -16,9 +16,11 @@ import dev.dertyp.testing.*
 import dev.dertyp.ui.*
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -29,6 +31,8 @@ import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import java.util.UUID
+
+private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 
 class ListenShareContributionsTest {
     private lateinit var database: Database
@@ -107,6 +111,19 @@ class ListenShareContributionsTest {
         return uid
     }
 
+    private fun giveProfileImage(userId: UUID, hash: String): UUID {
+        val imageId = UUID.randomUUID()
+        ImageTable.insert {
+            it[id] = imageId
+            it[path] = "avatar.jpg"
+            it[imageHash] = "hash_$imageId"
+            it[origin] = "test"
+            it[blurHash] = hash
+        }
+        UserTable.update({ UserTable.id eq userId }) { it[profileImage] = imageId }
+        return imageId
+    }
+
     private fun values(vararg pairs: Pair<String, UiValue>) = mapOf(*pairs)
 
     @ParameterizedTest
@@ -170,6 +187,43 @@ class ListenShareContributionsTest {
         assertEquals(UiValue.of(linkId.toString()), unlink.params.getValue("linkId"))
         val connect = page.invokes("connect").single()
         assertEquals(UiValue.of(candidate.toString()), connect.params.getValue("userId"))
+        val candidateCard = page.flatten().filterIsInstance<UiComponent.Card>().single()
+        assertEquals(null, candidateCard.image)
+        assertEquals(UiIcon(UiIconName.USER), candidateCard.icon)
+
+        val imageId = transaction(database) { giveProfileImage(candidate, "blur") }
+        val pictured = settings.render(scope(info(u))).flatten().filterIsInstance<UiComponent.Card>().single()
+        assertEquals(imageId, pictured.image?.imageId)
+        assertEquals("blur", pictured.image?.blurHash)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `partner rows carry the profile image and fall back to the user icon`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (u, withImage, without, imageId) = transaction(database) {
+            val shared = insertLbUser()
+            val u = insertUser()
+            val withImage = insertUser()
+            val without = insertUser()
+            linkListenBrainzUser(u, shared)
+            linkListenBrainzUser(withImage, shared)
+            linkListenBrainzUser(without, shared)
+            Quad(u, withImage, without, giveProfileImage(withImage, "blur"))
+        }
+        transaction(database) {
+            linkListenShare(u, withImage, useForRecommendations = true)
+            linkListenShare(u, without, useForRecommendations = true)
+        }
+
+        val items = settings.render(scope(info(u))).flatten().filterIsInstance<UiComponent.Form>()
+            .flatMap { it.children.filterIsInstance<UiComponent.ListItem>() }
+            .associateBy { it.title }
+
+        assertEquals(UiImageRef(imageId, "blur"), items.getValue("user_$withImage").image)
+        assertEquals(UiIcon(UiIconName.USER), items.getValue("user_$withImage").icon)
+        assertEquals(null, items.getValue("user_$without").image)
+        assertEquals(UiIcon(UiIconName.USER), items.getValue("user_$without").icon)
     }
 
     @ParameterizedTest
@@ -287,5 +341,20 @@ class ListenShareContributionsTest {
         assertTrue(admin.search(root, "other", "alice").isEmpty())
         assertTrue(admin.search(root, "userA", "  ").isEmpty())
         assertTrue(admin.search(root, "userA", "nobody").isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `search options carry the profile image`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val imageId = transaction(database) { giveProfileImage(insertNamedUser("pictured"), "blur") }
+        transaction(database) { insertNamedUser("plain") }
+        val root = scope(info(UUID.randomUUID(), admin = true))
+
+        val options = admin.search(root, "userA", "p").associateBy { it.label }
+
+        assertEquals(UiImageRef(imageId, "blur"), options.getValue("pictured").image)
+        assertEquals(null, options.getValue("plain").image)
+        assertEquals(UiIcon(UiIconName.USER), options.getValue("plain").icon)
     }
 }

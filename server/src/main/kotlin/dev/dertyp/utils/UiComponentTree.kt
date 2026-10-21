@@ -1,6 +1,13 @@
 package dev.dertyp.utils
 
 import dev.dertyp.ui.UiComponent
+import dev.dertyp.ui.UiOption
+
+inline fun UiComponent.mapOptions(transform: (UiOption) -> UiOption): UiComponent = when (this) {
+    is UiComponent.Select -> copy(options = options.map(transform))
+    is UiComponent.SearchField -> copy(value = value?.let(transform))
+    else -> this
+}
 
 inline fun UiComponent.mapChildren(transform: (UiComponent) -> UiComponent): UiComponent = when (this) {
     is UiComponent.Column -> copy(children = children.map(transform))

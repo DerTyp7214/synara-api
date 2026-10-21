@@ -320,6 +320,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [Named](#devdertypuiuiiconnamed)
 - [dev.dertyp.ui.UiIcon.Url](#devdertypuiuiiconurl)
 - [UiIconName](#devdertypuiuiiconname)
+- [UiImageRef](#devdertypuiuiimageref)
 - [UiIntakeCodeKind](#devdertypuiuiintakecodekind)
 - [UiIntakeResult](#devdertypuiuiintakeresult)
 - [UiIntakeStatus](#devdertypuiuiintakestatus)
@@ -3299,7 +3300,8 @@ Elevated container with optional header and trailing actions.
 | `children` | `List`<[UiComponent](#devdertypuiuicomponent)> | Content of the card. |
 | `title` | `String`? | Header title. |
 | `subtitle` | `String`? | Header subtitle. |
-| `icon` | [UiIcon](#devdertypuiuiicon)? | Semantic icon name shown in the header. |
+| `icon` | [UiIcon](#devdertypuiuiicon)? | Semantic icon name shown in the header. Shown when there is no image. |
+| `image` | [UiImageRef](#devdertypuiuiimageref)? | Optional image shown in the header instead of the icon. |
 | `tone` | [UiTone](#devdertypuiuitone) | Tone of the card. |
 | `actions` | `List`<[UiComponent](#devdertypuiuicomponent)> | Action elements (typically Buttons) rendered in the card footer. |
 
@@ -3401,9 +3403,10 @@ A list row.
 | :--- | :--- | :--- |
 | `title` | `String` | Title. |
 | `subtitle` | `String`? | Subtitle. |
-| `icon` | [UiIcon](#devdertypuiuiicon)? | Semantic icon name. |
+| `icon` | [UiIcon](#devdertypuiuiicon)? | Semantic icon name. Shown when there is no image. |
 | `trailing` | `String`? | Trailing text. |
 | `action` | [UiAction](#devdertypuiuiaction)? | Action performed when activated. |
+| `image` | [UiImageRef](#devdertypuiuiimageref)? | Optional image shown instead of the icon. |
 
 ### Live <a name="devdertypuiuicomponentlive"></a>
 A subtree that updates independently of the page: render child, then subscribe to IUiService.subscribeLive(contributionId, key) and apply each UiLiveUpdate to it.
@@ -3783,6 +3786,15 @@ Semantic icons clients map to their own icon set. Adding an entry requires a UI 
 | `MORE` | More / overflow menu. |
 | `BARCODE` | Barcode scanner. |
 
+### UiImageRef <a name="devdertypuiuiimageref"></a>
+A reference to a server image shown next to a row or option.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `imageId` | `PlatformUUID` | Id of a server image. |
+| `blurHash` | `String`? | Blur hash shown while the image loads. |
+| `rounded` | `Boolean` | Whether to render the image as a circle. |
+
 ### UiIntakeCodeKind <a name="devdertypuiuiintakecodekind"></a>
 Kind of a catalog code handed to the intake.
 
@@ -3882,7 +3894,8 @@ A selectable option of a Select field.
 | :--- | :--- | :--- |
 | `value` | `String` | Value submitted when selected. |
 | `label` | `String` | Display label. |
-| `icon` | [UiIcon](#devdertypuiuiicon)? | Optional icon. |
+| `icon` | [UiIcon](#devdertypuiuiicon)? | Optional icon. Shown when there is no image. |
+| `image` | [UiImageRef](#devdertypuiuiimageref)? | Optional image shown instead of the icon. |
 
 ### UiRender <a name="devdertypuiuirender"></a>
 A rendered contribution.

@@ -42,7 +42,7 @@ Every node is a `UiComponent`. On the wire (JSON) each node carries `"type"` wit
 | `column` | `children`, `spacing`, `align`, `weights?` | Vertical stack. `weights` are relative sizes per child when the container has a fixed height. |
 | `row` | `children`, `spacing`, `align`, `weights?` | Horizontal stack; wrap or scroll on narrow screens. `weights` of `0.0` mean "intrinsic size". |
 | `grid` | `children`, `columns`, `spacing` | Grid; reduce `columns` on small screens. |
-| `card` | `children`, `title?`, `subtitle?`, `icon?`, `tone`, `actions` | Elevated surface with optional header; `actions` (usually buttons) go in the footer. |
+| `card` | `children`, `title?`, `subtitle?`, `icon?`, `image?` (`{imageId,blurHash?,rounded}`), `tone`, `actions` | Elevated surface with optional header; `actions` (usually buttons) go in the footer. |
 | `section` | `children`, `title`, `collapsible`, `collapsed` | Titled group. |
 | `form` | `id`, `children`, `submit` (`invoke` action), `submitLabel`, `cancelLabel?`, `actions` | Collect the values of all fields inside and send them with the submit action. The submit button sits in a trailing row; `actions` (e.g. a scanner portal) are rendered in that same row, before it. Disable submit while a `required` field is empty. |
 
@@ -58,7 +58,7 @@ Every node is a `UiComponent`. On the wire (JSON) each node carries `"type"` wit
 | `progress` | `value?` (0–1), `label?` | `null` = indeterminate. |
 | `tile` | `title`, `subtitle?`, `icon?`, `action?`, `tone` | Tappable entry, e.g. in the library slot. |
 | `button` | `label`, `action`, `style`, `icon?`, `enabled` | |
-| `listItem` | `title`, `subtitle?`, `icon?`, `trailing?`, `action?` | |
+| `listItem` | `title`, `subtitle?`, `icon?`, `image?` (`{imageId,blurHash?,rounded}`), `trailing?`, `action?` | |
 | `table` | `columns`, `rows[{cells, action?}]` | |
 | `spacer` | `size` (`NONE`/`SMALL`/`MEDIUM`/`LARGE`) | Empty space of that size. |
 | `divider` | | |
@@ -76,10 +76,10 @@ All fields have `key` (the payload key), `label`, `helper?` and `enabled`. All e
 |---|---|---|
 | `textField` | `value?`, `placeholder?`, `secret`, `multiline`, `kind`, `toolbar` | `{"text": "…"}` |
 | `fileField` | `accept`, `binary`, `allowPaste`, `secret`, `value?`, `toolbar` | `{"text": "<file content>"}` |
-| `searchField` | `value?` (`{value,label,icon?}`), `placeholder?`, `minChars`, `toolbar` | `{"text": "<picked option value>"}` |
+| `searchField` | `value?` (`{value,label,icon?,image?}`), `placeholder?`, `minChars`, `toolbar` | `{"text": "<picked option value>"}` |
 | `numberField` | `value?`, `min?`, `max?`, `step?`, `toolbar` | `{"number": 3.0}` |
 | `switch` | `value` | `{"flag": true}` |
-| `select` | `value?`, `options[{value,label,icon?}]` | `{"text": "<option value>"}` |
+| `select` | `value?`, `options[{value,label,icon?,image?}]` | `{"text": "<option value>"}` |
 
 `secret` fields never contain the stored value; submitting an empty value means "unchanged". `kind` hints at the keyboard: `URL`, `EMAIL`, `BARCODE` (offer a scanner), `MULTILINE_URLS` (one entry per line, a scanner appends a line). `toolbar` is the **keyboard accessory toolbar**: shown above the on-screen keyboard while the field is focused (iOS `.keyboard` toolbar placement, Android IME accessory row; on desktop render it inline under the field), items trailing-aligned — typically a single `button` with `dismissKeyboard`.
 
@@ -90,6 +90,8 @@ All fields have `key` (the payload key), `label`, `helper?` and `enabled`. All e
 `searchField` is a search-as-you-type picker. Show `value.label` while nothing else is picked. Once the user has typed at least `minChars` characters, call `IUiService.search(contributionId, key, query, context)` with the contribution that rendered the field, its `key`, the typed text and the same `UiContext` the contribution was rendered with, then offer the returned options (at most 50). Debounce the calls and drop responses for outdated queries. The picked option's `value` is submitted under `key` with the enclosing `form`, just like a `select`. `search` checks the same access as `render`.
 
 Clients on UI schema version 2 or older receive a `column` instead: a `textField` with key `<key>.query`, a `button` that invokes `ui.search.<key>` with the enclosing form, and a `select` with key `<key>` holding the results for the query and the selected option. The server answers that invoke with an `openPage` of the same page whose params carry the query as `<key>.query`, and the reopened page lists the results. This only works on pages and inside a `form`, so a `searchField` elsewhere becomes a `fallback` for those clients.
+
+`image` on a `listItem`, on a `card` header and on an option references a server image by `imageId` with an optional `blurHash`. When `image` is set, render it (as a circle when `rounded`) in place of `icon`, and show `icon` only when there is no image. Clients on UI schema version 2 or older never receive `image` on `listItem`, `card`, `select` options or `searchField` values and keep getting the `icon`.
 
 ### Icons
 
