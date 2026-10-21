@@ -128,6 +128,18 @@ class UiSerializationTest {
                         required = true,
                         enabled = false
                     ),
+                    UiComponent.SearchField(
+                        "user",
+                        "User",
+                        UiOption("u1", "Alice", UiIcon(UiIconName.INFO)),
+                        placeholder = "p",
+                        helper = "h",
+                        error = "e",
+                        required = true,
+                        enabled = false,
+                        minChars = 3,
+                        toolbar = listOf(UiComponent.Button("Done", UiAction.DismissKeyboard)),
+                    ),
                     UiComponent.NumberField("n", "Number", 1.0, 0.0, 10.0, 1.0),
                     UiComponent.Switch("s", "Switch", true),
                     UiComponent.Select("sel", "Select", "a", listOf(UiOption("a", "A", UiIcon(UiIconName.INFO)))),
@@ -258,6 +270,17 @@ class UiSerializationTest {
     }
 
     @Test
+    fun `search field uses its own discriminator and is introduced in schema version 3`() {
+        val field = UiComponent.SearchField("user", "User", UiOption("u1", "Alice"))
+        val json = Json.parseToJsonElement(AppJson.encodeToString(UiComponent.serializer(), field)).jsonObject
+        assertEquals("searchField", json["type"]!!.jsonPrimitive.content)
+        assertEquals("u1", json["value"]!!.jsonObject["value"]!!.jsonPrimitive.content)
+        assertEquals(field, AppJson.decodeFromString(UiComponent.serializer(), json.toString()))
+        assertEquals(3, UiSchema.versionOf(field))
+        assertEquals(3, UiSchemaVersion.CURRENT)
+    }
+
+    @Test
     fun `component and action serial names are frozen`() {
         val componentNames =
             UiComponent::class.sealedSubclasses.map { it.findAnnotation<kotlinx.serialization.SerialName>()!!.value }
@@ -289,6 +312,7 @@ class UiSerializationTest {
                 "live",
                 "textField",
                 "fileField",
+                "searchField",
                 "numberField",
                 "switch",
                 "select",

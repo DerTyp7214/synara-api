@@ -71,6 +71,7 @@ class ListeningStatsServiceTest : KoinTest {
             ListenBrainzUserTable,
             UserListenBrainzLinkTable,
             ListenTable,
+            ListenShareTable,
             ListenLinkTable,
             ListenSongRedirectTable,
         )
@@ -1043,5 +1044,48 @@ class ListeningStatsServiceTest : KoinTest {
 
         assertEquals(2, service.relinkSong(user, from, to, null).linkedListens)
         coVerify(exactly = 0) { listenBrainzService.submitManualMapping(any(), any(), any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `listens of a linked partner are aggregated`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, partner) = transaction(database) {
+            val u = insertUser()
+            val partner = insertUser()
+            val stranger = insertUser()
+            val partnerLb = insertLbUser()
+            linkListenBrainzUser(partner, partnerLb)
+            linkListenShare(u, partner)
+            val album = insertAlbum()
+            val song = insertSong(album)
+            insertListen(at(1), userId = u, songId = song)
+            insertListen(at(2), userId = partner, songId = insertSong(album))
+            insertListen(at(3), lbUserId = partnerLb, songId = insertSong(album))
+            insertListen(at(4), userId = stranger, songId = insertSong(album))
+            u to partner
+        }
+
+        assertEquals(3L, stats(user).listenCount)
+        assertEquals(3, stats(user).uniqueSongs)
+        assertEquals(3L, stats(partner).listenCount)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `the same song played by both partners within the dedup window counts once`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val user = transaction(database) {
+            val u = insertUser()
+            val partner = insertUser()
+            linkListenShare(u, partner)
+            val song = insertSong(insertAlbum())
+            insertListen(at(1), userId = u, songId = song)
+            insertListen(at(1) + 1000, userId = partner, songId = song)
+            insertListen(at(1) + 60_000, userId = partner, songId = song)
+            u
+        }
+
+        assertEquals(2L, stats(user).listenCount)
     }
 }

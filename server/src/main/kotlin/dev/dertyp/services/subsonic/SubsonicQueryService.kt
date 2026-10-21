@@ -7,12 +7,14 @@ import dev.dertyp.db.AlbumTable
 import dev.dertyp.db.ArtistTable
 import dev.dertyp.db.FollowedArtistTable
 import dev.dertyp.db.GenreTable
+import dev.dertyp.db.ListenScope
 import dev.dertyp.db.ListenTable
 import dev.dertyp.db.SongArtistTable
 import dev.dertyp.db.SongGenreTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.UserAlbumTable
 import dev.dertyp.db.UserPlaylistTable
+import dev.dertyp.db.listenOwnerPredicate
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.EntityEventPublisher
 import dev.dertyp.services.Service
@@ -118,7 +120,7 @@ class SubsonicQueryService : Service() {
                 val listens = ListenTable.songId.count().alias("listens")
                 ListenTable.innerJoin(SongTable, { ListenTable.songId }, { SongTable.id })
                     .select(SongTable.albumId, listens)
-                    .where { ListenTable.userId eq userId }
+                    .where { listenOwnerPredicate(userId, ListenScope.SHARED) }
                     .andWhere { SongTable.albumId.isNotNull() }
                     .andWhere { ListenTable.qualifiedPlay }
                     .groupBy(SongTable.albumId)
@@ -131,7 +133,7 @@ class SubsonicQueryService : Service() {
                 val lastListen = ListenTable.listenedAt.max().alias("lastListen")
                 ListenTable.innerJoin(SongTable, { ListenTable.songId }, { SongTable.id })
                     .select(SongTable.albumId, lastListen)
-                    .where { ListenTable.userId eq userId }
+                    .where { listenOwnerPredicate(userId, ListenScope.SHARED) }
                     .andWhere { SongTable.albumId.isNotNull() }
                     .groupBy(SongTable.albumId)
                     .orderBy(lastListen, SortOrder.DESC)

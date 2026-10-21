@@ -294,13 +294,14 @@ suspend fun <S : Any> RoutingContext.restRoute(
     factory: suspend RoutingContext.() -> S,
     body: suspend RestCall<S>.() -> Unit,
 ) {
-    if (requireUser && call.getUser() == null) {
+    val user = if (requireUser) call.getUser() else null
+    if (requireUser && user == null) {
         call.respond(HttpStatusCode.Unauthorized)
         return
     }
     val raw = factory()
     val fileProvider = unwrapProxyTarget(raw) as? RestFileProvider
-    val service = raw.withClientCompat(serviceInterface, ResponseShaper(call.clientInfo))
+    val service = raw.withClientCompat(serviceInterface, ResponseShaper(call.clientInfo, user = user, call = call))
     try {
         RestCall(call, service, fileProvider).body()
     } catch (e: RestBindingException) {

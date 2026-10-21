@@ -2,7 +2,7 @@ package dev.dertyp.utils
 
 import dev.dertyp.ui.UiComponent
 
-fun UiComponent.mapChildren(transform: (UiComponent) -> UiComponent): UiComponent = when (this) {
+inline fun UiComponent.mapChildren(transform: (UiComponent) -> UiComponent): UiComponent = when (this) {
     is UiComponent.Column -> copy(children = children.map(transform))
     is UiComponent.Row -> copy(children = children.map(transform))
     is UiComponent.Grid -> copy(children = children.map(transform))
@@ -15,5 +15,6 @@ fun UiComponent.mapChildren(transform: (UiComponent) -> UiComponent): UiComponen
     is UiComponent.TextField -> copy(toolbar = toolbar.map(transform))
     is UiComponent.NumberField -> copy(toolbar = toolbar.map(transform))
     is UiComponent.FileField -> copy(toolbar = toolbar.map(transform))
+    is UiComponent.SearchField -> copy(toolbar = toolbar.map(transform))
     else -> this
 }

@@ -14,80 +14,106 @@ import dev.dertyp.data.RadioChannelSearchResults
 import dev.dertyp.data.RadioChannelSongMatch
 import dev.dertyp.data.RecentListens
 import dev.dertyp.data.Song
+import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
+import dev.dertyp.services.IUiService
 import dev.dertyp.services.models.RecentRelease
 import dev.dertyp.ui.UiComponent
+import dev.dertyp.ui.UiContext
+import dev.dertyp.ui.UiInvokePayload
+import dev.dertyp.ui.UiInvokeResult
 import dev.dertyp.ui.UiLiveUpdate
 import dev.dertyp.ui.UiRender
 import dev.dertyp.ui.UiSlotRender
+import io.ktor.server.application.ApplicationCall
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Method
 import java.lang.reflect.Proxy
+import java.util.UUID
 import kotlin.coroutines.Continuation
-import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
+import kotlin.coroutines.intrinsics.startCoroutineUninterceptedOrReturn
+import kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn
 
-open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = CompatRules.all) {
+open class ResponseShaper(
+    val client: ClientInfo,
+    rules: List<CompatRule> = CompatRules.all,
+    val user: User? = null,
+    val call: ApplicationCall? = null,
+) {
     private val activeRules = rules
         .filter { it.isActive(client) }
         .sortedByDescending { it.feature.minApiVersion }
 
     open val isNoop: Boolean get() = activeRules.isEmpty()
 
+    fun scope(contributionId: String? = null, context: UiContext = UiContext()): CompatScope =
+        CompatScope(client, user, contributionId, context, call)
+
     @Suppress("UNCHECKED_CAST")
-    fun shape(value: Any?): Any? = when (value) {
+    suspend fun shape(value: Any?, scope: CompatScope = scope()): Any? = when (value) {
         is Album -> shapeAlbum(value)
         is ListenedAlbum -> value.copy(album = shapeAlbum(value.album))
         is CollectionSearchResults -> value.copy(
-            songs = shapePaginated(value.songs as PaginatedResponse<Any?>) as PaginatedResponse<CollectionSongMatch>,
-            albums = shapePaginated(value.albums as PaginatedResponse<Any?>) as PaginatedResponse<Album>,
+            songs = shapePaginated(value.songs as PaginatedResponse<Any?>, scope) as PaginatedResponse<CollectionSongMatch>,
+            albums = shapePaginated(value.albums as PaginatedResponse<Any?>, scope) as PaginatedResponse<Album>,
         )
 
         is RadioChannelSearchResults -> value.copy(
-            songs = shapePaginated(value.songs as PaginatedResponse<Any?>) as PaginatedResponse<RadioChannelSongMatch>,
-            albums = shapePaginated(value.albums as PaginatedResponse<Any?>) as PaginatedResponse<Album>,
+            songs = shapePaginated(value.songs as PaginatedResponse<Any?>, scope) as PaginatedResponse<RadioChannelSongMatch>,
+            albums = shapePaginated(value.albums as PaginatedResponse<Any?>, scope) as PaginatedResponse<Album>,
         )
 
         is UserSong -> shapeUserSong(value)
         is Song -> shapeSong(value)
-        is UiComponent -> shapeUiComponent(value)
-        is UiRender -> value.copy(
-            root = shapeUiComponent(value.root),
-            toolbar = value.toolbar.map(::shapeUiComponent),
-            schemaVersion = minOf(value.schemaVersion, client.uiSchemaVersion),
-        )
+        is UiComponent -> shapeUiComponent(value, scope)
+        is UiRender -> scope.copy(contributionId = value.contributionId).let { renderScope ->
+            value.copy(
+                root = shapeUiComponent(value.root, renderScope),
+                toolbar = value.toolbar.map { shapeUiComponent(it, renderScope) },
+                schemaVersion = minOf(value.schemaVersion, client.uiSchemaVersion),
+            )
+        }
 
-        is UiSlotRender -> value.copy(items = value.items.map { shape(it) as UiRender })
-        is UiLiveUpdate.Replace -> value.copy(child = shapeUiComponent(value.child))
+        is UiSlotRender -> value.copy(items = value.items.map { shape(it, scope) as UiRender })
+        is UiLiveUpdate.Replace -> value.copy(child = shapeUiComponent(value.child, scope))
         is RecentRelease -> shapeRecentReleases(listOf(value)).first()
-        is PaginatedResponse<*> -> shapePaginated(value as PaginatedResponse<Any?>)
-        is List<*> -> shapeList(value)
-        is Map<*, *> -> value.mapValues { shape(it.value) }
-        is Flow<*> -> value.map(::shape)
+        is PaginatedResponse<*> -> shapePaginated(value as PaginatedResponse<Any?>, scope)
+        is List<*> -> shapeList(value, scope)
+        is Map<*, *> -> value.mapValues { shape(it.value, scope) }
+        is Flow<*> -> value.map { shape(it, scope) }
         is NowPlaying -> value.copy(song = shapeUserSong(value.song))
         is RecentListens -> value.copy(
-            nowPlaying = value.nowPlaying?.let { shape(it) as NowPlaying },
-            recent = value.recent.map { shape(it) as ListenedSong },
+            nowPlaying = value.nowPlaying?.let { shape(it, scope) as NowPlaying },
+            recent = value.recent.map { shape(it, scope) as ListenedSong },
         )
 
         is ListenedSong -> value.copy(song = shapeUserSong(value.song))
         is CollectionSongMatch -> value.copy(song = shapeUserSong(value.song))
         is RadioChannelSongMatch -> value.copy(song = shapeUserSong(value.song))
-        is PlaybackState -> value.copy(queue = value.queue.map { shape(it) as PlaybackState.QueueEntry })
+        is PlaybackState -> value.copy(queue = value.queue.map { shape(it, scope) as PlaybackState.QueueEntry })
         is PlaybackState.QueueEntry.WithSong -> value.copy(song = shapeUserSong(value.song))
         is QueueItem -> value.copy(song = value.song?.let(::shapeUserSong))
         else -> value
     }
 
+    suspend fun interceptUiInvoke(
+        scope: CompatScope,
+        contributionId: String,
+        actionId: String,
+        payload: UiInvokePayload,
+    ): UiInvokeResult? = activeRules.firstNotNullOfOrNull { it.interceptUiInvoke(scope, contributionId, actionId, payload) }
+
     @Suppress("UNCHECKED_CAST")
-    private fun shapeList(list: List<*>): List<Any?> = when {
+    private suspend fun shapeList(list: List<*>, scope: CompatScope): List<Any?> = when {
         list.isNotEmpty() && list.all { it is RecentRelease } -> shapeRecentReleases(list as List<RecentRelease>)
         list.isNotEmpty() && list.all { it is Album } -> shapeAlbums(list as List<Album>).map(::shapeAlbum)
-        else -> list.map(::shape)
+        else -> list.map { shape(it, scope) }
     }
 
-    private fun shapePaginated(response: PaginatedResponse<Any?>): PaginatedResponse<Any?> {
-        val data = shapeList(response.data)
+    private suspend fun shapePaginated(response: PaginatedResponse<Any?>, scope: CompatScope): PaginatedResponse<Any?> {
+        val data = shapeList(response.data, scope)
         return response.copy(data = data, total = response.total + (data.size - response.data.size))
     }
 
@@ -107,9 +133,45 @@ open class ResponseShaper(val client: ClientInfo, rules: List<CompatRule> = Comp
     protected open fun shapeUserSong(song: UserSong): UserSong =
         activeRules.fold(song) { shaped, rule -> rule.shapeUserSong(shaped) }
 
-    protected open fun shapeUiComponent(component: UiComponent): UiComponent =
-        activeRules.fold(component) { shaped, rule -> rule.shapeUiComponent(shaped, client) }
+    protected open suspend fun shapeUiComponent(component: UiComponent, scope: CompatScope): UiComponent =
+        activeRules.fold(component) { shaped, rule -> rule.shapeUiComponent(shaped, scope) }
 }
+
+private val uiContributionCalls = setOf(
+    IUiService::render.name,
+    IUiService::subscribe.name,
+    IUiService::subscribeWithContext.name,
+    IUiService::subscribeLive.name,
+    IUiService::subscribeLiveWithContext.name,
+    IUiService::search.name,
+    IUiService::invoke.name,
+)
+
+private fun ResponseShaper.scopeOf(method: Method, params: Array<Any?>): CompatScope {
+    if (method.declaringClass != IUiService::class.java) return scope()
+    val context = params.firstNotNullOfOrNull { it as? UiContext }
+        ?: params.firstNotNullOfOrNull { it as? UiInvokePayload }?.context
+        ?: UiContext(entityId = params.firstNotNullOfOrNull { it as? UUID })
+    val contributionId = if (method.name in uiContributionCalls) params.firstOrNull() as? String else null
+    return scope(contributionId, context)
+}
+
+private suspend fun ResponseShaper.intercept(method: Method, params: Array<Any?>, scope: CompatScope): UiInvokeResult? {
+    if (method.declaringClass != IUiService::class.java || method.name != IUiService::invoke.name) return null
+    val contributionId = params[0] as String
+    val actionId = params[1] as String
+    val payload = params[2] as UiInvokePayload
+    return interceptUiInvoke(scope, contributionId, actionId, payload)
+}
+
+private fun invokeTarget(target: Any, method: Method, args: Array<Any?>): Any? = try {
+    method.invoke(target, *args)
+} catch (e: InvocationTargetException) {
+    throw e.targetException
+}
+
+private suspend fun invokeSuspending(target: Any, method: Method, params: Array<Any?>): Any? =
+    suspendCoroutineUninterceptedOrReturn { continuation -> invokeTarget(target, method, arrayOf(*params, continuation)) }
 
 @Suppress("UNCHECKED_CAST", "PLATFORM_CLASS_MAPPED_TO_KOTLIN")
 fun <T : Any> T.withClientCompat(interfaceClass: Class<T>, shaper: ResponseShaper): T {
@@ -127,23 +189,21 @@ fun <T : Any> T.withClientCompat(interfaceClass: Class<T>, shaper: ResponseShape
             }
         }
 
-        val lastArg = args?.lastOrNull()
-        val invokeArgs = if (lastArg is Continuation<*>) {
-            val continuation = lastArg as Continuation<Any?>
-            val shaped = object : Continuation<Any?> {
-                override val context = continuation.context
-                override fun resumeWith(result: Result<Any?>) = continuation.resumeWith(result.map(shaper::shape))
+        val callArgs = args ?: emptyArray()
+        val continuation = callArgs.lastOrNull() as? Continuation<Any?>
+        if (continuation != null) {
+            val params = callArgs.copyOfRange(0, callArgs.size - 1)
+            val scope = shaper.scopeOf(method, params)
+            val shaped: suspend () -> Any? = {
+                shaper.intercept(method, params, scope) ?: shaper.shape(invokeSuspending(target, method, params), scope)
             }
-            args.copyOf().also { it[it.size - 1] = shaped }
+            shaped.startCoroutineUninterceptedOrReturn(continuation)
         } else {
-            args ?: emptyArray()
-        }
-
-        try {
-            val res = method.invoke(target, *invokeArgs)
-            if (res === COROUTINE_SUSPENDED) res else shaper.shape(res)
-        } catch (e: InvocationTargetException) {
-            throw e.targetException
+            val scope = shaper.scopeOf(method, callArgs)
+            when (val res = invokeTarget(target, method, callArgs)) {
+                is Flow<*> -> res.map { shaper.shape(it, scope) }
+                else -> res
+            }
         }
     } as T
 }

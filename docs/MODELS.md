@@ -292,6 +292,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [NumberField](#devdertypuiuicomponentnumberfield)
 - [Progress](#devdertypuiuicomponentprogress)
 - [Row](#devdertypuiuicomponentrow)
+- [SearchField](#devdertypuiuicomponentsearchfield)
 - [Section](#devdertypuiuicomponentsection)
 - [Select](#devdertypuiuicomponentselect)
 - [Spacer](#devdertypuiuicomponentspacer)
@@ -3463,6 +3464,22 @@ Horizontal layout container.
 | `spacing` | [UiSpacing](#devdertypuiuispacing) | Spacing between children. |
 | `align` | [UiAlign](#devdertypuiuialign) | Vertical alignment of children. |
 | `weights` | `List`<`Double`>? | Optional relative weights, one per child. |
+
+### SearchField <a name="devdertypuiuicomponentsearchfield"></a>
+Search-as-you-type picker. While the user types at least minChars characters, clients call IUiService.search(contributionId, key, query, context) with the contribution that rendered the field and show the returned options. The value of the picked option is submitted under key with the enclosing Form. Clients without search field support receive a query TextField, a Search button and a Select of the results.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `key` | `String` | Payload key, also passed to IUiService.search. |
+| `label` | `String` | Label. |
+| `value` | [UiOption](#devdertypuiuioption)? | Currently selected option. Its label is shown until the user picks another one. |
+| `placeholder` | `String`? | Placeholder. |
+| `helper` | `String`? | Helper text. |
+| `error` | `String`? | Validation error to display. |
+| `required` | `Boolean` | Whether a value is required. |
+| `enabled` | `Boolean` | Whether the field is editable. |
+| `minChars` | `Int` | Minimum number of typed characters before clients search. |
+| `toolbar` | `List`<[UiComponent](#devdertypuiuicomponent)> | Keyboard accessory toolbar shown above the on-screen keyboard while the field is focused. Items are trailing-aligned. Buttons, Icons and Native portals. |
 
 ### Section <a name="devdertypuiuicomponentsection"></a>
 Titled group of content.

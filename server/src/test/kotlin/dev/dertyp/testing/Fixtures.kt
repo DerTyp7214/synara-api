@@ -7,6 +7,7 @@ import io.mockk.mockk
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.util.UUID
 
@@ -87,4 +88,13 @@ fun linkListenBrainzUser(userId: UUID, lbUserId: UUID) {
         it[UserListenBrainzLinkTable.userId] = userId
         it[listenBrainzUserId] = lbUserId
     }
+}
+
+fun linkListenShare(userA: UUID, userB: UUID, useForRecommendations: Boolean = false): UUID {
+    val (first, second) = if (userA < userB) userA to userB else userB to userA
+    return ListenShareTable.insertAndGetId {
+        it[ListenShareTable.userA] = first
+        it[ListenShareTable.userB] = second
+        it[ListenShareTable.useForRecommendations] = useForRecommendations
+    }.value
 }

@@ -33,7 +33,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 |---|---|
 | `UiSchemaVersion.HEADER` | `X-Ui-Schema-Version` |
 | `UiSchemaVersion.NONE` | `0` |
-| `UiSchemaVersion.CURRENT` | `2` |
+| `UiSchemaVersion.CURRENT` | `3` |
 | `ClientTimeZone.HEADER` | `X-Time-Zone` |
 
 | Component | Introduced in |
@@ -66,6 +66,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 | `textField` | 1 |
 | `tile` | 1 |
 | `fileField` | 2 |
+| `searchField` | 3 |
 
 ## Authentication
 

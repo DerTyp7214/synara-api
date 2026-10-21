@@ -5,6 +5,7 @@ import org.koin.dsl.module
 
 val listeningModule = module {
     singleOf(::ListenService)
+    singleOf(::ListenShareService)
     singleOf(::ScrobbleService)
     singleOf(::ListeningStatsService)
     singleOf(::PlaybackService)

@@ -2,32 +2,71 @@ package dev.dertyp.utils
 
 import dev.dertyp.core.ClientFeature
 import dev.dertyp.core.ClientInfo
+import dev.dertyp.services.ui.TranslationService
+import dev.dertyp.services.ui.UiRegistry
+import dev.dertyp.services.ui.UiService
+import dev.dertyp.ui.UiAction
 import dev.dertyp.ui.UiComponent
+import dev.dertyp.ui.UiContributionKind
+import dev.dertyp.ui.UiIcon
+import dev.dertyp.ui.UiIconName
+import dev.dertyp.ui.UiInvokePayload
+import dev.dertyp.ui.UiInvokeResult
+import dev.dertyp.ui.UiInvokeStatus
 import dev.dertyp.ui.UiSchema
 import dev.dertyp.ui.UiSchemaVersion
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import kotlin.reflect.KClass
 
 class UiSchemaCompat(
     private val introducedIn: Map<KClass<out UiComponent>, Int> = UiSchema.introducedIn,
-) : CompatRule {
+) : CompatRule, KoinComponent {
     override val feature = ClientFeature.SERVER_DRIVEN_UI
+
+    private val uiService by inject<UiService>()
+    private val translations by inject<TranslationService>()
 
     private val latestVersion = introducedIn.values.maxOrNull() ?: UiSchemaVersion.CURRENT
 
     override fun isActive(client: ClientInfo): Boolean = client.uiSchemaVersion < latestVersion
 
-    override fun shapeUiComponent(component: UiComponent, client: ClientInfo): UiComponent =
-        downgrade(component, client.uiSchemaVersion)
+    override suspend fun shapeUiComponent(component: UiComponent, scope: CompatScope): UiComponent =
+        downgrade(component, scope.client.uiSchemaVersion, scope)
+
+    override suspend fun interceptUiInvoke(
+        scope: CompatScope,
+        contributionId: String,
+        actionId: String,
+        payload: UiInvokePayload,
+    ): UiInvokeResult? {
+        if (!actionId.startsWith(SEARCH_ACTION_PREFIX)) return null
+        if ((introducedIn[UiComponent.SearchField::class] ?: UiSchemaVersion.CURRENT) <= scope.client.uiSchemaVersion) {
+            return null
+        }
+        val queryKey = queryKey(actionId.removePrefix(SEARCH_ACTION_PREFIX))
+        val query = payload.values[queryKey]?.text.orEmpty()
+        return UiInvokeResult(
+            UiInvokeStatus.OK,
+            next = UiAction.OpenPage(contributionId, payload.context.params + (queryKey to query)),
+        )
+    }
 
     private fun versionOf(component: UiComponent): Int = introducedIn[component::class] ?: UiSchemaVersion.CURRENT
 
-    fun downgrade(component: UiComponent, version: Int): UiComponent {
+    suspend fun downgrade(component: UiComponent, version: Int, scope: CompatScope? = null, formId: String? = null): UiComponent {
         if (component is UiComponent.FileField && versionOf(component) > version) return downgrade(
             asTextField(component),
-            version
+            version,
+            scope,
+            formId,
         )
+        if (component is UiComponent.SearchField && versionOf(component) > version && scope != null && formId != null) {
+            asSearchColumn(component, scope, formId)?.let { return downgrade(it, version, scope, formId) }
+        }
         if (versionOf(component) > version) return UiComponent.Fallback()
-        return component.mapChildren { downgrade(it, version) }
+        val enclosingForm = (component as? UiComponent.Form)?.id ?: formId
+        return component.mapChildren { downgrade(it, version, scope, enclosingForm) }
     }
 
     private fun asTextField(field: UiComponent.FileField): UiComponent.TextField = UiComponent.TextField(
@@ -43,7 +82,58 @@ class UiSchemaCompat(
         toolbar = field.toolbar,
     )
 
+    private suspend fun asSearchColumn(
+        field: UiComponent.SearchField,
+        scope: CompatScope,
+        formId: String,
+    ): UiComponent.Column? {
+        val user = scope.user ?: return null
+        val contributionId = scope.contributionId ?: return null
+        val registered = uiService.registry.get(contributionId) ?: return null
+        if (registered.contribution.kind != UiContributionKind.PAGE) return null
+        val queryKey = queryKey(field.key)
+        val query = scope.context.params[queryKey]
+        val results = if (query != null && query.length >= field.minChars) {
+            uiService.search(user, scope.client, contributionId, field.key, query, scope.context, scope.call)
+        } else {
+            emptyList()
+        }
+        val selected = field.value?.takeIf { value -> results.none { it.value == value.value } }
+        val t = translations.translator(UiRegistry.SERVER_SOURCE, scope.client.locale)
+        return UiComponent.Column(
+            listOf(
+                UiComponent.TextField(
+                    key = queryKey,
+                    label = field.label,
+                    value = query,
+                    placeholder = field.placeholder,
+                    helper = field.helper,
+                    enabled = field.enabled,
+                    toolbar = field.toolbar,
+                ),
+                UiComponent.Button(
+                    label = t.t("ui.search.submit"),
+                    action = UiAction.Invoke(contributionId, SEARCH_ACTION_PREFIX + field.key, formId = formId),
+                    icon = UiIcon(UiIconName.SEARCH),
+                    enabled = field.enabled,
+                ),
+                UiComponent.Select(
+                    key = field.key,
+                    label = t.t("ui.search.results"),
+                    value = field.value?.value,
+                    options = listOfNotNull(selected) + results,
+                    error = field.error,
+                    required = field.required,
+                    enabled = field.enabled,
+                ),
+            ),
+        )
+    }
+
     companion object {
         const val BASE64_HINT = "Paste the file content as base64."
+        const val SEARCH_ACTION_PREFIX = "ui.search."
+
+        fun queryKey(key: String): String = "$key.query"
     }
 }

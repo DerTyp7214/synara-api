@@ -166,6 +166,7 @@ class FlywayMigrationTest {
         val createdByLaterMigrations = setOf(
             if (dialect == DbDialect.POSTGRES) "userplaylistshare" else "userPlaylistShare",
             "listen_song_redirect",
+            "listen_share",
         )
         assertEquals(createdByLaterMigrations, after.tables - before.tables)
         assertEquals(before.copy(tables = before.tables + createdByLaterMigrations, history = history), after)

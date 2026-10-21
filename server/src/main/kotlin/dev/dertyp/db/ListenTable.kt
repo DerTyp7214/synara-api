@@ -4,9 +4,12 @@ import dev.dertyp.PlatformUUID
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 import org.jetbrains.exposed.v1.core.java.javaUUID
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.select
 
 enum class ListenSource { LISTENBRAINZ, LOCAL }
+
+enum class ListenScope { OWN, SHARED, RECOMMENDATIONS }
 
 object ListenTable : UUIDTable("listen") {
     val listenBrainzUserId =
@@ -64,15 +67,30 @@ object ListenTable : UUIDTable("listen") {
         isrcs.map { it.uppercase() }.distinct().sorted().joinToString(",").ifBlank { null }
 }
 
-internal fun listenOwnerPredicate(userId: PlatformUUID): Op<Boolean> {
-    val listenBrainzUserId = UserListenBrainzLinkTable
-        .select(UserListenBrainzLinkTable.listenBrainzUserId)
-        .where { UserListenBrainzLinkTable.userId eq userId }
-        .singleOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
+internal fun listenOwnerIds(userId: PlatformUUID, scope: ListenScope): Set<PlatformUUID> {
+    if (scope == ListenScope.OWN) return setOf(userId)
+    val partners = ListenShareTable
+        .select(ListenShareTable.userA, ListenShareTable.userB)
+        .where { (ListenShareTable.userA eq userId) or (ListenShareTable.userB eq userId) }
+        .apply { if (scope == ListenScope.RECOMMENDATIONS) andWhere { ListenShareTable.useForRecommendations eq true } }
+        .map {
+            val a = it[ListenShareTable.userA].value
+            if (a == userId) it[ListenShareTable.userB].value else a
+        }
+    return setOf(userId) + partners
+}
 
-    return if (listenBrainzUserId != null) {
-        (ListenTable.userId eq userId) or (ListenTable.listenBrainzUserId eq listenBrainzUserId)
+internal fun listenOwnerPredicate(userId: PlatformUUID, scope: ListenScope): Op<Boolean> {
+    val ownerIds = listenOwnerIds(userId, scope)
+    val listenBrainzUserIds = UserListenBrainzLinkTable
+        .select(UserListenBrainzLinkTable.listenBrainzUserId)
+        .where { UserListenBrainzLinkTable.userId inList ownerIds }
+        .map { it[UserListenBrainzLinkTable.listenBrainzUserId].value }
+        .distinct()
+
+    return if (listenBrainzUserIds.isNotEmpty()) {
+        (ListenTable.userId inList ownerIds) or (ListenTable.listenBrainzUserId inList listenBrainzUserIds)
     } else {
-        ListenTable.userId eq userId
+        ListenTable.userId inList ownerIds
     }
 }

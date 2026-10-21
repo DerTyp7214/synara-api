@@ -6,9 +6,22 @@ import dev.dertyp.core.fullName
 import dev.dertyp.core.fullTitle
 import dev.dertyp.data.Album
 import dev.dertyp.data.Song
+import dev.dertyp.data.User
 import dev.dertyp.data.UserSong
 import dev.dertyp.services.models.RecentRelease
 import dev.dertyp.ui.UiComponent
+import dev.dertyp.ui.UiContext
+import dev.dertyp.ui.UiInvokePayload
+import dev.dertyp.ui.UiInvokeResult
+import io.ktor.server.application.ApplicationCall
+
+data class CompatScope(
+    val client: ClientInfo,
+    val user: User? = null,
+    val contributionId: String? = null,
+    val context: UiContext = UiContext(),
+    val call: ApplicationCall? = null,
+)
 
 interface CompatRule {
     val feature: ClientFeature
@@ -16,7 +29,13 @@ interface CompatRule {
     fun shapeAlbum(album: Album): Album = album
     fun shapeSong(song: Song): Song = song
     fun shapeUserSong(song: UserSong): UserSong = song
-    fun shapeUiComponent(component: UiComponent, client: ClientInfo): UiComponent = component
+    suspend fun shapeUiComponent(component: UiComponent, scope: CompatScope): UiComponent = component
+    suspend fun interceptUiInvoke(
+        scope: CompatScope,
+        contributionId: String,
+        actionId: String,
+        payload: UiInvokePayload,
+    ): UiInvokeResult? = null
     fun shapeAlbums(albums: List<Album>): List<Album> = albums
     fun shapeRecentReleases(releases: List<RecentRelease>): List<RecentRelease> = releases
 }

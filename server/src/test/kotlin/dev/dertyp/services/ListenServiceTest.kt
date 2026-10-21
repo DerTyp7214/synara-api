@@ -82,6 +82,7 @@ class ListenServiceTest : KoinTest {
             ListenBrainzUserTable,
             UserListenBrainzLinkTable,
             ListenTable,
+            ListenShareTable,
             ListenLinkTable,
             ListenSongRedirectTable,
         )
@@ -140,6 +141,7 @@ class ListenServiceTest : KoinTest {
         ListenBrainzUserTable,
         UserListenBrainzLinkTable,
         ListenTable,
+        ListenShareTable,
         ListenLinkTable,
         ListenSongRedirectTable,
         *allMusicBrainzTables,
@@ -1195,5 +1197,145 @@ class ListenServiceTest : KoinTest {
         verify(exactly = 3) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
         verify(exactly = 1) { changeNotifier.notify(linkedUser, ChangeTopic.LISTENS) }
         verify(exactly = 0) { changeNotifier.notify(otherUser, any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentListens includes the local and ListenBrainz listens of a linked partner`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, own, partnerLocal, partnerLb) = transaction(database) {
+            val u = insertUser()
+            val partner = insertUser()
+            val stranger = insertUser()
+            val partnerAccount = insertLbUser()
+            linkListenBrainzUser(partner, partnerAccount)
+            linkListenShare(u, partner)
+            val album = insertAlbum()
+            val own = insertSong(album)
+            val partnerLocal = insertSong(album)
+            val partnerLb = insertSong(album)
+            insertLocal(u, own, 10_000)
+            insertLocal(partner, partnerLocal, 20_000)
+            insertLb(partnerAccount, partnerLb, 30_000)
+            insertLocal(stranger, insertSong(album), 40_000)
+            Quad(u, own, partnerLocal, partnerLb)
+        }
+
+        assertEquals(listOf(partnerLb, partnerLocal, own), service.recentListens(user, 10).map { it.song.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentArtists and recentAlbums include a linked partner's listens`(dialect: DbDialect) = runBlocking {
+        setupWithLibrary(dialect)
+        val (user, partner, album, artist) = transaction(database) {
+            val u = insertUser()
+            val partner = insertUser()
+            val stranger = insertUser()
+            linkListenShare(partner, u)
+            val album = insertAlbum("Partner Album")
+            val song = insertSong(album)
+            val artist = insertArtist("Partner Artist")
+            linkSongArtist(song, artist)
+            insertLocal(partner, song, 5_000)
+            val strangerSong = insertSong(insertAlbum("Stranger Album"))
+            linkSongArtist(strangerSong, insertArtist("Stranger Artist"))
+            insertLocal(stranger, strangerSong, 6_000)
+            Quad(u, partner, album, artist)
+        }
+
+        assertEquals(listOf(artist), service.recentArtists(user, 10).map { it.artist.id })
+        assertEquals(listOf(album), service.recentAlbums(user, 10).map { it.album.id })
+        assertEquals(listOf(artist), service.recentArtists(partner, 10).map { it.artist.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `linkedGroups, relinkSong and linkUnmatched ignore a linked partner's listens`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbid = UUID.randomUUID()
+        val unmatchedMbid = UUID.randomUUID()
+        val f = transaction(database) {
+            val f = relinkFixture()
+            val partner = insertUser()
+            val partnerAccount = insertLbUser()
+            linkListenBrainzUser(partner, partnerAccount)
+            linkListenShare(f.user, partner)
+            insertRelinkRow(ListenSource.LOCAL, partner, f.songA, 600, trackName = "Partner local")
+            insertRelinkRow(ListenSource.LISTENBRAINZ, partnerAccount, f.songA, 610, recordingMbid = f.mbid, trackName = "Partner mbid")
+            insertRelinkRow(ListenSource.LISTENBRAINZ, partnerAccount, f.songA, 620, recordingMbid = mbid, trackName = "Partner only")
+            insertUnmatchedLb(partnerAccount, 630, recordingMbid = unmatchedMbid, trackName = "Partner unmatched")
+            insertUnmatchedLb(f.lb, 640, recordingMbid = unmatchedMbid, trackName = "Own unmatched")
+            f
+        }
+
+        val groups = service.linkedGroups(f.user, f.songA)
+        assertEquals(listOf(3L, 2L, 2L, 1L, 1L), groups.map { it.listenCount })
+        assertFalse(groups.any { it.key.recordingMbid == mbid })
+
+        assertEquals(9, service.relinkSong(f.user, f.songA, f.songB, null).linkedListens)
+        assertEquals(1, service.linkUnmatched(f.user, f.songB, null, unmatchedMbid).linkedListens)
+
+        transaction(database) {
+            val byTrack = songIdsByTrack()
+            assertEquals(f.songA, byTrack["Partner local"])
+            assertEquals(f.songA, byTrack["Partner mbid"])
+            assertEquals(f.songA, byTrack["Partner only"])
+            assertNull(byTrack["Partner unmatched"])
+            assertEquals(f.songB, byTrack["Own unmatched"])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `recentSeedWeights includes a partner's listens only when the link is used for recommendations`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val (user, own, partnerSong, linkId) = transaction(database) {
+                val u = insertUser()
+                val partner = insertUser()
+                val partnerAccount = insertLbUser()
+                linkListenBrainzUser(partner, partnerAccount)
+                val linkId = linkListenShare(u, partner)
+                val album = insertAlbum()
+                val own = insertSong(album)
+                val partnerSong = insertSong(album)
+                val partnerLbSong = insertSong(album)
+                insertLocal(u, own, 1_000)
+                insertLocal(partner, partnerSong, 2_000)
+                insertLb(partnerAccount, partnerLbSong, 3_000)
+                Quad(u, own, partnerSong, linkId)
+            }
+
+            assertEquals(setOf(own), service.recentSeedWeights(user, 500).keys)
+
+            transaction(database) {
+                ListenShareTable.update({ ListenShareTable.id eq linkId }) { it[useForRecommendations] = true }
+            }
+            val weights = service.recentSeedWeights(user, 500)
+            assertEquals(3, weights.size)
+            assertTrue(own in weights && partnerSong in weights)
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `listen changes are announced to linked partners`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, partner, stranger, song) = transaction(database) {
+            val u = insertUser()
+            val partner = insertUser()
+            val stranger = insertUser()
+            linkListenShare(u, partner)
+            Quad(u, partner, stranger, insertSong(insertAlbum()))
+        }
+
+        service.ingestLocal(user, song, 500, 250)
+        verify(exactly = 1) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
+        verify(exactly = 1) { changeNotifier.notify(partner, ChangeTopic.LISTENS) }
+        verify(exactly = 0) { changeNotifier.notify(stranger, any()) }
+
+        service.ingestLocal(partner, song, 600, 250)
+        verify(exactly = 2) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
+        verify(exactly = 2) { changeNotifier.notify(partner, ChangeTopic.LISTENS) }
     }
 }

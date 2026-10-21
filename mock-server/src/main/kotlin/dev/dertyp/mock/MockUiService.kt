@@ -26,6 +26,7 @@ import dev.dertyp.ui.UiInvokeResult
 import dev.dertyp.ui.UiInvokeStatus
 import dev.dertyp.ui.UiLiveUpdate
 import dev.dertyp.ui.UiMenuItem
+import dev.dertyp.ui.UiOption
 import dev.dertyp.ui.UiPortals
 import dev.dertyp.ui.UiRender
 import dev.dertyp.ui.UiSlotRender
@@ -489,6 +490,11 @@ class MockUiService : IUiService {
         }
         return handlers
     }
+
+    override suspend fun search(contributionId: String, key: String, query: String, context: UiContext): List<UiOption> =
+        listOf("alice", "bob", "bobby", "carol")
+            .filter { it.contains(query, ignoreCase = true) }
+            .map { UiOption(it, it) }
 
     override suspend fun intake(items: List<IntakeItem>, resolverId: String?): UiIntakeResult {
         val handlers = offers(items).filter { resolverId == null || it.id == resolverId }

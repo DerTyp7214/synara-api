@@ -61,6 +61,7 @@ class ListenHistoryQueryServiceTest {
             ListenBrainzUserTable,
             UserListenBrainzLinkTable,
             ListenTable,
+            ListenShareTable,
             ListenLinkTable,
             ListenSongRedirectTable,
         )
@@ -152,6 +153,35 @@ class ListenHistoryQueryServiceTest {
         val page = service.listens(user as UUID, ListenFilter(), 10, null, ZoneOffset.UTC)
 
         assertEquals(listOf(t3, t2, t1), page.listens.map { it.listenedAt.epochMs })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `listens and summary include a linked partner's listens`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, own, partnerLocal, partnerLb) = transaction(database) {
+            val u = insertUser()
+            val partner = insertUser()
+            val stranger = insertUser()
+            val partnerAccount = insertLbUser()
+            linkListenBrainzUser(partner, partnerAccount)
+            linkListenShare(u, partner)
+            val song = insertSong(insertAlbum())
+            registerSong(song, "Song")
+            val own = ms(2024, 1, 1)
+            val partnerLocal = ms(2024, 1, 2)
+            val partnerLb = ms(2024, 1, 3)
+            insertListen(own, userId = u, songId = song)
+            insertListen(partnerLocal, userId = partner, songId = song)
+            insertListen(partnerLb, lbUserId = partnerAccount, songId = song)
+            insertListen(ms(2024, 1, 4), userId = stranger, songId = song)
+            listOf(u, own, partnerLocal, partnerLb)
+        }
+
+        val page = service.listens(user as UUID, ListenFilter(), 10, null, ZoneOffset.UTC)
+
+        assertEquals(listOf(partnerLb, partnerLocal, own), page.listens.map { it.listenedAt.epochMs })
+        assertEquals(3L, service.summary(user, ListenFilter(), ZoneOffset.UTC).listenCount)
     }
 
     @ParameterizedTest

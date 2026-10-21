@@ -15,11 +15,12 @@ The API version is `ApiVersion.CURRENT` ([ApiVersion.kt](../common-rpc/src/commo
 
 ## UI schema version
 
-The UI schema version is `UiSchemaVersion.CURRENT` ([UiSchemaVersion.kt](../common-rpc/src/commonMain/kotlin/dev/dertyp/ui/UiSchemaVersion.kt)). Each component is registered with its introducing version in `UiSchema.introducedIn` and `UiSchemaCompat` downgrades newer ones to `Fallback` or, for `FileField`, to a base64 `TextField` ([UiSchemaCompat.kt](../server/src/main/kotlin/dev/dertyp/utils/UiSchemaCompat.kt)). See [SERVER_DRIVEN_UI.md](SERVER_DRIVEN_UI.md).
+The UI schema version is `UiSchemaVersion.CURRENT` ([UiSchemaVersion.kt](../common-rpc/src/commonMain/kotlin/dev/dertyp/ui/UiSchemaVersion.kt)). Each component is registered with its introducing version in `UiSchema.introducedIn` and `UiSchemaCompat` downgrades newer ones to `Fallback`, for `FileField` to a base64 `TextField` and for `SearchField` to a query `TextField`, a Search button and a `Select` of the results ([UiSchemaCompat.kt](../server/src/main/kotlin/dev/dertyp/utils/UiSchemaCompat.kt)). See [SERVER_DRIVEN_UI.md](SERVER_DRIVEN_UI.md).
 
 ### No target version yet
 
 - `UiComponent.FileField` (introduced in schema version 2): the `asTextField` downgrade in `UiSchemaCompat` and `BASE64_HINT` can go once clients below schema version 2 are unsupported. When schema version 1 is dropped, `UiSchemaCompat` itself and the `introducedIn` map can be reduced the same way.
+- `UiComponent.SearchField` (introduced in schema version 3): the `asSearchColumn` downgrade and the `ui.search.<key>` invoke interception in `UiSchemaCompat`, the `CompatScope` it needs and the `interceptUiInvoke` hook in `CompatRule` can go once clients below schema version 3 are unsupported.
 
 ## Plugin API version
 

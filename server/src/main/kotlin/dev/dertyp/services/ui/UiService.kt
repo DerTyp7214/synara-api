@@ -27,6 +27,7 @@ import dev.dertyp.ui.UiInvokePayload
 import dev.dertyp.ui.UiInvokeResult
 import dev.dertyp.ui.UiInvokeStatus
 import dev.dertyp.ui.UiLiveUpdate
+import dev.dertyp.ui.UiOption
 import dev.dertyp.ui.UiHookHandlerInfo
 import dev.dertyp.ui.UiHookKind
 import dev.dertyp.ui.UiRender
@@ -174,6 +175,7 @@ class UiService(
             is UiComponent.TextField -> if (shaped.toolbar.isEmpty()) shaped.copy(toolbar = done) else shaped
             is UiComponent.NumberField -> if (shaped.toolbar.isEmpty()) shaped.copy(toolbar = done) else shaped
             is UiComponent.FileField -> if (shaped.toolbar.isEmpty()) shaped.copy(toolbar = done) else shaped
+            is UiComponent.SearchField -> if (shaped.toolbar.isEmpty()) shaped.copy(toolbar = done) else shaped
             else -> shaped
         }
 
@@ -313,6 +315,20 @@ class UiService(
         return result
     }
 
+    suspend fun search(
+        user: User,
+        client: ClientInfo,
+        id: String,
+        key: String,
+        query: String,
+        context: UiContext,
+        call: ApplicationCall? = null
+    ): List<UiOption> {
+        val registered = require(id, user)
+        return registered.contribution.search(scope(registered, user, client, context, call), key, query)
+            .take(MAX_SEARCH_RESULTS)
+    }
+
     suspend fun dispatchHook(
         user: User,
         client: ClientInfo,
@@ -375,4 +391,8 @@ class UiService(
 
     fun contributionsOf(registeredContribution: UiContribution): RegisteredContribution? =
         registry.get(registeredContribution.id)
+
+    companion object {
+        const val MAX_SEARCH_RESULTS = 50
+    }
 }

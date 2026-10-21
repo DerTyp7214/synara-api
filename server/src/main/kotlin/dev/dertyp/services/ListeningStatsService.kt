@@ -295,16 +295,7 @@ class ListeningStatsService : Service() {
         previousStart: Long?,
         zone: ZoneId,
     ): PassResult {
-        val lbId = UserListenBrainzLinkTable
-            .select(UserListenBrainzLinkTable.listenBrainzUserId)
-            .where { UserListenBrainzLinkTable.userId eq userId }
-            .singleOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
-
-        val owner = if (lbId != null) {
-            (ListenTable.userId eq userId) or (ListenTable.listenBrainzUserId eq lbId)
-        } else {
-            ListenTable.userId eq userId
-        }
+        val owner = listenOwnerPredicate(userId, ListenScope.SHARED)
 
         val result = PassResult()
         var lastTs = 0L

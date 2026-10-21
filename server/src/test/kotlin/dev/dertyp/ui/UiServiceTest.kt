@@ -66,6 +66,9 @@ class UiServiceTest {
 
         override fun changes(scope: UiRenderScope): Flow<Unit> = ticks
 
+        override suspend fun search(scope: UiRenderScope, key: String, query: String): List<UiOption> =
+            (1..60).map { UiOption("$key-$it", "$query ${scope.context.params["tab"]} ${scope.i18n.locale}") }
+
         override fun live(scope: UiRenderScope, key: String): Flow<UiLiveUpdate>? =
             if (key == "lines") ticks.map { UiLiveUpdate.AppendLines(listOf(scope.i18n.locale)) } else null
 
@@ -131,6 +134,20 @@ class UiServiceTest {
         assertEquals("core.import", render.contributionId)
         assertEquals(UiSchemaVersion.CURRENT, render.schemaVersion)
         assertTrue((render.root as UiComponent.Text).text.endsWith("de"))
+    }
+
+    @Test
+    fun `search enforces access and returns at most 50 options of the contribution`() = runBlocking {
+        val context = UiContext(params = mapOf("tab" to "users"))
+        assertThrows<UnauthorizedException> { service.search(plain, client, "core.admin", "user", "al", context) }
+        assertThrows<IllegalArgumentException> { service.search(admin, client, "core.missing", "user", "al", context) }
+
+        val options = service.search(admin, client, "core.admin", "user", "al", context)
+
+        assertEquals(UiService.MAX_SEARCH_RESULTS, options.size)
+        assertEquals(50, options.size)
+        assertEquals((1..50).map { "user-$it" }, options.map { it.value })
+        assertTrue(options.all { it.label == "al users de" })
     }
 
     @Test
@@ -267,6 +284,7 @@ class UiServiceTest {
                     "form",
                     listOf(
                         UiComponent.TextField("text", "Text"),
+                        UiComponent.SearchField("search", "Search"),
                         UiComponent.Card(
                             listOf(
                                 UiComponent.Section(
@@ -305,7 +323,7 @@ class UiServiceTest {
     )
 
     private fun UiComponent.fields(): List<UiComponent> = when (this) {
-        is UiComponent.TextField, is UiComponent.NumberField, is UiComponent.FileField -> listOf(this)
+        is UiComponent.TextField, is UiComponent.NumberField, is UiComponent.FileField, is UiComponent.SearchField -> listOf(this)
         is UiComponent.Column -> children.flatMap { it.fields() }
         is UiComponent.Row -> children.flatMap { it.fields() }
         is UiComponent.Grid -> children.flatMap { it.fields() }
@@ -321,6 +339,7 @@ class UiServiceTest {
             is UiComponent.TextField -> it.key to it.toolbar
             is UiComponent.NumberField -> it.key to it.toolbar
             is UiComponent.FileField -> it.key to it.toolbar
+            is UiComponent.SearchField -> it.key to it.toolbar
             else -> error("not a field")
         }
     }
@@ -331,8 +350,9 @@ class UiServiceTest {
 
         val toolbars = service.render(admin, client, "core.fields", UiContext()).root.toolbars()
 
-        assertEquals(listOf("text", "number", "file", "liveText", "explicit"), toolbars.keys.toList())
+        assertEquals(listOf("text", "search", "number", "file", "liveText", "explicit"), toolbars.keys.toList())
         assertEquals(done, toolbars.getValue("text"))
+        assertEquals(done, toolbars.getValue("search"))
         assertEquals(done, toolbars.getValue("number"))
         assertEquals(done, toolbars.getValue("file"))
         assertEquals(done, toolbars.getValue("liveText"))

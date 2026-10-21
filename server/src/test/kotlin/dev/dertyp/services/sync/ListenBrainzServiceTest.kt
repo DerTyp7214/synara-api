@@ -56,6 +56,7 @@ class ListenBrainzServiceTest : KoinTest {
             ListenBrainzUserTable,
             UserListenBrainzLinkTable,
             ListenTable,
+            ListenShareTable,
             ListenLinkTable,
             ListenSongRedirectTable,
         )

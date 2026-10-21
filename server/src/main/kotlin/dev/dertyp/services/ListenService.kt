@@ -57,9 +57,11 @@ class ListenService : Service() {
         MutableSharedFlow<Unit>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val listenChanges: SharedFlow<Unit> = _listenChanges.asSharedFlow()
 
-    private fun listensChanged(userIds: Collection<PlatformUUID>) {
+    suspend fun listensChanged(userIds: Collection<PlatformUUID>) {
         _listenChanges.tryEmit(Unit)
-        userIds.forEach { changeNotifier.notify(it, ChangeTopic.LISTENS) }
+        if (userIds.isEmpty()) return
+        val audience = dbQuery { userIds.flatMapTo(LinkedHashSet()) { listenOwnerIds(it, ListenScope.SHARED) } }
+        audience.forEach { changeNotifier.notify(it, ChangeTopic.LISTENS) }
     }
 
     suspend fun ingestListenBrainz(listenBrainzUserId: PlatformUUID, listens: List<IncomingListen>): Int {
@@ -95,16 +97,7 @@ class ListenService : Service() {
     }
 
     suspend fun recentSeedWeights(userId: PlatformUUID, cutoff: Long): Map<PlatformUUID, Float> = dbQuery {
-        val account = UserListenBrainzLinkTable
-            .select(UserListenBrainzLinkTable.listenBrainzUserId)
-            .where { UserListenBrainzLinkTable.userId eq userId }
-            .firstOrNull()?.get(UserListenBrainzLinkTable.listenBrainzUserId)?.value
-
-        val owner = if (account != null) {
-            (ListenTable.userId eq userId) or (ListenTable.listenBrainzUserId eq account)
-        } else {
-            ListenTable.userId eq userId
-        }
+        val owner = listenOwnerPredicate(userId, ListenScope.RECOMMENDATIONS)
 
         val weights = HashMap<PlatformUUID, Float>()
         ListenTable.innerJoin(SongTable, { ListenTable.songId }, { SongTable.id })
@@ -234,7 +227,7 @@ class ListenService : Service() {
         val result = dbQuery {
             require(SongTable.select(SongTable.id).where { SongTable.id eq songId }.any()) { "Song $songId not found" }
 
-            val owner = listenOwnerPredicate(userId)
+            val owner = listenOwnerPredicate(userId, ListenScope.OWN)
 
             val mbid = recordingMbid ?: recordingMsid?.let { msid ->
                 ListenTable
@@ -334,7 +327,7 @@ class ListenService : Service() {
                 ListenTable.listenedAt,
                 ListenTable.msPlayed,
             )
-            .where { listenOwnerPredicate(userId) }
+            .where { listenOwnerPredicate(userId, ListenScope.OWN) }
             .andWhere { ListenTable.songId eq songId }
             .toList()
         if (rows.isEmpty()) return emptyList()
@@ -406,7 +399,7 @@ class ListenService : Service() {
             require(SongTable.select(SongTable.id).where { SongTable.id eq toSongId }.any()) { "Song $toSongId not found" }
 
             val keys = (groups ?: linkedGroupsOf(userId, fromSongId).map { it.key }).distinct()
-            val owner = listenOwnerPredicate(userId)
+            val owner = listenOwnerPredicate(userId, ListenScope.OWN)
             val now = System.currentTimeMillis()
             var moved = 0
             val msids = LinkedHashSet<PlatformUUID>()
@@ -504,7 +497,7 @@ class ListenService : Service() {
         val capped = limit.coerceIn(1, 1000)
 
         val rows = dbQuery {
-            val owner = listenOwnerPredicate(userId)
+            val owner = listenOwnerPredicate(userId, ListenScope.SHARED)
 
             ListenTable
                 .select(
@@ -564,7 +557,7 @@ class ListenService : Service() {
                     otherColumn = SongArtistTable.songId
                 )
                 .select(SongArtistTable.artistId, lastListen)
-                .where { listenOwnerPredicate(userId) }
+                .where { listenOwnerPredicate(userId, ListenScope.SHARED) }
                 .andWhere { ListenTable.songId.isNotNull() }
                 .groupBy(SongArtistTable.artistId)
                 .orderBy(lastListen, SortOrder.DESC)
@@ -584,7 +577,7 @@ class ListenService : Service() {
             val lastListen = ListenTable.listenedAt.max().alias("lastListen")
             ListenTable.innerJoin(SongTable, { ListenTable.songId }, { SongTable.id })
                 .select(SongTable.albumId, lastListen)
-                .where { listenOwnerPredicate(userId) }
+                .where { listenOwnerPredicate(userId, ListenScope.SHARED) }
                 .andWhere { ListenTable.songId.isNotNull() }
                 .groupBy(SongTable.albumId)
                 .orderBy(lastListen, SortOrder.DESC)

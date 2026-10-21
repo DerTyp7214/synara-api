@@ -283,7 +283,7 @@ class ClientCompatTest {
     private val flatAlbumNames = listOf("A", "A (Deluxe Edition)", "A (2011 Remaster)", "B")
 
     @Test
-    fun `clients below api version 9 get one album entry per edition with tags in the name`() {
+    fun `clients below api version 9 get one album entry per edition with tags in the name`() = runBlocking {
         val shaped = ResponseShaper(ClientInfo(8)).shape(PaginatedResponse(groupedAlbums(), total = 2)) as PaginatedResponse<*>
 
         val albums = shaped.data.map { it as Album }
@@ -293,7 +293,7 @@ class ClientCompatTest {
     }
 
     @Test
-    fun `a plain album list is flattened for clients below api version 9`() {
+    fun `a plain album list is flattened for clients below api version 9`() = runBlocking {
         val shaped = ResponseShaper(ClientInfo(8)).shape(groupedAlbums()) as List<*>
         val albums = shaped.map { it as Album }
 
@@ -302,7 +302,7 @@ class ClientCompatTest {
     }
 
     @Test
-    fun `a single album with versions has them emptied for clients below api version 9`() {
+    fun `a single album with versions has them emptied for clients below api version 9`() = runBlocking {
         val shaped = ResponseShaper(ClientInfo(8)).shape(groupedAlbums().first()) as Album
 
         assertEquals("A", shaped.name)
@@ -310,7 +310,7 @@ class ClientCompatTest {
     }
 
     @Test
-    fun `current clients keep the folded album editions`() {
+    fun `current clients keep the folded album editions`() = runBlocking {
         val page = PaginatedResponse(groupedAlbums(), total = 2)
         assertEquals(page, ResponseShaper(ClientInfo(ApiVersion.CURRENT)).shape(page))
         assertEquals(page.data, ResponseShaper(ClientInfo(ApiVersion.CURRENT)).shape(page.data))
@@ -339,7 +339,7 @@ class ClientCompatTest {
 
     @Test
     @Suppress("UNCHECKED_CAST")
-    fun `legacy clients get one entry per edition of a release`() {
+    fun `legacy clients get one entry per edition of a release`() = runBlocking {
         val shaped = ResponseShaper(ClientInfo(6)).shape(foldedReleases) as PaginatedResponse<RecentRelease>
 
         assertEquals(listOf("Album", "Album (Explicit)", "Album (Deluxe)"), shaped.data.map { it.title })
@@ -348,7 +348,7 @@ class ClientCompatTest {
     }
 
     @Test
-    fun `current clients keep the folded editions`() {
+    fun `current clients keep the folded editions`() = runBlocking {
         assertEquals(foldedReleases, ResponseShaper(ClientInfo(ApiVersion.CURRENT)).shape(foldedReleases))
     }
 

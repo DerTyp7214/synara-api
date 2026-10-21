@@ -2,21 +2,14 @@ package dev.dertyp.services.subsonic
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.db.AlbumTable
-import dev.dertyp.db.AnimatedImageTable
-import dev.dertyp.db.ArtistTable
-import dev.dertyp.db.SongArtistTable
-import dev.dertyp.db.ImageTable
-import dev.dertyp.db.ListenBrainzUserTable
-import dev.dertyp.db.ListenSource
-import dev.dertyp.db.ListenTable
-import dev.dertyp.db.SongTable
-import dev.dertyp.db.SongVariantTable
-import dev.dertyp.db.UserAlbumTable
-import dev.dertyp.db.UserTable
+import dev.dertyp.db.*
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.testing.entityChangeTables
 import dev.dertyp.testing.entityEventsModule
+import dev.dertyp.testing.insertLbUser
+import dev.dertyp.testing.insertUser
+import dev.dertyp.testing.linkListenBrainzUser
+import dev.dertyp.testing.linkListenShare
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -39,7 +32,7 @@ class SubsonicQueryServiceTest {
         TestDatabase.connect(
             dialect, "subsonic_query_test",
             UserTable, ImageTable, AnimatedImageTable, AlbumTable, SongTable, SongVariantTable,
-            ListenBrainzUserTable, ListenTable, UserAlbumTable, *entityChangeTables,
+            ListenBrainzUserTable, UserListenBrainzLinkTable, ListenTable, ListenShareTable, UserAlbumTable, *entityChangeTables,
         )
         dbQuery {
             UserTable.insert {
@@ -75,14 +68,26 @@ class SubsonicQueryServiceTest {
         return songId
     }
 
-    private suspend fun insertListens(songId: UUID, count: Int, lastAt: Long, playedMs: Long? = null) {
+    private suspend fun insertListens(
+        songId: UUID,
+        count: Int,
+        lastAt: Long,
+        playedMs: Long? = null,
+        ownerId: UUID = userId,
+        lbUserId: UUID? = null,
+    ) {
         dbQuery {
             repeat(count) { index ->
                 ListenTable.insert {
-                    it[ListenTable.userId] = this@SubsonicQueryServiceTest.userId
+                    if (lbUserId != null) {
+                        it[listenBrainzUserId] = lbUserId
+                        it[listenSource] = ListenSource.LISTENBRAINZ
+                    } else {
+                        it[ListenTable.userId] = ownerId
+                        it[listenSource] = ListenSource.LOCAL
+                    }
                     it[ListenTable.songId] = songId
                     it[listenedAt] = lastAt - index * 60_000
-                    it[listenSource] = ListenSource.LOCAL
                     it[msPlayed] = playedMs
                 }
             }
@@ -124,6 +129,37 @@ class SubsonicQueryServiceTest {
         )
         assertEquals(
             listOf(newAlbum, oldAlbum),
+            service.albumIds(AlbumListType.RECENT, 10, 0, null, null, null, userId),
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `frequent and recent count own ListenBrainz and linked partner listens`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (partner, stranger, lb) = dbQuery {
+            val partner = insertUser()
+            val stranger = insertUser()
+            val lb = insertLbUser()
+            linkListenBrainzUser(userId, lb)
+            linkListenShare(userId, partner)
+            Triple(partner, stranger, lb)
+        }
+        val oldSong = insertSong(oldAlbum, 1_000)
+        val midSong = insertSong(midAlbum, 2_000)
+        val newSong = insertSong(newAlbum, 3_000)
+        insertListens(oldSong, 1, 30_000_000)
+        insertListens(midSong, 3, 10_000_000, ownerId = partner)
+        insertListens(newSong, 2, 20_000_000, lbUserId = lb)
+        insertListens(oldSong, 10, 40_000_000, ownerId = stranger)
+
+        val service = SubsonicQueryService()
+        assertEquals(
+            listOf(midAlbum, newAlbum, oldAlbum),
+            service.albumIds(AlbumListType.FREQUENT, 10, 0, null, null, null, userId),
+        )
+        assertEquals(
+            listOf(oldAlbum, newAlbum, midAlbum),
             service.albumIds(AlbumListType.RECENT, 10, 0, null, null, null, userId),
         )
     }

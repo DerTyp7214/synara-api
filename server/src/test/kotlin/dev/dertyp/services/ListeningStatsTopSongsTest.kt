@@ -89,6 +89,7 @@ class ListeningStatsTopSongsTest : KoinTest {
             ListenBrainzUserTable,
             UserListenBrainzLinkTable,
             ListenTable,
+            ListenShareTable,
             ListenLinkTable,
             ListenSongRedirectTable,
         )
@@ -294,6 +295,29 @@ class ListeningStatsTopSongsTest : KoinTest {
 
         assertEquals(ids, topSongs(user, order = TopOrder.LISTEN_COUNT))
         assertEquals(ids, topSongs(user, order = TopOrder.LISTENED_MS))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a linked partner's listens are ranked`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, partnerFavourite, own) = transaction(database) {
+            val u = insertUser()
+            val partner = insertUser()
+            val stranger = insertUser()
+            linkListenShare(u, partner)
+            val album = insertAlbum()
+            val partnerFavourite = insertSong(album, durationMs = 240_000)
+            val own = insertSong(album, durationMs = 240_000)
+            val strangers = insertSong(album, durationMs = 240_000)
+            insertListen(at(1), userId = partner, songId = partnerFavourite)
+            insertListen(at(2), userId = partner, songId = partnerFavourite)
+            insertListen(at(3), userId = u, songId = own)
+            (1L..3L).forEach { insertListen(at(3 + it), userId = stranger, songId = strangers) }
+            Triple(u, partnerFavourite, own)
+        }
+
+        assertEquals(listOf(partnerFavourite, own), topSongs(user, order = TopOrder.LISTEN_COUNT))
     }
 
     @ParameterizedTest

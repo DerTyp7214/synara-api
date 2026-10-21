@@ -13,6 +13,7 @@ import dev.dertyp.ui.UiIcon
 import dev.dertyp.ui.UiInvokeResult
 import dev.dertyp.ui.UiInvokeStatus
 import dev.dertyp.ui.UiLiveUpdate
+import dev.dertyp.ui.UiOption
 import dev.dertyp.ui.UiValue
 import kotlinx.coroutines.flow.Flow
 
@@ -73,6 +74,8 @@ abstract class UiContribution(
         UiInvokeResult(UiInvokeStatus.ERROR, "Unknown action: $actionId")
 
     open suspend fun onHook(scope: UiRenderScope, event: UiHookEvent): UiHookOffer? = null
+
+    open suspend fun search(scope: UiRenderScope, key: String, query: String): List<UiOption> = emptyList()
 }
 
 fun interface UiRegistration {

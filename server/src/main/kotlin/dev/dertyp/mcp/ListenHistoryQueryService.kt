@@ -14,6 +14,7 @@ import dev.dertyp.db.SongMusicBrainzTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.fullAlbumName
 import dev.dertyp.db.fullSongTitle
+import dev.dertyp.db.ListenScope
 import dev.dertyp.db.listenOwnerPredicate
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.formatISO
@@ -252,7 +253,7 @@ class ListenHistoryQueryService(
         var query = ListenTable
             .leftJoin(SongTable, { ListenTable.songId }, { SongTable.id })
             .select(WINDOW_COLUMNS)
-            .where { listenOwnerPredicate(userId) }
+            .where { listenOwnerPredicate(userId, ListenScope.SHARED) }
 
         filter.from?.let { from -> query = query.andWhere { ListenTable.listenedAt greaterEq from } }
         filter.to?.let { to -> query = query.andWhere { ListenTable.listenedAt less to } }

@@ -76,6 +76,7 @@ All fields have `key` (the payload key), `label`, `helper?` and `enabled`. All e
 |---|---|---|
 | `textField` | `value?`, `placeholder?`, `secret`, `multiline`, `kind`, `toolbar` | `{"text": "…"}` |
 | `fileField` | `accept`, `binary`, `allowPaste`, `secret`, `value?`, `toolbar` | `{"text": "<file content>"}` |
+| `searchField` | `value?` (`{value,label,icon?}`), `placeholder?`, `minChars`, `toolbar` | `{"text": "<picked option value>"}` |
 | `numberField` | `value?`, `min?`, `max?`, `step?`, `toolbar` | `{"number": 3.0}` |
 | `switch` | `value` | `{"flag": true}` |
 | `select` | `value?`, `options[{value,label,icon?}]` | `{"text": "<option value>"}` |
@@ -83,6 +84,12 @@ All fields have `key` (the payload key), `label`, `helper?` and `enabled`. All e
 `secret` fields never contain the stored value; submitting an empty value means "unchanged". `kind` hints at the keyboard: `URL`, `EMAIL`, `BARCODE` (offer a scanner), `MULTILINE_URLS` (one entry per line, a scanner appends a line). `toolbar` is the **keyboard accessory toolbar**: shown above the on-screen keyboard while the field is focused (iOS `.keyboard` toolbar placement, Android IME accessory row; on desktop render it inline under the field), items trailing-aligned — typically a single `button` with `dismissKeyboard`.
 
 `fileField` opens a native file picker filtered by `accept` (extensions such as `.p8`) and submits the file's UTF-8 text, or the base64 of its bytes when `binary` is set. With `allowPaste` the client also offers pasting that content. Clients on an older UI schema version receive a multi-line `textField` with the same key instead.
+
+#### Search fields
+
+`searchField` is a search-as-you-type picker. Show `value.label` while nothing else is picked. Once the user has typed at least `minChars` characters, call `IUiService.search(contributionId, key, query, context)` with the contribution that rendered the field, its `key`, the typed text and the same `UiContext` the contribution was rendered with, then offer the returned options (at most 50). Debounce the calls and drop responses for outdated queries. The picked option's `value` is submitted under `key` with the enclosing `form`, just like a `select`. `search` checks the same access as `render`.
+
+Clients on UI schema version 2 or older receive a `column` instead: a `textField` with key `<key>.query`, a `button` that invokes `ui.search.<key>` with the enclosing form, and a `select` with key `<key>` holding the results for the query and the selected option. The server answers that invoke with an `openPage` of the same page whose params carry the query as `<key>.query`, and the reopened page lists the results. This only works on pages and inside a `form`, so a `searchField` elsewhere becomes a `fallback` for those clients.
 
 ### Icons
 

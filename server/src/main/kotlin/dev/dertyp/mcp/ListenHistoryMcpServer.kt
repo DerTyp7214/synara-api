@@ -31,7 +31,8 @@ import java.util.UUID
 
 private const val INSTRUCTIONS = """
 Synara is a personal music server. Every tool on this server reads the listen history and library of the
-authenticated user only; there is no way to reach another user's data.
+authenticated user. The listen history also includes the listens of accounts that are linked to this user for
+listen sharing. There is no other way to reach another user's data.
 
 Ids are UUID strings. Use `search_library` first to turn a song, artist or album name into the id that the
 other tools expect.

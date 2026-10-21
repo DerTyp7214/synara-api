@@ -16,6 +16,7 @@ import dev.dertyp.ui.UiHookKind
 import dev.dertyp.ui.UiInvokePayload
 import dev.dertyp.ui.UiInvokeResult
 import dev.dertyp.ui.UiLiveUpdate
+import dev.dertyp.ui.UiOption
 import dev.dertyp.ui.UiRender
 import dev.dertyp.ui.UiSlotRender
 import io.ktor.server.application.ApplicationCall
@@ -51,6 +52,9 @@ class RpcUiService(
 
     override suspend fun invoke(contributionId: String, actionId: String, payload: UiInvokePayload): UiInvokeResult =
         uiService.invoke(user, client, contributionId, actionId, payload, call)
+
+    override suspend fun search(contributionId: String, key: String, query: String, context: UiContext): List<UiOption> =
+        uiService.search(user, client, contributionId, key, query, context, call)
 
     override suspend fun dispatchHook(event: UiHookEvent): List<UiHookHandler> =
         uiService.dispatchHook(user, client, event, call)

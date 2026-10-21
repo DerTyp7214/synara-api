@@ -3,6 +3,7 @@ package dev.dertyp.services.ui
 import dev.dertyp.config.ServerConfig
 import dev.dertyp.plugins.PluginManager
 import dev.dertyp.plugins.UiContribution
+import dev.dertyp.services.ListenShareService
 import dev.dertyp.services.UserService
 import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.credentials.CredentialServerConnectionSource
@@ -24,6 +25,7 @@ class CoreUiContributions(
     private val jobService: JobService,
     private val coverGenerationService: CoverGenerationService,
     private val hueService: HueService,
+    private val listenShareService: ListenShareService,
     private val credentialServerAdmin: CredentialServerAdminClient,
     private val credentialServerConnection: CredentialServerConnectionSource,
     private val credentialProvider: CredentialProvider,
@@ -42,6 +44,10 @@ class CoreUiContributions(
         CollectionCoverContribution(coverGenerationService, jobService),
         HueSettingsEntryContribution(),
         HueSettingsContribution(hueService),
+        ListenShareEntryContribution(),
+        ListenShareSettingsContribution(listenShareService),
+        ListenShareAdminEntryContribution(),
+        ListenShareAdminContribution(listenShareService, userService),
     )
 
     private fun credentialContributions(): List<UiContribution> =

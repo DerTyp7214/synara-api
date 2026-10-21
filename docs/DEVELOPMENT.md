@@ -150,6 +150,22 @@ The generator writes what Exposed proposes, and three kinds of change need a cor
 
 At startup `MigrationBaseCheck` refuses a database that is not at the base (see [ARCHITECTURE.md](ARCHITECTURE.md#migrations)), and the message names the `0.0.1-dev` image to start first, see [Updating from 0.0.1](../README.md#updating-from-001). Backups carry the schema version they were made at, and a restore applies the same rule before it changes anything, so a new migration needs no change to the backup code.
 
+## Listen sharing
+
+Two accounts can be linked so that each sees the other's listens. A link is a row in `listen_share` (`ListenShareTable`) with the two user ids stored as an ordered pair (`userA` < `userB`) and a `useForRecommendations` flag. Links are pairwise and not transitive. `ListenShareService` holds the rules: an admin links any two users, a user links itself to another user only while both are linked to the same ListenBrainz account, and an admin or either member can unlink or toggle the flag at any time. A later change of the ListenBrainz link keeps existing links.
+
+Writes stay per user. Every play is recorded for the account that played it, and ingest, `ListenBrainzService`, `ListenBackupService` and the co-occurrence model of `RecommendationService` never look at links.
+
+Reads choose their owners through `listenOwnerPredicate(userId, scope)` in `db/ListenTable.kt`. It matches the listens of the owner users and of their linked ListenBrainz accounts. The scope has no default, so every query names one:
+
+- `OWN` is the user alone. Linked groups, `relinkSong` and `linkUnmatched` use it, because they write overrides and redirects for that user only.
+- `SHARED` adds every partner. Recent listens, artists and albums, listening stats and top songs, the MCP listen history and the Subsonic frequent and recent album lists use it.
+- `RECOMMENDATIONS` adds the partners of links with `useForRecommendations` on. `ListenService.recentSeedWeights` uses it for the listen part, while favourites and super likes stay per user.
+
+`ListenService.listensChanged` notifies the partners of every affected user as well, so a partner's screens update live. Every link change notifies both members and invalidates the `listenShare.settings` and `listenShare.admin` UI contributions.
+
+Recent listens, stats and the MCP summary deduplicate plays by time across the merged stream (`ListenTable.DEDUP_WINDOW_MS`, 2 s). If both linked users play the same song within that window, the two plays count once.
+
 ## Proxy tunnel protocol
 
 The standalone `:proxy` and the server share one binary protocol on the websocket that the server opens to `/proxy/server`. The code is in `common-proxy/src/main/kotlin/dev/dertyp/proxy/` (`Protocol.kt`, `HttpTunnel.kt`) and is used by `:proxy` (`Application.kt`, `HttpTunnelRoute.kt`) and by the server (`services/ReverseProxyService.kt`, `services/ReverseProxyHttpGateway.kt`). The request flow and the path scope are in [ARCHITECTURE.md](ARCHITECTURE.md#reverse-proxy).
