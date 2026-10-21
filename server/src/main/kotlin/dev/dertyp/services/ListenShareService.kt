@@ -28,8 +28,8 @@ data class ListenSharePair(
 
 class ListenShareService : Service() {
     companion object {
-        const val SETTINGS_CONTRIBUTION_ID = "listenShare.settings"
-        const val ADMIN_CONTRIBUTION_ID = "listenShare.admin"
+        const val SETTINGS_CONTRIBUTION_ID = "core.listenshare.settings"
+        const val ADMIN_CONTRIBUTION_ID = "core.listenshare.admin"
     }
 
     private val listenService by inject<ListenService>()

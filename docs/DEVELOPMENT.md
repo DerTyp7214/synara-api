@@ -162,7 +162,7 @@ Reads choose their owners through `listenOwnerPredicate(userId, scope)` in `db/L
 - `SHARED` adds every partner. Recent listens, artists and albums, listening stats and top songs, the MCP listen history and the Subsonic frequent and recent album lists use it.
 - `RECOMMENDATIONS` adds the partners of links with `useForRecommendations` on. `ListenService.recentSeedWeights` uses it for the listen part, while favourites and super likes stay per user.
 
-`ListenService.listensChanged` notifies the partners of every affected user as well, so a partner's screens update live. Every link change notifies both members and invalidates the `listenShare.settings` and `listenShare.admin` UI contributions.
+`ListenService.listensChanged` notifies the partners of every affected user as well, so a partner's screens update live. Every link change notifies both members and invalidates the `core.listenshare.settings` and `core.listenshare.admin` UI contributions.
 
 Recent listens, stats and the MCP summary deduplicate plays by time across the merged stream (`ListenTable.DEDUP_WINDOW_MS`, 2 s). If both linked users play the same song within that window, the two plays count once.
 

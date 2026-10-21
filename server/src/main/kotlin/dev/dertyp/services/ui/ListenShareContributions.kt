@@ -15,8 +15,8 @@ import dev.dertyp.ui.*
 import org.jetbrains.exposed.v1.jdbc.andWhere
 import java.util.UUID
 
-private const val ENTRY_ID = "listenShare.entry"
-private const val ADMIN_ENTRY_ID = "listenShare.adminEntry"
+private const val ENTRY_ID = "core.listenshare.entry"
+private const val ADMIN_ENTRY_ID = "core.listenshare.admin.entry"
 private const val ACTION_TOGGLE = "toggle"
 private const val ACTION_UNLINK = "unlink"
 private const val ACTION_CONNECT = "connect"
