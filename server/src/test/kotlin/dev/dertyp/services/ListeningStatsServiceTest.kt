@@ -4,12 +4,15 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.data.LinkUnmatchedTrackRequest
+import dev.dertyp.data.LinkedListenGroupKey
+import dev.dertyp.data.ListenGroupSource
 import dev.dertyp.data.StatsRange
 import dev.dertyp.data.TopOrder
 import dev.dertyp.db.*
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.services.sync.ListenBrainzService
 import dev.dertyp.testing.*
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -31,6 +34,7 @@ import java.util.*
 class ListeningStatsServiceTest : KoinTest {
     private lateinit var database: Database
     private lateinit var service: ListeningStatsService
+    private val listenBrainzService = mockk<ListenBrainzService>(relaxed = true)
 
     private val nowUtc: ZonedDateTime = ZonedDateTime.of(2025, 6, 15, 12, 0, 0, 0, ZoneOffset.UTC)
     private val nowMs = nowUtc.toInstant().toEpochMilli()
@@ -42,7 +46,7 @@ class ListeningStatsServiceTest : KoinTest {
                 single { mockk<SongService>() }
                 single { ListenService() }
                 single { mockk<ChangeNotifier>(relaxed = true) }
-                single { mockk<ListenBrainzService>(relaxed = true) }
+                single { listenBrainzService }
             })
         }
         database = TestDatabase.connect(
@@ -68,6 +72,7 @@ class ListeningStatsServiceTest : KoinTest {
             UserListenBrainzLinkTable,
             ListenTable,
             ListenLinkTable,
+            ListenSongRedirectTable,
         )
         service = ListeningStatsService()
     }
@@ -986,5 +991,57 @@ class ListeningStatsServiceTest : KoinTest {
         assertEquals(0L, byTime.listenCount)
         assertEquals(0, byTime.uniqueSongs)
         assertEquals(emptyList<Any>(), byTime.discoveries.songs)
+    }
+    private fun relinkScenario(targetMbid: UUID?): Triple<UUID, UUID, UUID> = transaction(database) {
+        val u = insertUser()
+        val lb = insertLbUser()
+        linkListenBrainzUser(u, lb)
+        val album = insertAlbum()
+        val from = insertSong(album, title = "From")
+        val to = insertSong(album, title = "To")
+        if (targetMbid != null) {
+            MBRecordingTable.insert {
+                it[id] = targetMbid
+                it[title] = "To"
+            }
+            SongMusicBrainzTable.insert {
+                it[songId] = to
+                it[musicBrainzId] = targetMbid
+            }
+        }
+        insertListen(at(1), lbUserId = lb, songId = from, recordingMbid = UUID.randomUUID(), recordingMsid = msidOne)
+        insertListen(at(2), lbUserId = lb, songId = from, recordingMbid = UUID.randomUUID(), recordingMsid = msidTwo)
+        Triple(u, from, to)
+    }
+
+    private val msidOne = UUID.randomUUID()
+    private val msidTwo = UUID.randomUUID()
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `relinkSong submits the moved MSIDs to ListenBrainz for a target with an MBID`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val targetMbid = UUID.randomUUID()
+        val (user, from, to) = relinkScenario(targetMbid)
+
+        val result = service.relinkSong(user, from, to, null)
+
+        assertEquals(2, result.linkedListens)
+        coVerify(exactly = 1) {
+            listenBrainzService.submitManualMapping(user, targetMbid, match { it.toSet() == setOf(msidOne, msidTwo) && it.size == 2 })
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `relinkSong submits nothing for a target without an MBID`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, from, to) = relinkScenario(null)
+
+        val result = service.relinkSong(user, from, to, listOf(LinkedListenGroupKey(ListenGroupSource.LISTENBRAINZ)))
+        assertEquals(0, result.linkedListens)
+
+        assertEquals(2, service.relinkSong(user, from, to, null).linkedListens)
+        coVerify(exactly = 0) { listenBrainzService.submitManualMapping(any(), any(), any()) }
     }
 }

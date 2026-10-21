@@ -116,7 +116,7 @@ class SubsonicQueryService : Service() {
 
             AlbumListType.FREQUENT -> {
                 val listens = ListenTable.songId.count().alias("listens")
-                ListenTable.innerJoin(SongTable)
+                ListenTable.innerJoin(SongTable, { ListenTable.songId }, { SongTable.id })
                     .select(SongTable.albumId, listens)
                     .where { ListenTable.userId eq userId }
                     .andWhere { SongTable.albumId.isNotNull() }
@@ -129,7 +129,7 @@ class SubsonicQueryService : Service() {
 
             AlbumListType.RECENT -> {
                 val lastListen = ListenTable.listenedAt.max().alias("lastListen")
-                ListenTable.innerJoin(SongTable)
+                ListenTable.innerJoin(SongTable, { ListenTable.songId }, { SongTable.id })
                     .select(SongTable.albumId, lastListen)
                     .where { ListenTable.userId eq userId }
                     .andWhere { SongTable.albumId.isNotNull() }
@@ -247,7 +247,7 @@ class SubsonicQueryService : Service() {
 
     suspend fun topSongIdsForArtist(artistId: UUID, limit: Int): List<UUID> = dbQuery {
         val listens = ListenTable.songId.count().alias("listens")
-        ListenTable.innerJoin(SongTable)
+        ListenTable.innerJoin(SongTable, { ListenTable.songId }, { SongTable.id })
             .innerJoin(SongArtistTable, { SongTable.id }, { SongArtistTable.songId })
             .select(SongTable.id, listens)
             .where { SongArtistTable.artistId eq artistId }

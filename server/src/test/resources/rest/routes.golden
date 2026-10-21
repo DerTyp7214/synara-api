@@ -167,9 +167,11 @@ GET /listenBrainz/recentListens IListenBrainzService.recentListens [q:limit] JSO
 GET /listenBrainz/status IListenBrainzService.getStatus [] JSON
 POST /listenBrainz/link IListenBrainzService.link [q:username q:token?] JSON
 POST /listenBrainz/syncNow IListenBrainzService.syncNow [] JSON
+GET /listeningStats/linkedListenGroups/{songId} IListeningStatsService.getLinkedListenGroups [p:songId] JSON
 GET /listeningStats/stats IListeningStatsService.getStats [q:range q:timezone q:topLimit q:topOrder?] JSON
 GET /listeningStats/topSongs IListeningStatsService.getTopSongs [q:range q:timezone q:limit q:order?] JSON
 POST /listeningStats/linkUnmatchedTrack IListeningStatsService.linkUnmatchedTrack [b:request] JSON
+POST /listeningStats/relinkSong/{fromSongId} IListeningStatsService.relinkSong [p:fromSongId q:toSongId b:groups?] JSON
 GET /lyrics/syncedLyrics/{songId} ILyricsService.getSyncedLyrics [p:songId] JSON
 POST /lyrics/startSyncWorker ILyricsService.startSyncWorker [] JSON
 POST /lyrics/transcribeLyrics/{songId} ILyricsService.transcribeLyrics [p:songId q:lyrics?] JSON

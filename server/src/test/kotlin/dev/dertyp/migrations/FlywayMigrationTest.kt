@@ -163,8 +163,11 @@ class FlywayMigrationTest {
         val history = assertNotNull(after.history)
         assertEquals(oldHistory, history.take(oldHistory.size))
         assertEquals(headHistory.drop(1), history.drop(oldHistory.size).map { it[1] to it[3] })
-        val createdByLaterMigrations = if (dialect == DbDialect.POSTGRES) "userplaylistshare" else "userPlaylistShare"
-        assertEquals(setOf(createdByLaterMigrations), after.tables - before.tables)
+        val createdByLaterMigrations = setOf(
+            if (dialect == DbDialect.POSTGRES) "userplaylistshare" else "userPlaylistShare",
+            "listen_song_redirect",
+        )
+        assertEquals(createdByLaterMigrations, after.tables - before.tables)
         assertEquals(before.copy(tables = before.tables + createdByLaterMigrations, history = history), after)
         if (dialect == DbDialect.SQLITE) {
             assertEquals(setOf("hue_bridge_userId_bridgeId_unique"), hueBridgeIndexes(target))

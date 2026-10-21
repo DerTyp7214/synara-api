@@ -4,6 +4,8 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.data.ChangeTopic
+import dev.dertyp.data.ListenGroupSource
+import dev.dertyp.data.LinkedListenGroupKey
 import dev.dertyp.data.UserSong
 import dev.dertyp.db.*
 import dev.dertyp.plugins.HookBus
@@ -22,12 +24,15 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.deleteAll
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
@@ -78,6 +83,7 @@ class ListenServiceTest : KoinTest {
             UserListenBrainzLinkTable,
             ListenTable,
             ListenLinkTable,
+            ListenSongRedirectTable,
         )
         service = ListenService()
     }
@@ -135,6 +141,7 @@ class ListenServiceTest : KoinTest {
         UserListenBrainzLinkTable,
         ListenTable,
         ListenLinkTable,
+        ListenSongRedirectTable,
         *allMusicBrainzTables,
     )
 
@@ -874,6 +881,288 @@ class ListenServiceTest : KoinTest {
             it[listenedAt] = at
             it[listenSource] = ListenSource.LOCAL
             it[msPlayed] = playedMs
+        }
+    }
+
+    private fun insertRelinkRow(
+        source: ListenSource,
+        owner: UUID,
+        songId: UUID,
+        at: Long,
+        playedSongId: UUID? = null,
+        recordingMbid: UUID? = null,
+        recordingMsid: UUID? = null,
+        trackName: String? = null,
+    ) {
+        ListenTable.insert {
+            if (source == ListenSource.LOCAL) it[ListenTable.userId] = owner else it[listenBrainzUserId] = owner
+            it[ListenTable.songId] = songId
+            it[ListenTable.playedSongId] = playedSongId
+            it[ListenTable.recordingMbid] = recordingMbid
+            it[ListenTable.recordingMsid] = recordingMsid
+            it[ListenTable.trackName] = trackName
+            it[listenedAt] = at
+            it[listenSource] = source
+        }
+    }
+
+    private fun insertOverride(owner: UUID, songId: UUID, mbid: UUID?, msid: UUID?, at: Long = 1) {
+        ListenLinkTable.insert {
+            it[ListenLinkTable.userId] = owner
+            it[ListenLinkTable.songId] = songId
+            it[recordingMbid] = mbid
+            it[recordingMsid] = msid
+            it[createdAt] = at
+        }
+    }
+
+    private fun insertRedirect(owner: UUID, from: UUID, to: UUID) {
+        ListenSongRedirectTable.insert {
+            it[ListenSongRedirectTable.userId] = owner
+            it[fromSongId] = from
+            it[toSongId] = to
+            it[createdAt] = 1
+        }
+    }
+
+    private class RelinkFixture(
+        val user: UUID,
+        val lb: UUID,
+        val songA: UUID,
+        val songB: UUID,
+        val played: UUID,
+        val mbid: UUID,
+        val mbidMsid1: UUID,
+        val mbidMsid2: UUID,
+        val msidOnly: UUID,
+    )
+
+    private fun relinkFixture(): RelinkFixture {
+        val user = insertUser()
+        val lb = insertLbUser()
+        linkListenBrainzUser(user, lb)
+        val album = insertAlbum()
+        val songA = insertSong(album, title = "A")
+        val songB = insertSong(album, title = "B")
+        val played = insertSong(album, title = "Played")
+        val mbid = UUID.randomUUID()
+        val mbidMsid1 = UUID.randomUUID()
+        val mbidMsid2 = UUID.randomUUID()
+        val msidOnly = UUID.randomUUID()
+        insertRelinkRow(ListenSource.LOCAL, user, songA, 100, trackName = "A old")
+        insertRelinkRow(ListenSource.LOCAL, user, songA, 110, trackName = "A new")
+        insertRelinkRow(ListenSource.LOCAL, user, songA, 500, playedSongId = played, trackName = "Played local")
+        insertRedirect(user, played, songA)
+        insertRelinkRow(ListenSource.LISTENBRAINZ, lb, songA, 200, recordingMbid = mbid, recordingMsid = mbidMsid1, trackName = "Mbid old")
+        insertRelinkRow(ListenSource.LISTENBRAINZ, lb, songA, 210, recordingMbid = mbid, recordingMsid = mbidMsid1, trackName = "Mbid mid")
+        insertRelinkRow(ListenSource.LISTENBRAINZ, lb, songA, 220, recordingMbid = mbid, recordingMsid = mbidMsid2, trackName = "Mbid new")
+        insertRelinkRow(ListenSource.LISTENBRAINZ, lb, songA, 300, recordingMsid = msidOnly, trackName = "Msid old")
+        insertRelinkRow(ListenSource.LISTENBRAINZ, lb, songA, 310, recordingMsid = msidOnly, trackName = "Msid new")
+        insertRelinkRow(ListenSource.LISTENBRAINZ, lb, songA, 400, trackName = "Anonymous")
+        insertOverride(user, songA, mbid, mbidMsid1)
+        insertOverride(user, songA, null, msidOnly, at = 2)
+        return RelinkFixture(user, lb, songA, songB, played, mbid, mbidMsid1, mbidMsid2, msidOnly)
+    }
+
+    private fun songIdsByTrack(): Map<String?, UUID?> = ListenTable.selectAll()
+        .associate { it[ListenTable.trackName] to it[ListenTable.songId]?.value }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `linkedGroups lists local, MBID, MSID and anonymous groups in order`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val f = transaction(database) { relinkFixture() }
+
+        val groups = service.linkedGroups(f.user, f.songA)
+
+        assertEquals(
+            listOf(
+                LinkedListenGroupKey(ListenGroupSource.LISTENBRAINZ, recordingMbid = f.mbid),
+                LinkedListenGroupKey(ListenGroupSource.LISTENBRAINZ, recordingMsid = f.msidOnly),
+                LinkedListenGroupKey(ListenGroupSource.LOCAL, playedSongId = f.songA),
+                LinkedListenGroupKey(ListenGroupSource.LOCAL, playedSongId = f.played),
+                LinkedListenGroupKey(ListenGroupSource.LISTENBRAINZ),
+            ),
+            groups.map { it.key },
+        )
+        assertEquals(listOf(3L, 2L, 2L, 1L, 1L), groups.map { it.listenCount })
+        assertEquals(listOf(220L, 310L, 110L, 500L, 400L), groups.map { it.lastListenedAt })
+        assertEquals(
+            listOf("Mbid new", "Msid new", "A new", "Played local", "Anonymous"),
+            groups.map { it.trackName },
+        )
+        assertEquals(listOf(true, true, false, true, false), groups.map { it.linkedManually })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `relinking one ListenBrainz group moves only that group and points its override at the target`(dialect: DbDialect) =
+        runBlocking {
+            setup(dialect)
+            val f = transaction(database) { relinkFixture() }
+
+            val result = service.relinkSong(
+                f.user, f.songA, f.songB,
+                listOf(LinkedListenGroupKey(ListenGroupSource.LISTENBRAINZ, recordingMbid = f.mbid)),
+            )
+
+            assertEquals(3, result.linkedListens)
+            assertEquals(setOf(f.mbidMsid1, f.mbidMsid2), result.recordingMsids.toSet())
+            transaction(database) {
+                val byTrack = songIdsByTrack()
+                assertEquals(f.songB, byTrack["Mbid old"])
+                assertEquals(f.songB, byTrack["Mbid mid"])
+                assertEquals(f.songB, byTrack["Mbid new"])
+                listOf("A old", "A new", "Played local", "Msid old", "Msid new", "Anonymous").forEach {
+                    assertEquals(f.songA, byTrack[it], it)
+                }
+                val mbidOverrides = ListenLinkTable.selectAll().where { ListenLinkTable.recordingMbid eq f.mbid }.toList()
+                assertEquals(1, mbidOverrides.size)
+                assertEquals(f.songB, mbidOverrides.single()[ListenLinkTable.songId].value)
+                val msidOverride = ListenLinkTable.selectAll().where { ListenLinkTable.recordingMsid eq f.msidOnly }.single()
+                assertEquals(f.songA, msidOverride[ListenLinkTable.songId].value)
+            }
+        }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `relinking all groups moves every listen`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val f = transaction(database) { relinkFixture() }
+
+        val result = service.relinkSong(f.user, f.songA, f.songB, null)
+
+        assertEquals(9, result.linkedListens)
+        transaction(database) {
+            assertTrue(songIdsByTrack().values.all { it == f.songB })
+            val played = ListenTable.selectAll().where { ListenTable.trackName eq "Played local" }.single()
+            assertEquals(f.played, played[ListenTable.playedSongId]?.value)
+            val own = ListenTable.selectAll().where { ListenTable.trackName eq "A new" }.single()
+            assertEquals(f.songA, own[ListenTable.playedSongId]?.value)
+            val redirects = ListenSongRedirectTable.selectAll().associate {
+                it[ListenSongRedirectTable.fromSongId].value to it[ListenSongRedirectTable.toSongId].value
+            }
+            assertEquals(mapOf(f.played to f.songB, f.songA to f.songB), redirects)
+            assertTrue(ListenLinkTable.selectAll().all { it[ListenLinkTable.songId].value == f.songB })
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `relinking a local group redirects later plays and relinking back undoes it`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, songA, songB) = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum()
+            Triple(u, insertSong(album, title = "A"), insertSong(album, title = "B"))
+        }
+        service.ingestLocal(user, songA, 100, 50)
+        val key = LinkedListenGroupKey(ListenGroupSource.LOCAL, playedSongId = songA)
+
+        assertEquals(1, service.relinkSong(user, songA, songB, listOf(key)).linkedListens)
+        service.ingestLocal(user, songA, 200, 50)
+
+        transaction(database) {
+            val rows = ListenTable.selectAll().toList()
+            assertEquals(listOf(songB, songB), rows.map { it[ListenTable.songId]?.value })
+            assertEquals(listOf(songA, songA), rows.map { it[ListenTable.playedSongId]?.value })
+            val redirect = ListenSongRedirectTable.selectAll().single()
+            assertEquals(songA, redirect[ListenSongRedirectTable.fromSongId].value)
+            assertEquals(songB, redirect[ListenSongRedirectTable.toSongId].value)
+        }
+
+        assertEquals(2, service.relinkSong(user, songB, songA, listOf(key)).linkedListens)
+        service.ingestLocal(user, songA, 300, 50)
+
+        transaction(database) {
+            assertEquals(0L, ListenSongRedirectTable.selectAll().count())
+            val rows = ListenTable.selectAll().toList()
+            assertEquals(listOf(songA, songA, songA), rows.map { it[ListenTable.songId]?.value })
+            assertTrue(rows.all { it[ListenTable.playedSongId] == null })
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `relinking an MBID group removes an older override on its other MSID`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val f = transaction(database) {
+            val f = relinkFixture()
+            insertOverride(f.user, f.songA, null, f.mbidMsid2, at = 0)
+            f
+        }
+
+        service.relinkSong(
+            f.user, f.songA, f.songB,
+            listOf(LinkedListenGroupKey(ListenGroupSource.LISTENBRAINZ, recordingMbid = f.mbid)),
+        )
+
+        transaction(database) {
+            assertEquals(0L, ListenLinkTable.selectAll().where { ListenLinkTable.recordingMsid eq f.mbidMsid2 }.count())
+            val forMbid = ListenLinkTable.selectAll().where { ListenLinkTable.recordingMbid eq f.mbid }.single()
+            assertEquals(f.songB, forMbid[ListenLinkTable.songId].value)
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `relinkSong rejects the same song and an unknown target`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val f = transaction(database) { relinkFixture() }
+
+        assertThrows<IllegalArgumentException> { service.relinkSong(f.user, f.songA, f.songA, null) }
+        assertThrows<IllegalArgumentException> { service.relinkSong(f.user, f.songA, UUID.randomUUID(), null) }
+
+        transaction(database) {
+            assertTrue(songIdsByTrack().values.all { it == f.songA })
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `relinkSong announces listens only when something moved`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val (user, songA, songB) = transaction(database) {
+            val u = insertUser()
+            val album = insertAlbum()
+            Triple(u, insertSong(album, title = "A"), insertSong(album, title = "B"))
+        }
+
+        service.relinkSong(user, songA, songB, null)
+        verify(exactly = 0) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
+
+        service.ingestLocal(user, songA, 100, 50)
+        verify(exactly = 1) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
+
+        service.relinkSong(
+            user, songA, songB,
+            listOf(LinkedListenGroupKey(ListenGroupSource.LOCAL, playedSongId = UUID.randomUUID())),
+        )
+        verify(exactly = 1) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
+
+        service.relinkSong(user, songA, songB, null)
+        verify(exactly = 2) { changeNotifier.notify(user, ChangeTopic.LISTENS) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `relinking an anonymous ListenBrainz group persists no override`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val f = transaction(database) { relinkFixture() }
+        transaction(database) { ListenLinkTable.deleteAll() }
+
+        val result = service.relinkSong(
+            f.user, f.songA, f.songB,
+            listOf(LinkedListenGroupKey(ListenGroupSource.LISTENBRAINZ)),
+        )
+
+        assertEquals(1, result.linkedListens)
+        assertEquals(emptyList<UUID>(), result.recordingMsids)
+        transaction(database) {
+            assertEquals(0L, ListenLinkTable.selectAll().count())
+            assertEquals(f.songB, songIdsByTrack()["Anonymous"])
+            assertFalse(songIdsByTrack().filterKeys { it != "Anonymous" }.values.any { it == f.songB })
+            assertNull(ListenTable.selectAll().where { ListenTable.trackName eq "Anonymous" }.single()[ListenTable.playedSongId])
         }
     }
 

@@ -90,6 +90,7 @@ class ListeningStatsTopSongsTest : KoinTest {
             UserListenBrainzLinkTable,
             ListenTable,
             ListenLinkTable,
+            ListenSongRedirectTable,
         )
         service = ListeningStatsService()
     }

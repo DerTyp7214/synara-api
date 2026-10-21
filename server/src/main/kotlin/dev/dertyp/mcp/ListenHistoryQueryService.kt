@@ -250,7 +250,7 @@ class ListenHistoryQueryService(
 
     private fun filteredQuery(userId: UUID, filter: ListenFilter): Query {
         var query = ListenTable
-            .leftJoin(SongTable)
+            .leftJoin(SongTable, { ListenTable.songId }, { SongTable.id })
             .select(WINDOW_COLUMNS)
             .where { listenOwnerPredicate(userId) }
 

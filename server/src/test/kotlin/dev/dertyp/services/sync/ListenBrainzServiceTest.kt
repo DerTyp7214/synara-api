@@ -4,6 +4,8 @@ import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.data.ChangeTopic
+import dev.dertyp.data.LinkedListenGroupKey
+import dev.dertyp.data.ListenGroupSource
 import dev.dertyp.db.*
 import dev.dertyp.plugins.HookBus
 import dev.dertyp.services.ListenService
@@ -55,6 +57,7 @@ class ListenBrainzServiceTest : KoinTest {
             UserListenBrainzLinkTable,
             ListenTable,
             ListenLinkTable,
+            ListenSongRedirectTable,
         )
         service = ListenBrainzService()
     }
@@ -185,4 +188,60 @@ class ListenBrainzServiceTest : KoinTest {
             verify(exactly = 1) { changeNotifier.notify(linkedUser, ChangeTopic.LISTENBRAINZ_STATUS) }
             verify(exactly = 0) { changeNotifier.notify(otherUser, any()) }
         }
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `listens arriving after a relink resolve to the new song`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val mbid = UUID.randomUUID()
+        val msid = UUID.randomUUID()
+        val (user, lb, songA, songB) = transaction(database) {
+            val u = insertUser()
+            val lbId = insertLbUser()
+            linkListenBrainzUser(u, lbId)
+            val album = insertAlbum()
+            val a = insertSong(album, title = "A")
+            val b = insertSong(album, title = "B")
+            ListenLinkTable.insert {
+                it[ListenLinkTable.userId] = u
+                it[songId] = a
+                it[recordingMbid] = mbid
+                it[recordingMsid] = msid
+                it[createdAt] = 1
+            }
+            ListenTable.insert {
+                it[listenBrainzUserId] = lbId
+                it[songId] = a
+                it[recordingMbid] = mbid
+                it[recordingMsid] = msid
+                it[listenedAt] = 100
+                it[listenSource] = ListenSource.LISTENBRAINZ
+            }
+            listOf(u, lbId, a, b)
+        }
+
+        ListenService().relinkSong(
+            user, songA, songB,
+            listOf(LinkedListenGroupKey(ListenGroupSource.LISTENBRAINZ, recordingMbid = mbid)),
+        )
+        transaction(database) {
+            fun insertNew(at: Long, rMbid: UUID?, rMsid: UUID?) {
+                ListenTable.insert {
+                    it[listenBrainzUserId] = lb
+                    it[recordingMbid] = rMbid
+                    it[recordingMsid] = rMsid
+                    it[listenedAt] = at
+                    it[listenSource] = ListenSource.LISTENBRAINZ
+                }
+            }
+            insertNew(200, mbid, null)
+            insertNew(300, null, msid)
+        }
+
+        assertEquals(2, service.rematchUnmatched(lb))
+
+        transaction(database) {
+            val songs = ListenTable.selectAll().map { it[ListenTable.songId]?.value }
+            assertEquals(listOf(songB, songB, songB), songs)
+        }
+    }
 }

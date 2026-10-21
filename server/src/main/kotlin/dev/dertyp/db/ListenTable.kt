@@ -13,6 +13,7 @@ object ListenTable : UUIDTable("listen") {
         reference("listenBrainzUserId", ListenBrainzUserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
     val userId = reference("userId", UserTable.id, onDelete = ReferenceOption.CASCADE).nullable()
     val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
+    val playedSongId = reference("playedSongId", SongTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val recordingMbid = javaUUID("recordingMbid").nullable()
     val recordingMsid = javaUUID("recordingMsid").nullable()
     val releaseMbid = javaUUID("releaseMbid").nullable()
@@ -29,6 +30,7 @@ object ListenTable : UUIDTable("listen") {
     init {
         uniqueIndex(listenBrainzUserId, listenedAt)
         index(false, songId)
+        index(false, playedSongId)
         index(false, recordingMbid)
         index(false, userId)
         index(false, userId, listenedAt)

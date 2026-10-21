@@ -62,6 +62,7 @@ class ListenHistoryQueryServiceTest {
             UserListenBrainzLinkTable,
             ListenTable,
             ListenLinkTable,
+            ListenSongRedirectTable,
         )
         songDtos.clear()
         songService = mockk()

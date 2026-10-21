@@ -88,11 +88,14 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [LikeLevel](#devdertypdatalikelevel)
 - [LinkUnmatchedTrackRequest](#devdertypdatalinkunmatchedtrackrequest)
 - [LinkUnmatchedTrackResult](#devdertypdatalinkunmatchedtrackresult)
+- [LinkedListenGroup](#devdertypdatalinkedlistengroup)
+- [LinkedListenGroupKey](#devdertypdatalinkedlistengroupkey)
 - [ListenBackupConfig](#devdertypdatalistenbackupconfig)
 - [ListenBackupConnectionTest](#devdertypdatalistenbackupconnectiontest)
 - [ListenBackupState](#devdertypdatalistenbackupstate)
 - [ListenBrainzStatus](#devdertypdatalistenbrainzstatus)
 - [ListenClock](#devdertypdatalistenclock)
+- [ListenGroupSource](#devdertypdatalistengroupsource)
 - [ListenedAlbum](#devdertypdatalistenedalbum)
 - [ListenedArtist](#devdertypdatalistenedartist)
 - [ListenedSong](#devdertypdatalistenedsong)
@@ -1228,6 +1231,30 @@ Result of linking unmatched listens to a library song.
 | `linkedListens` | `Int` | Number of listens that were linked to the song. |
 | `submittedToListenBrainz` | `Int` | Number of manual mappings accepted by the ListenBrainz API. 0 when the song has no recording MBID, no account token is stored, or no listens carry an MSID. |
 
+### LinkedListenGroup <a name="devdertypdatalinkedlistengroup"></a>
+A group of the user's listens that is linked to a library song.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `key` | [LinkedListenGroupKey](#devdertypdatalinkedlistengroupkey) | The key that identifies the group, to pass to relinkSong. |
+| `trackName` | `String`? | The track name of the most recent listen in the group, or null if unknown. |
+| `artistName` | `String`? | The artist name of the most recent listen in the group, or null if unknown. |
+| `releaseName` | `String`? | The release name of the most recent listen in the group, or null if unknown. |
+| `listenCount` | `Long` | Number of listens in the group. |
+| `listenedMs` | `Long` | Total milliseconds listened across the group. |
+| `lastListenedAt` | `Long` | Time of the most recent listen in the group (epoch milliseconds). |
+| `linkedManually` | `Boolean` | True when the group was linked to the song by the user rather than automatically. |
+
+### LinkedListenGroupKey <a name="devdertypdatalinkedlistengroupkey"></a>
+Identifies a group of listens linked to a library song. LOCAL groups are keyed by the song that was actually played. LISTENBRAINZ groups are keyed by recording MBID, or by recording MSID when there is no MBID. A LISTENBRAINZ key with neither holds the listens that carry no recording identity.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `source` | [ListenGroupSource](#devdertypdatalistengroupsource) | The kind of listens in the group. |
+| `playedSongId` | `PlatformUUID`? | The library song that was actually played, for LOCAL groups. Null for LISTENBRAINZ groups. |
+| `recordingMbid` | `PlatformUUID`? | The MusicBrainz recording MBID of a LISTENBRAINZ group, or null. |
+| `recordingMsid` | `PlatformUUID`? | The ListenBrainz recording MSID of a LISTENBRAINZ group without a recording MBID, or null. |
+
 ### ListenBackupConfig <a name="devdertypdatalistenbackupconfig"></a>
 Configuration for backing up server-side listens to a remote listen-backup receiver.
 
@@ -1279,6 +1306,14 @@ Distribution of listens over the hours of the day and days of the week, in the r
 | :--- | :--- | :--- |
 | `hourOfDay` | `List`<`Long`> | Listen counts per hour of day. 24 entries, index 0 = 00:00-00:59. |
 | `dayOfWeek` | `List`<`Long`> | Listen counts per day of week. 7 entries, index 0 = Monday. |
+
+### ListenGroupSource <a name="devdertypdatalistengroupsource"></a>
+The kind of listens in a linked listen group. LOCAL groups hold plays on this server. LISTENBRAINZ groups hold listens imported from ListenBrainz.
+
+| Value | Description |
+| :--- | :--- |
+| `LOCAL` |  |
+| `LISTENBRAINZ` |  |
 
 ### ListenedAlbum <a name="devdertypdatalistenedalbum"></a>
 An album from the user's listen history, with when one of its songs was last played.

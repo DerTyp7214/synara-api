@@ -3,6 +3,9 @@ package dev.dertyp.services
 import dev.dertyp.PlatformUUID
 import dev.dertyp.core.ChangeNotifier
 import dev.dertyp.data.ChangeTopic
+import dev.dertyp.data.LinkedListenGroup
+import dev.dertyp.data.LinkedListenGroupKey
+import dev.dertyp.data.ListenGroupSource
 import dev.dertyp.data.ListenedAlbum
 import dev.dertyp.data.ListenedArtist
 import dev.dertyp.data.ListenedSong
@@ -104,7 +107,7 @@ class ListenService : Service() {
         }
 
         val weights = HashMap<PlatformUUID, Float>()
-        ListenTable.innerJoin(SongTable)
+        ListenTable.innerJoin(SongTable, { ListenTable.songId }, { SongTable.id })
             .select(ListenTable.songId, ListenTable.msPlayed, SongTable.duration)
             .where { owner }
             .andWhere { ListenTable.listenedAt greater cutoff }
@@ -134,9 +137,15 @@ class ListenService : Service() {
     suspend fun ingestLocal(userId: PlatformUUID, songId: PlatformUUID, listenedAtMs: Long, msPlayed: Long?) {
         dbQuery {
             val meta = localListenMetadata(songId)
+            val redirect = ListenSongRedirectTable
+                .select(ListenSongRedirectTable.toSongId)
+                .where { ListenSongRedirectTable.userId eq userId }
+                .andWhere { ListenSongRedirectTable.fromSongId eq songId }
+                .singleOrNull()?.get(ListenSongRedirectTable.toSongId)?.value
             ListenTable.insert {
                 it[ListenTable.userId] = userId
-                it[ListenTable.songId] = songId
+                it[ListenTable.songId] = redirect ?: songId
+                it[ListenTable.playedSongId] = redirect?.let { songId }
                 it[ListenTable.recordingMbid] = meta.recordingMbid
                 it[ListenTable.releaseMbid] = meta.releaseMbid
                 it[ListenTable.artistMbids] = meta.artistMbids
@@ -242,27 +251,7 @@ class ListenService : Service() {
                 recordingMsid?.let { ListenTable.recordingMsid eq it },
             ).reduce { a, b -> a or b }
 
-            val existingOverrides = ListenLinkTable
-                .selectAll()
-                .where { ListenLinkTable.userId eq userId }
-                .andWhere {
-                    listOfNotNull(
-                        mbid?.let { ListenLinkTable.recordingMbid eq it },
-                        recordingMsid?.let { ListenLinkTable.recordingMsid eq it },
-                    ).reduce { a, b -> a or b }
-                }
-                .toList()
-            val oldSongIds = existingOverrides.map { it[ListenLinkTable.songId].value }.toSet()
-            if (existingOverrides.isNotEmpty()) {
-                ListenLinkTable.deleteWhere { ListenLinkTable.id inList existingOverrides.map { row -> row[ListenLinkTable.id].value } }
-            }
-            ListenLinkTable.insert {
-                it[ListenLinkTable.userId] = userId
-                it[ListenLinkTable.songId] = songId
-                it[ListenLinkTable.recordingMbid] = mbid
-                it[ListenLinkTable.recordingMsid] = recordingMsid
-                it[createdAt] = System.currentTimeMillis()
-            }
+            val oldSongIds = replaceOverride(userId, songId, mbid, recordingMsid)
 
             val relinkable = if (oldSongIds.isEmpty()) {
                 ListenTable.songId.isNull()
@@ -288,6 +277,223 @@ class ListenService : Service() {
 
             val msids = (rows.mapNotNull { it[ListenTable.recordingMsid] } + listOfNotNull(recordingMsid)).distinct()
             LinkUnmatchedResult(linkedListens = updated, recordingMsids = msids)
+        }
+
+        if (result.linkedListens > 0) listensChanged(listOf(userId))
+        return result
+    }
+
+    private fun replaceOverride(
+        userId: PlatformUUID,
+        songId: PlatformUUID,
+        recordingMbid: PlatformUUID?,
+        recordingMsid: PlatformUUID?,
+    ): Set<PlatformUUID> {
+        val existingOverrides = ListenLinkTable
+            .selectAll()
+            .where { ListenLinkTable.userId eq userId }
+            .andWhere {
+                listOfNotNull(
+                    recordingMbid?.let { ListenLinkTable.recordingMbid eq it },
+                    recordingMsid?.let { ListenLinkTable.recordingMsid eq it },
+                ).reduce { a, b -> a or b }
+            }
+            .toList()
+        val oldSongIds = existingOverrides.map { it[ListenLinkTable.songId].value }.toSet()
+        if (existingOverrides.isNotEmpty()) {
+            ListenLinkTable.deleteWhere { ListenLinkTable.id inList existingOverrides.map { row -> row[ListenLinkTable.id].value } }
+        }
+        ListenLinkTable.insert {
+            it[ListenLinkTable.userId] = userId
+            it[ListenLinkTable.songId] = songId
+            it[ListenLinkTable.recordingMbid] = recordingMbid
+            it[ListenLinkTable.recordingMsid] = recordingMsid
+            it[createdAt] = System.currentTimeMillis()
+        }
+        return oldSongIds
+    }
+
+    suspend fun linkedGroups(userId: PlatformUUID, songId: PlatformUUID): List<LinkedListenGroup> =
+        dbQuery { linkedGroupsOf(userId, songId) }
+
+    private fun linkedGroupsOf(userId: PlatformUUID, songId: PlatformUUID): List<LinkedListenGroup> {
+        val duration = SongTable
+            .select(SongTable.duration)
+            .where { SongTable.id eq songId }
+            .singleOrNull()?.get(SongTable.duration)
+
+        val rows = ListenTable
+            .select(
+                ListenTable.listenSource,
+                ListenTable.playedSongId,
+                ListenTable.recordingMbid,
+                ListenTable.recordingMsid,
+                ListenTable.trackName,
+                ListenTable.artistName,
+                ListenTable.releaseName,
+                ListenTable.listenedAt,
+                ListenTable.msPlayed,
+            )
+            .where { listenOwnerPredicate(userId) }
+            .andWhere { ListenTable.songId eq songId }
+            .toList()
+        if (rows.isEmpty()) return emptyList()
+
+        val redirectedFrom = ListenSongRedirectTable
+            .select(ListenSongRedirectTable.fromSongId)
+            .where { ListenSongRedirectTable.userId eq userId }
+            .andWhere { ListenSongRedirectTable.toSongId eq songId }
+            .map { it[ListenSongRedirectTable.fromSongId].value }
+            .toSet()
+
+        val overrides = ListenLinkTable
+            .select(ListenLinkTable.recordingMbid, ListenLinkTable.recordingMsid)
+            .where { ListenLinkTable.userId eq userId }
+            .andWhere { ListenLinkTable.songId eq songId }
+            .map { it[ListenLinkTable.recordingMbid] to it[ListenLinkTable.recordingMsid] }
+        val overrideMbids = overrides.mapNotNull { it.first }.toSet()
+        val overrideMsids = overrides.mapNotNull { it.second }.toSet()
+
+        return rows
+            .groupBy { row ->
+                if (row[ListenTable.listenSource] == ListenSource.LOCAL) {
+                    LinkedListenGroupKey(
+                        source = ListenGroupSource.LOCAL,
+                        playedSongId = row[ListenTable.playedSongId]?.value ?: songId,
+                    )
+                } else {
+                    val mbid = row[ListenTable.recordingMbid]
+                    LinkedListenGroupKey(
+                        source = ListenGroupSource.LISTENBRAINZ,
+                        recordingMbid = mbid,
+                        recordingMsid = if (mbid == null) row[ListenTable.recordingMsid] else null,
+                    )
+                }
+            }
+            .map { (key, groupRows) ->
+                val newest = groupRows.maxBy { it[ListenTable.listenedAt] }
+                val mbid = key.recordingMbid
+                val msid = key.recordingMsid
+                val linkedManually = when {
+                    key.source == ListenGroupSource.LOCAL -> key.playedSongId in redirectedFrom
+                    mbid != null -> mbid in overrideMbids || groupRows.any { it[ListenTable.recordingMsid] in overrideMsids }
+                    msid != null -> msid in overrideMsids
+                    else -> false
+                }
+                LinkedListenGroup(
+                    key = key,
+                    trackName = newest[ListenTable.trackName],
+                    artistName = newest[ListenTable.artistName],
+                    releaseName = newest[ListenTable.releaseName],
+                    listenCount = groupRows.size.toLong(),
+                    listenedMs = groupRows.sumOf { ListenTable.playedMs(it[ListenTable.msPlayed], duration) },
+                    lastListenedAt = newest[ListenTable.listenedAt],
+                    linkedManually = linkedManually,
+                )
+            }
+            .sortedWith(compareByDescending<LinkedListenGroup> { it.listenCount }.thenByDescending { it.lastListenedAt })
+    }
+
+    suspend fun relinkSong(
+        userId: PlatformUUID,
+        fromSongId: PlatformUUID,
+        toSongId: PlatformUUID,
+        groups: List<LinkedListenGroupKey>?,
+    ): LinkUnmatchedResult {
+        require(fromSongId != toSongId) { "fromSongId and toSongId must differ" }
+
+        val result = dbQuery {
+            require(SongTable.select(SongTable.id).where { SongTable.id eq toSongId }.any()) { "Song $toSongId not found" }
+
+            val keys = (groups ?: linkedGroupsOf(userId, fromSongId).map { it.key }).distinct()
+            val owner = listenOwnerPredicate(userId)
+            val now = System.currentTimeMillis()
+            var moved = 0
+            val msids = LinkedHashSet<PlatformUUID>()
+
+            for (key in keys) {
+                when (key.source) {
+                    ListenGroupSource.LOCAL -> {
+                        val played = requireNotNull(key.playedSongId) { "playedSongId is required for LOCAL groups" }
+                        val ids = ListenTable
+                            .select(ListenTable.id)
+                            .where { ListenTable.userId eq userId }
+                            .andWhere { ListenTable.listenSource eq ListenSource.LOCAL }
+                            .andWhere { ListenTable.songId eq fromSongId }
+                            .andWhere {
+                                if (played == fromSongId) {
+                                    ListenTable.playedSongId.isNull() or (ListenTable.playedSongId eq played)
+                                } else {
+                                    ListenTable.playedSongId eq played
+                                }
+                            }
+                            .map { it[ListenTable.id].value }
+                        if (ids.isEmpty()) continue
+
+                        val playedSongId = played.takeIf { it != toSongId }
+                        ids.chunked(1000).forEach { chunk ->
+                            moved += ListenTable.update({ ListenTable.id inList chunk }) {
+                                it[ListenTable.songId] = toSongId
+                                it[ListenTable.playedSongId] = playedSongId
+                                it[ListenTable.updatedAt] = now
+                            }
+                        }
+
+                        ListenSongRedirectTable.deleteWhere {
+                            (ListenSongRedirectTable.userId eq userId) and (ListenSongRedirectTable.fromSongId eq played)
+                        }
+                        if (playedSongId != null) {
+                            ListenSongRedirectTable.insert {
+                                it[ListenSongRedirectTable.userId] = userId
+                                it[ListenSongRedirectTable.fromSongId] = playedSongId
+                                it[ListenSongRedirectTable.toSongId] = toSongId
+                                it[createdAt] = now
+                            }
+                        }
+                    }
+
+                    ListenGroupSource.LISTENBRAINZ -> {
+                        val mbid = key.recordingMbid
+                        val msid = key.recordingMsid
+                        val query = ListenTable
+                            .select(ListenTable.id, ListenTable.recordingMsid)
+                            .where { owner }
+                            .andWhere { ListenTable.listenSource eq ListenSource.LISTENBRAINZ }
+                            .andWhere { ListenTable.songId eq fromSongId }
+                        when {
+                            mbid != null -> query.andWhere { ListenTable.recordingMbid eq mbid }
+                            msid != null -> query
+                                .andWhere { ListenTable.recordingMbid.isNull() }
+                                .andWhere { ListenTable.recordingMsid eq msid }
+                            else -> query
+                                .andWhere { ListenTable.recordingMbid.isNull() }
+                                .andWhere { ListenTable.recordingMsid.isNull() }
+                        }
+                        val rows = query.toList()
+                        if (rows.isEmpty()) continue
+
+                        rows.map { it[ListenTable.id].value }.chunked(1000).forEach { chunk ->
+                            moved += ListenTable.update({ ListenTable.id inList chunk }) {
+                                it[ListenTable.songId] = toSongId
+                                it[ListenTable.updatedAt] = now
+                            }
+                        }
+
+                        val rowMsids = rows.mapNotNull { it[ListenTable.recordingMsid] }.distinct()
+                        msids += rowMsids
+                        if (rowMsids.isNotEmpty()) {
+                            ListenLinkTable.deleteWhere {
+                                (ListenLinkTable.userId eq userId) and (ListenLinkTable.recordingMsid inList rowMsids)
+                            }
+                        }
+                        if (mbid != null || msid != null) {
+                            replaceOverride(userId, toSongId, mbid, msid ?: rowMsids.firstOrNull())
+                        }
+                    }
+                }
+            }
+
+            LinkUnmatchedResult(linkedListens = moved, recordingMsids = msids.toList())
         }
 
         if (result.linkedListens > 0) listensChanged(listOf(userId))
@@ -376,7 +582,7 @@ class ListenService : Service() {
 
         val lastListened = dbQuery {
             val lastListen = ListenTable.listenedAt.max().alias("lastListen")
-            ListenTable.innerJoin(SongTable)
+            ListenTable.innerJoin(SongTable, { ListenTable.songId }, { SongTable.id })
                 .select(SongTable.albumId, lastListen)
                 .where { listenOwnerPredicate(userId) }
                 .andWhere { ListenTable.songId.isNotNull() }

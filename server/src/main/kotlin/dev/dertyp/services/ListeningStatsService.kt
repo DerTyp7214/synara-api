@@ -23,11 +23,31 @@ class ListeningStatsService : Service() {
 
     suspend fun linkUnmatched(userId: PlatformUUID, request: LinkUnmatchedTrackRequest): LinkUnmatchedTrackResult {
         val link = listenService.linkUnmatched(userId, request.songId, request.recordingMsid, request.recordingMbid)
+        return submitLink(userId, request.songId, link)
+    }
 
+    suspend fun linkedGroups(userId: PlatformUUID, songId: PlatformUUID): List<LinkedListenGroup> =
+        listenService.linkedGroups(userId, songId)
+
+    suspend fun relinkSong(
+        userId: PlatformUUID,
+        fromSongId: PlatformUUID,
+        toSongId: PlatformUUID,
+        groups: List<LinkedListenGroupKey>?,
+    ): LinkUnmatchedTrackResult {
+        val link = listenService.relinkSong(userId, fromSongId, toSongId, groups)
+        return submitLink(userId, toSongId, link)
+    }
+
+    private suspend fun submitLink(
+        userId: PlatformUUID,
+        songId: PlatformUUID,
+        link: LinkUnmatchedResult,
+    ): LinkUnmatchedTrackResult {
         val songMbid = dbQuery {
             SongMusicBrainzTable
                 .select(SongMusicBrainzTable.musicBrainzId)
-                .where { SongMusicBrainzTable.songId eq request.songId }
+                .where { SongMusicBrainzTable.songId eq songId }
                 .singleOrNull()?.get(SongMusicBrainzTable.musicBrainzId)?.value
         }
         val submitted = if (songMbid != null && link.recordingMsids.isNotEmpty()) {
@@ -368,7 +388,7 @@ class ListeningStatsService : Service() {
         }
 
         ListenTable
-            .leftJoin(SongTable)
+            .leftJoin(SongTable, { ListenTable.songId }, { SongTable.id })
             .select(
                 ListenTable.songId, ListenTable.listenedAt, ListenTable.recordingMbid, ListenTable.recordingMsid,
                 ListenTable.isrcs, ListenTable.releaseMbid, ListenTable.artistMbids, ListenTable.trackName,
@@ -711,4 +731,14 @@ class RpcListeningStatsService(
 
     override suspend fun linkUnmatchedTrack(request: LinkUnmatchedTrackRequest): LinkUnmatchedTrackResult =
         service.linkUnmatched(user.id, request)
+
+    override suspend fun getLinkedListenGroups(songId: PlatformUUID): List<LinkedListenGroup> =
+        service.linkedGroups(user.id, songId)
+
+    override suspend fun relinkSong(
+        fromSongId: PlatformUUID,
+        toSongId: PlatformUUID,
+        groups: List<LinkedListenGroupKey>?,
+    ): LinkUnmatchedTrackResult =
+        service.relinkSong(user.id, fromSongId, toSongId, groups)
 }
