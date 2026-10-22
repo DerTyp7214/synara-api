@@ -60,7 +60,7 @@ CLASS_GROUPS = [
     ("system", "System"),
     ("core", "Core"),
 ]
-KOIN_GROUPS = {"intake": "import", "config": "core", "mcp": "entry"}
+KOIN_GROUPS = {"intake": "import", "config": "core", "mcp": "entry", "lyricsproviders": "library"}
 PACKAGE_GROUPS = [
     ("services.schedule", "schedule"), ("services.credentials", "credentials"), ("services.ui", "ui"), ("services.metadata", "metadata"),
     ("services.import", "import"), ("services.intake", "import"), ("services.jobs", "import"), ("services.gamdl", "import"),

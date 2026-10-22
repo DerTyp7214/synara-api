@@ -42,6 +42,7 @@ TARGETS = {
     "linkresolver": ("LinkResolver", "linkresolver.synara.audio", "Resolves a URL, ISRC or UPC to links on other platforms. Needs LINKRESOLVER_API_KEY."),
     "apple-music": ("Apple Music catalog", "api.music.apple.com", "Catalog albums of followed artists. Needs the developer token."),
     "lrclib": ("LRCLIB", "lrclib.net", "Synced and plain lyrics by artist, title, album and duration."),
+    "lyrics-providers": ("Lyrics providers", "LYRICS_PROVIDERS", "Better Lyrics, Unison, LyricsPlus, KuGou, LRCLIB and YouTube Music, asked in parallel for word, line or plain lyrics."),
     "syncedlyrics": ("syncedlyrics", "command-line tool", "python3 -u -m syncedlyrics searches lyrics text by title and artist and writes an .lrc file."),
     "transcriber": ("transcriber", "WhisperX sidecar", "Aligns lyrics to the audio and returns word and character timings."),
     "audio-embed": ("audio-embed", "MusiCNN sidecar", "Returns one embedding vector per audio file path."),
@@ -280,6 +281,14 @@ CURATED = {
         "group": "lyrics",
         "does": "Fetches lyrics from LRCLIB for songs without lyrics whose last attempt is more than 7 days old, synced preferred over plain. It writes the song table directly and records the change through EntityEventPublisher.",
         "targets": [("lrclib", "Lyrics lookup", "HTTPS GET /api/get", "artist, track, album and duration, returns synced or plain lyrics", S + "services/LrcLibService.kt:13", None)],
+    },
+    "lyrics-provider-worker": {
+        "group": "lyrics",
+        "does": "Looks up lyrics through the configured providers for songs without candidates, misses older than 14 days and line-synced candidates older than 14 days. Every answer is stored as a ranked lyrics_candidate row, misses included.",
+        "targets": [
+            ("lyrics-providers", "Lyrics lookup", "HTTPS", "title, artists, album and duration, returns TTML, LRC, KRC, syllable JSON or timed rows", S + "services/lyrics/LyricsCandidateService.kt:299", "LYRICS_PROVIDERS"),
+            ("database", "Store candidates", "JDBC", "upserts lyrics_candidate rows and recomputes their ranks", SCHEDULE + "LyricsProviderWorker.kt:29", None),
+        ],
     },
     "search-index-rebuild-worker": {
         "group": "infrastructure",
