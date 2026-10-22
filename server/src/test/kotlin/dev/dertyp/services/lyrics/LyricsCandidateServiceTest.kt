@@ -292,7 +292,7 @@ class LyricsCandidateServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `importSyncedLyrics of an enhanced LRC stores word timing`(dialect: DbDialect) = runBlocking {
+    fun `importSyncedLyrics of an enhanced LRC stores word timing`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
         val songId = song()
 
@@ -309,7 +309,7 @@ class LyricsCandidateServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `importSyncedLyrics of a lyricsfile stores word timing`(dialect: DbDialect) = runBlocking {
+    fun `importSyncedLyrics of a lyricsfile stores word timing`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
         val songId = song()
 
@@ -441,7 +441,7 @@ class LyricsCandidateServiceTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `getLyrics returns the song candidate for a song with only its own lyrics`(dialect: DbDialect) = runBlocking {
+    fun `getLyrics returns the song candidate for a song with only its own lyrics`(dialect: DbDialect): Unit = runBlocking {
         setup(dialect)
         val synced = song(lyrics = lineLrc)
         val plain = song(lyrics = "Just words\nNo timing")
