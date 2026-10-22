@@ -6,9 +6,13 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.http.toHttpDate
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.util.date.GMTDate
 import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.unmockkAll
@@ -21,8 +25,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 class HttpClientQueueServiceTest {
 
@@ -135,5 +142,31 @@ class HttpClientQueueServiceTest {
         assertFalse(error is CancellationException)
         assertEquals("HTTP queue stopped", error.message)
         assertTrue(isActive)
+    }
+
+    @Test
+    fun `a 429 is retried after the seconds given in Retry-After`(): Unit = runBlocking {
+        assertRetryWaits(headersOf(HttpHeaders.RetryAfter, "1"), 1.seconds)
+    }
+
+    @Test
+    fun `a 429 is retried after the date given in Retry-After`(): Unit = runBlocking {
+        val at = GMTDate(System.currentTimeMillis() + 2.seconds.inWholeMilliseconds).toHttpDate()
+        assertRetryWaits(headersOf(HttpHeaders.RetryAfter, at), 1.seconds)
+    }
+
+    private suspend fun assertRetryWaits(limited: Headers, atLeast: Duration) {
+        val calls = AtomicInteger()
+        every { ApiClient.instance } returns HttpClient(MockEngine { _ ->
+            if (calls.getAndIncrement() == 0) respond("", HttpStatusCode.TooManyRequests, limited)
+            else respond("OK", HttpStatusCode.OK)
+        })
+
+        val started = TimeSource.Monotonic.markNow()
+        val response = queueService.enqueue("https://limited.example.com/a")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals(2, calls.get())
+        assertTrue(started.elapsedNow() >= atLeast)
     }
 }

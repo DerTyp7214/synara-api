@@ -32,6 +32,6 @@ class LyricsPlusProvider : LyricsProvider, Service() {
     companion object {
         const val ID = "lyricsplus"
         const val ENDPOINT = "https://lyricsplus.binimum.org/v2/lyrics/get"
-        private val TIMEOUT = 4.seconds
+        private val TIMEOUT = 10.seconds
     }
 }

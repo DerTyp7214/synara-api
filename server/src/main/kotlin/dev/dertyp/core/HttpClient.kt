@@ -4,12 +4,14 @@ import dev.dertyp.ApiClient
 import dev.dertyp.services.Service
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.request
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpMethod
 import io.ktor.http.Url
+import io.ktor.http.fromHttpToGmtDate
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
@@ -19,6 +21,7 @@ import java.util.concurrent.PriorityBlockingQueue
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -127,12 +130,18 @@ class HttpClientQueueService : Service() {
         if (limit != null && remaining != null && resetIn != null) {
             hostRateLimits[host] = RateLimitState(limit, remaining, resetIn, Clock.System.now())
         } else if (response.status.value == 429) {
-            val retryAfter = response.headers["Retry-After"]?.toIntOrNull()
-                ?: response.headers["X-Retry-After"]?.toIntOrNull()
+            val retryAfter = retryAfter(response)
             if (retryAfter != null) {
-                hostRateLimits[host] = RateLimitState(limit ?: 0, 0, retryAfter, Clock.System.now())
+                hostRateLimits[host] = RateLimitState(limit ?: 0, 0, retryAfter.inWholeSeconds.toInt(), Clock.System.now())
             }
         }
+    }
+
+    private fun retryAfter(response: HttpResponse): Duration? {
+        val value = (response.headers["Retry-After"] ?: response.headers["X-Retry-After"])?.trim() ?: return null
+        value.toLongOrNull()?.let { return it.coerceAtLeast(0).seconds }
+        val at = runCatching { value.fromHttpToGmtDate().timestamp }.getOrNull() ?: return null
+        return (at - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0).milliseconds
     }
 
     private data class QueuedRequest(
@@ -250,8 +259,7 @@ class HttpClientQueueService : Service() {
 
                     var attempts = 1
                     while (response.status.value == 429 && attempts < 3) {
-                        val retryAfter =
-                            response.headers["Retry-After"]?.toIntOrNull()?.seconds ?: (delayTime + 500.milliseconds)
+                        val retryAfter = retryAfter(response) ?: (MISSING_RETRY_AFTER_BACKOFF * attempts)
                         logger.warn("Rate limit exceeded for $host (attempt $attempts), waiting $retryAfter before retry")
                         delay(retryAfter)
                         response = client.request(next.urlString) {
@@ -266,6 +274,9 @@ class HttpClientQueueService : Service() {
                 } catch (e: CancellationException) {
                     next.deferred.completeWith(Result.failure(e))
                     throw e
+                } catch (e: HttpRequestTimeoutException) {
+                    logger.warn("Queued request for $host timed out: ${e.message}")
+                    next.deferred.completeWith(Result.failure(e))
                 } catch (e: Exception) {
                     logger.error("Error executing queued request for $host", e)
                     next.deferred.completeWith(Result.failure(e))
@@ -283,6 +294,7 @@ class HttpClientQueueService : Service() {
 
     companion object {
         private const val STOPPED_MESSAGE = "HTTP queue stopped"
+        private val MISSING_RETRY_AFTER_BACKOFF = 5.seconds
         private val LYRICS_PROVIDER_HOSTS = setOf(
             "lyrics-api.boidu.dev",
             "unison.betterlyrics.org",
