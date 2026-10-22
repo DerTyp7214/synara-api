@@ -29,9 +29,9 @@ class HttpClientFactoryTest {
         val factory = HttpClientFactory()
         val api = factory.api
         val shared = factory.shared("mirror", CIO)
-        val defaultEngine = factory.sharedWithDefaultEngine("proxy")
+        val proxy = factory.shared("proxy", CIO)
         val created = factory.create(OkHttp)
-        val clients = listOf(api, shared, defaultEngine, created)
+        val clients = listOf(api, shared, proxy, created)
         assertTrue(clients.all { it.coroutineContext.job.isActive })
 
         factory.stopService()

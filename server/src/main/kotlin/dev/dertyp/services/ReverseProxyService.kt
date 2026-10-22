@@ -10,6 +10,7 @@ import dev.dertyp.proxy.ProxyMessage
 import dev.dertyp.routing.registerAuthenticatedServices
 import dev.dertyp.routing.registerPublicServices
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
@@ -53,7 +54,7 @@ class ReverseProxyService(
     private val httpGateway by inject<ReverseProxyHttpGateway>()
 
     private val client: HttpClient
-        get() = httpClientFactory.sharedWithDefaultEngine(HttpClientFactory.REVERSE_PROXY) {
+        get() = httpClientFactory.shared(HttpClientFactory.REVERSE_PROXY, CIO) {
             install(WebSockets)
         }
 
@@ -143,9 +144,10 @@ class ReverseProxyService(
             _isConnected.store(true)
             lastInteraction = TimeSource.Monotonic.markNow()
             var idAssigned = false
+            var healthCheck: Job? = null
 
             try {
-                launch {
+                healthCheck = launch {
                     while (isActive) {
                         delay(10.seconds)
                         val last = lastInteraction
@@ -226,6 +228,7 @@ class ReverseProxyService(
                     throw IllegalStateException("Reverse proxy closed the connection before assigning an ID ($detail)")
                 }
             } finally {
+                healthCheck?.cancel()
                 _isConnected.store(false)
                 activeServers.values.forEach { it.close() }
                 httpStreams.close()

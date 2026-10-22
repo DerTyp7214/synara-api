@@ -34,11 +34,6 @@ class HttpClientFactory : Service() {
         configure: HttpClientConfig<*>.() -> Unit = {},
     ): HttpClient = sharedClients.computeIfAbsent(name) { create(engineFactory, engineConfig, configure) }
 
-    fun sharedWithDefaultEngine(
-        name: String,
-        configure: HttpClientConfig<*>.() -> Unit = {},
-    ): HttpClient = sharedClients.computeIfAbsent(name) { track(HttpClient(configure)) }
-
     fun <T : HttpClientEngineConfig> create(
         engineFactory: HttpClientEngineFactory<T>,
         engineConfig: T.() -> Unit = {},
