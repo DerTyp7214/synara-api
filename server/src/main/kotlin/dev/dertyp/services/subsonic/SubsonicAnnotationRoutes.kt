@@ -1,7 +1,9 @@
 package dev.dertyp.services.subsonic
 
+import dev.dertyp.core.db.dbQuery
 import dev.dertyp.core.fullTitle
 import dev.dertyp.data.User
+import dev.dertyp.db.SongTable
 import dev.dertyp.services.AlbumService
 import dev.dertyp.services.ArtistService
 import dev.dertyp.services.DiscoveryService
@@ -9,9 +11,17 @@ import dev.dertyp.services.ListenService
 import dev.dertyp.services.LyricsService
 import dev.dertyp.services.ScrobbleService
 import dev.dertyp.services.SongService
+import dev.dertyp.services.lyrics.LyricsCandidateService
 import io.ktor.http.Parameters
 import io.ktor.server.routing.Route
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.select
+import java.util.UUID
 import org.koin.ktor.ext.inject
+
+private suspend fun songLyricsText(songId: UUID): String = dbQuery {
+    SongTable.select(SongTable.lyrics).where { SongTable.id eq songId }.singleOrNull()?.get(SongTable.lyrics)
+}.orEmpty()
 
 internal fun Route.subsonicAnnotationRoutes() {
     val authenticator by inject<SubsonicAuthenticator>()
@@ -23,6 +33,7 @@ internal fun Route.subsonicAnnotationRoutes() {
     val scrobbleService by inject<ScrobbleService>()
     val discoveryService by inject<DiscoveryService>()
     val lyricsService by inject<LyricsService>()
+    val lyricsCandidateService by inject<LyricsCandidateService>()
 
     suspend fun setStars(params: Parameters, user: User, starred: Boolean) {
         val ids = listOf("id", "albumId", "artistId")
@@ -139,7 +150,7 @@ internal fun Route.subsonicAnnotationRoutes() {
         val artist = params["artist"] ?: ""
         val title = params["title"] ?: ""
         val song = songService.rankedSearch(0, 1, "$artist $title".trim(), true, user.id).data.firstOrNull()
-        val lyrics = song?.lyrics?.takeIf { it.isNotBlank() }
+        val lyrics = song?.let { songLyricsText(it.id) }?.takeIf { it.isNotBlank() }
         call.respondSubsonic(
             SubsonicResponse(
                 lyrics = Lyrics(
@@ -163,25 +174,28 @@ internal fun Route.subsonicAnnotationRoutes() {
             ?: return@subAuth respondNotFound(params, "Song")
 
         val displayArtist = song.artists.firstOrNull()?.name
-        val synced = lyricsService.getSyncedLyrics(id.uuid)
+        val plainLyrics = songLyricsText(song.id)
+        val candidate = lyricsCandidateService.getLyrics(song.id)
+            ?.lyrics?.takeIf { lyrics -> lyrics.lines.any { !it.background } }
+        val synced = candidate ?: lyricsService.getSyncedLyrics(id.uuid)
         val structured = when {
             synced != null && synced.lines.isNotEmpty() -> StructuredLyrics(
                 displayArtist = displayArtist,
                 displayTitle = song.fullTitle,
                 synced = true,
-                line = synced.lines.map { line ->
+                line = synced.lines.filterNot { it.background }.map { line ->
                     LyricsLine(
                         start = line.startTime.inWholeMilliseconds,
-                        value = line.words.joinToString(" ") { it.text },
+                        value = line.text ?: line.words.joinToString(" ") { it.text },
                     )
                 },
             )
 
-            song.lyrics.isNotBlank() -> StructuredLyrics(
+            plainLyrics.isNotBlank() -> StructuredLyrics(
                 displayArtist = displayArtist,
                 displayTitle = song.fullTitle,
                 synced = false,
-                line = song.lyrics.lines().map { LyricsLine(value = it) },
+                line = plainLyrics.lines().map { LyricsLine(value = it) },
             )
 
             else -> null

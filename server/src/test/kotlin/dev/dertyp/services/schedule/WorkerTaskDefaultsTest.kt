@@ -80,6 +80,12 @@ class WorkerTaskDefaultsTest {
         ),
         TaskConfiguration(TaskKeys.LRCLIB_WORKER, "LrcLib Worker", true, TriggerDefinition.Cron("30 4 * * *")),
         TaskConfiguration(
+            TaskKeys.LYRICS_PROVIDER_WORKER,
+            "Lyrics Provider Worker",
+            true,
+            TriggerDefinition.Cron("0 5 * * *")
+        ),
+        TaskConfiguration(
             TaskKeys.RECENT_RELEASE_WORKER,
             "Recent Release Worker",
             true,

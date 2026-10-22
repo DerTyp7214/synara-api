@@ -16,6 +16,10 @@ import dev.dertyp.data.User
 import dev.dertyp.data.UserCapability
 import dev.dertyp.db.UserCapabilityTable
 import dev.dertyp.db.UserTable
+import dev.dertyp.services.lyrics.LyricsCandidateService
+import dev.dertyp.services.lyrics.RpcLyricsCandidateService
+import dev.dertyp.services.models.LyricsImport
+import dev.dertyp.services.models.LyricsImportFormat
 import dev.dertyp.services.models.RecentRelease
 import dev.dertyp.services.podcast.PodcastFeedService
 import dev.dertyp.services.podcast.PodcastImportService
@@ -381,6 +385,52 @@ class CapabilityAuthorizationTest : KoinTest {
 
         authorizedService.setReleaseHidden(UUID.randomUUID(), true)
         authorizedService.confirmRelease(UUID.randomUUID())
+    }
+
+    private fun lyricsRpcService(user: User): ILyricsCandidateService =
+        RpcLyricsCandidateService(user, mockk<LyricsCandidateService>(relaxed = true))
+            .withAuthorization<ILyricsCandidateService>(user)
+
+    private suspend fun unwrapped(block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (e: UndeclaredThrowableException) {
+            throw e.undeclaredThrowable
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `lyrics writes and a refresh lookup require EDIT`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val user = User(id = UUID.randomUUID(), username = "lyrics-noedit", isAdmin = false, capabilities = emptyList())
+        val service = lyricsRpcService(user)
+        val songId = UUID.randomUUID()
+
+        assertFailsWith<UnauthorizedException> { unwrapped { service.setSyncedLyrics(songId, null) } }
+        assertFailsWith<UnauthorizedException> { unwrapped { service.importSyncedLyrics(songId, LyricsImport(LyricsImportFormat.LRC, "")) } }
+        assertFailsWith<UnauthorizedException> { unwrapped { service.setPreferredLyrics(songId, null) } }
+        assertFailsWith<UnauthorizedException> { unwrapped { service.findLyrics(songId, refresh = true) } }
+        service.findLyrics(songId)
+        service.getLyrics(songId)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `lyrics writes and a refresh lookup are allowed with EDIT and for an admin`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val users = listOf(
+            User(id = UUID.randomUUID(), username = "lyrics-edit", isAdmin = false, capabilities = listOf(UserCapability.EDIT)),
+            User(id = UUID.randomUUID(), username = "lyrics-admin", isAdmin = true, capabilities = emptyList()),
+        )
+        for (user in users) {
+            val service = lyricsRpcService(user)
+            val songId = UUID.randomUUID()
+            service.setSyncedLyrics(songId, null)
+            service.importSyncedLyrics(songId, LyricsImport(LyricsImportFormat.LRC, ""))
+            service.setPreferredLyrics(songId, null)
+            service.findLyrics(songId, refresh = true)
+        }
     }
 
     @Test

@@ -189,6 +189,7 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [SongAudioTimeline](#devdertypdatasongaudiotimeline)
 - [SongDownloadSize](#devdertypdatasongdownloadsize)
 - [SongExtendedMetadata](#devdertypdatasongextendedmetadata)
+- [SongLyricsInfo](#devdertypdatasonglyricsinfo)
 - [SongTag](#devdertypdatasongtag)
 - [SplitArtist](#devdertypdatasplitartist)
 - [StatsRange](#devdertypdatastatsrange)
@@ -249,7 +250,16 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [FollowedArtist](#devdertypservicesmodelsfollowedartist)
 - [LyricChar](#devdertypservicesmodelslyricchar)
 - [LyricLine](#devdertypservicesmodelslyricline)
+- [LyricVoice](#devdertypservicesmodelslyricvoice)
+- [LyricVoiceType](#devdertypservicesmodelslyricvoicetype)
 - [LyricWord](#devdertypservicesmodelslyricword)
+- [LyricsCandidate](#devdertypservicesmodelslyricscandidate)
+- [LyricsImport](#devdertypservicesmodelslyricsimport)
+- [LyricsImportFormat](#devdertypservicesmodelslyricsimportformat)
+- [LyricsMatch](#devdertypservicesmodelslyricsmatch)
+- [LyricsProviderInfo](#devdertypservicesmodelslyricsproviderinfo)
+- [LyricsSearchResult](#devdertypservicesmodelslyricssearchresult)
+- [LyricsSyncLevel](#devdertypservicesmodelslyricssynclevel)
 - [RecentRelease](#devdertypservicesmodelsrecentrelease)
 - [SyncedLyrics](#devdertypservicesmodelssyncedlyrics)
 - [ClientTimeZone](#devdertypuiclienttimezone)
@@ -2273,7 +2283,6 @@ Contains core metadata about a track that is common for all users.
 | `duration` | `Long` | Duration of the song in milliseconds. |
 | `explicit` | `Boolean` | Whether the song contains explicit content. |
 | `releaseDate` | `PlatformLocalDate`? | Original release date of the track. |
-| `lyrics` | `String` | The plain text lyrics of the song. |
 | `path` | `String` | Internal server path to the audio file. |
 | `originalUrl` | `String` | The URL to the item on its original platform. |
 | `trackNumber` | `Int` | The position of the track in the album. |
@@ -2291,6 +2300,7 @@ Contains core metadata about a track that is common for all users.
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 | `audioStartMs` | `Long`? | Offset in milliseconds of the first audible sound, or null if not yet analyzed. |
 | `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Version markers split off the title, e.g. remix, live or featuring, in order of extraction. The title never contains them. |
+| `lyricsInfo` | [SongLyricsInfo](#devdertypdatasonglyricsinfo)? | Summary of the lyrics available for this song. |
 | `atmosVariantPath` | `String`? |  |
 
 ### SongAudioBand <a name="devdertypdatasongaudioband"></a>
@@ -2358,6 +2368,19 @@ Extended metadata for a song.
 | `audioData` | [SongAudioData](#devdertypdatasongaudiodata)? | Detailed audio analysis data. |
 | `insertedAt` | `Long` | Timestamp of when the song was first inserted into the database. |
 
+### SongLyricsInfo <a name="devdertypdatasonglyricsinfo"></a>
+Summary of the lyrics available for a song.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `available` | `Boolean` | Whether the song has any lyrics at all. |
+| `syncLevel` | [LyricsSyncLevel](#devdertypservicesmodelslyricssynclevel)? | The best sync level of the default lyrics, or null if there are none. |
+| `levels` | `Set`<[LyricsSyncLevel](#devdertypservicesmodelslyricssynclevel)> | Every sync level that at least one lyrics candidate offers. |
+| `instrumental` | `Boolean` | Whether the song is instrumental. |
+| `defaultCandidateId` | `PlatformUUID`? | The identifier of the default lyrics candidate. |
+| `defaultProvider` | `String`? | The identifier of the provider of the default lyrics candidate. |
+| `candidateCount` | `Int` | Number of stored lyrics candidates. |
+
 ### SongTag <a name="devdertypdatasongtag"></a>
 Flags and metadata attributes for a song.
 
@@ -2369,6 +2392,8 @@ Flags and metadata attributes for a song.
 | `B_16` | Bit depth is 16-bit. |
 | `B_24` | Bit depth is 24-bit. |
 | `HAS_LYRICS` | The song has associated lyrics. |
+| `HAS_SYNCED_LYRICS` | The song has lyrics synced per line or per word. |
+| `HAS_WORD_SYNCED_LYRICS` | The song has lyrics synced per word. |
 | `CUSTOM_UPLOAD` | The song was manually uploaded by a user. |
 | `HAS_MUSICBRAINZ_ID` | The song has a linked MusicBrainz Recording ID. |
 
@@ -2709,7 +2734,6 @@ Extends track metadata with user-specific information like favorite status.
 | `duration` | `Long` | Duration of the song in milliseconds. |
 | `explicit` | `Boolean` | Whether the song contains explicit content. |
 | `releaseDate` | `PlatformLocalDate`? | Original release date of the track. |
-| `lyrics` | `String` | The plain text lyrics of the song. |
 | `path` | `String` | Internal server path to the audio file. |
 | `originalUrl` | `String` | The URL to the item on its original platform. |
 | `trackNumber` | `Int` | The position of the track in the album. |
@@ -2727,6 +2751,7 @@ Extends track metadata with user-specific information like favorite status.
 | `animatedCoverBlurHash` | `String`? | BlurHash of the animated cover's first frame. |
 | `audioStartMs` | `Long`? | Offset in milliseconds of the first audible sound, or null if not yet analyzed. |
 | `tags` | `List`<[TitleTag](#devdertypdatatitletag)> | Version markers split off the title, e.g. remix, live or featuring, in order of extraction. The title never contains them. |
+| `lyricsInfo` | [SongLyricsInfo](#devdertypdatasonglyricsinfo)? | Summary of the lyrics available for this song. |
 | `atmosVariantPath` | `String`? |  |
 | `isFavourite` | `Boolean`? | Whether the current user has marked this song as a favorite. |
 | `userSongCreatedAt` | `PlatformDate`? | Timestamp of when the song record was created. |
@@ -3056,6 +3081,26 @@ A single line of lyrics with timing information.
 | `startTime` | `Duration` | Timestamp of when the line starts. |
 | `endTime` | `Duration` | Timestamp of when the line ends. |
 | `words` | `List`<[LyricWord](#devdertypservicesmodelslyricword)> | Collection of individual words in the line. |
+| `text` | `String`? | The full text of the line. When set, the word texts joined without a separator equal it exactly. When null, the words are joined with a space. |
+| `voice` | `String`? | The id of the voice singing the line, as a key of the voices of the lyrics. |
+| `background` | `Boolean` | Whether the line is a backing vocal. |
+| `group` | `Int` | Identifier shared by a lead line and the backing vocal lines that were split from the same line. |
+
+### LyricVoice <a name="devdertypservicesmodelslyricvoice"></a>
+A singer that lyric lines can be assigned to.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `name` | `String` | The display name of the singer. |
+| `type` | [LyricVoiceType](#devdertypservicesmodelslyricvoicetype) | Whether the voice is a single person or a group. |
+
+### LyricVoiceType <a name="devdertypservicesmodelslyricvoicetype"></a>
+Kind of singer behind a voice.
+
+| Value | Description |
+| :--- | :--- |
+| `PERSON` | A single person. |
+| `GROUP` | A group of singers. |
 
 ### LyricWord <a name="devdertypservicesmodelslyricword"></a>
 A single word in a synced lyric line with precise timing.
@@ -3066,6 +3111,78 @@ A single word in a synced lyric line with precise timing.
 | `startTime` | `Duration` | Timestamp of when the word starts. |
 | `endTime` | `Duration` | Timestamp of when the word ends. |
 | `chars` | `List`<[LyricChar](#devdertypservicesmodelslyricchar)>? | Optional character-level timing information. |
+
+### LyricsCandidate <a name="devdertypservicesmodelslyricscandidate"></a>
+One version of the lyrics of a song as offered by a provider.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `PlatformUUID` | The candidate unique identifier. |
+| `songId` | `PlatformUUID`? | The song unique identifier, or null if the candidate is not tied to a song. |
+| `provider` | [LyricsProviderInfo](#devdertypservicesmodelslyricsproviderinfo) | The provider the candidate comes from. |
+| `syncLevel` | [LyricsSyncLevel](#devdertypservicesmodelslyricssynclevel) | How finely the lyrics are synced. |
+| `instrumental` | `Boolean` | Whether the track is instrumental. |
+| `match` | [LyricsMatch](#devdertypservicesmodelslyricsmatch) | How sure it is that the lyrics belong to the song. |
+| `durationGapSec` | `Int`? | Difference in seconds between the duration of the lyrics and of the song, or null if unknown. |
+| `rank` | `Int` | Position among the candidates of the song, 1 is best. |
+| `preferred` | `Boolean` | Whether an admin pinned this candidate as the default. |
+| `fetchedAt` | `PlatformDate` | Timestamp of when the candidate was fetched. |
+| `plain` | `String` | The plain text of the lyrics. |
+| `lyrics` | [SyncedLyrics](#devdertypservicesmodelssyncedlyrics)? | The synced lyrics. Only filled when the content was requested. |
+
+### LyricsImport <a name="devdertypservicesmodelslyricsimport"></a>
+A lyrics file to import.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `format` | [LyricsImportFormat](#devdertypservicesmodelslyricsimportformat) | The format of the content. |
+| `content` | `String` | The content of the file. |
+
+### LyricsImportFormat <a name="devdertypservicesmodelslyricsimportformat"></a>
+File format of lyrics that are imported.
+
+| Value | Description |
+| :--- | :--- |
+| `LRC` | LRC with line stamps and optional word stamps. |
+| `TTML` | TTML with optionally timed words. |
+| `LYRICSFILE` | A lyricsfile in YAML. |
+
+### LyricsMatch <a name="devdertypservicesmodelslyricsmatch"></a>
+How sure it is that lyrics belong to the song.
+
+| Value | Description |
+| :--- | :--- |
+| `VERIFIED` | The title, artist and duration of the lyrics were checked against the song. |
+| `PROVIDER` | The provider returned the lyrics for the song, but did not tell which track they are for. |
+
+### LyricsProviderInfo <a name="devdertypservicesmodelslyricsproviderinfo"></a>
+A source of lyrics.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `String` | The provider identifier, such as betterlyrics or kugou. |
+| `name` | `String` | The display name of the provider. |
+| `url` | `String`? | The web address of the provider to credit, or null if it has none. |
+| `enabled` | `Boolean` | Whether lookups ask this provider. |
+| `priority` | `Int` | Position of the provider in the configured order, lower is asked and preferred first. |
+
+### LyricsSearchResult <a name="devdertypservicesmodelslyricssearchresult"></a>
+Lyrics candidates found for a song or a query.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `candidates` | `List`<[LyricsCandidate](#devdertypservicesmodelslyricscandidate)> | The candidates ordered by rank. |
+| `defaultCandidateId` | `PlatformUUID`? | The identifier of the default candidate. This is the pinned one, otherwise the best ranked one. |
+| `pending` | `List`<`String`> | Identifiers of the providers that did not answer in time and can be asked again later. |
+
+### LyricsSyncLevel <a name="devdertypservicesmodelslyricssynclevel"></a>
+How finely lyrics are synced to the audio.
+
+| Value | Description |
+| :--- | :--- |
+| `PLAIN` | Text only, without timing. |
+| `LINE` | Timed per line. |
+| `WORD` | Timed per word or syllable. |
 
 ### RecentRelease <a name="devdertypservicesmodelsrecentrelease"></a>
 Metadata for a recently released album or single from a followed artist.
@@ -3099,6 +3216,7 @@ A collection of time-synced lyrics for a song.
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `lines` | `List`<[LyricLine](#devdertypservicesmodelslyricline)> | List of individual lyric lines. |
+| `voices` | `Map`<`String`, [LyricVoice](#devdertypservicesmodelslyricvoice)> | The singers of the lyrics by voice id, used by duets and backing vocals. |
 
 ### ClientTimeZone <a name="devdertypuiclienttimezone"></a>
 The client's time zone, sent as an optional request header next to X-Ui-Schema-Version and Accept-Language. The server formats times on server-driven pages in this zone. Clients without it get times in UTC.

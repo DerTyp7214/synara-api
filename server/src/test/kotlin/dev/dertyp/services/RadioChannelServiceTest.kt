@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.testing.noLyricsCandidates
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.InsertableRadioChannel
@@ -194,6 +195,7 @@ class RadioChannelServiceTest : KoinTest {
                 single { mockk<LibraryMergeService>(relaxed = true) }
                 single { mockk<LinkResolverService>(relaxed = true) }
                 single { mockk<RedisSearchService>(relaxed = true) }
+                single { noLyricsCandidates() }
                 single { storageService }
                 single { SongService() }
                 single { ArtistService() }

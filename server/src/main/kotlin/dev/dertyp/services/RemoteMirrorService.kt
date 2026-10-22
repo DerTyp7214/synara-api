@@ -12,6 +12,9 @@ import dev.dertyp.core.withSplitTitleTags
 import dev.dertyp.data.*
 import dev.dertyp.randomPlatformUUID
 import dev.dertyp.rpc.BaseRpcServiceManager
+import dev.dertyp.services.lyrics.LyricsCandidateService
+import dev.dertyp.services.lyrics.parse.LrcWriter
+import dev.dertyp.services.models.LyricsSyncLevel
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
@@ -247,6 +250,7 @@ class RemoteMirrorService : Service() {
             mirrorService = mirrorService,
             remoteImageService = manager.getService<IImageService>(),
             remoteSongService = manager.getService<ISongService>(),
+            remoteLyricsService = manager.getService<ILyricsCandidateService>(),
             remotePaths = remotePaths
         )
 
@@ -622,6 +626,7 @@ class RemoteMirrorService : Service() {
                             artists = song.artists.mapNotNull { s -> session.artistIdMap[s.id]?.let { s.copy(id = it) } },
                             coverId = song.coverId?.let { session.imageIdMap[it] })
                     )
+                    mirrorLyrics(session.remoteLyricsService, song.id, newId)
                     session.songIdMap[song.id] = newId
                     session.progressMutex.withLock {
                         session.songCount++
@@ -655,6 +660,22 @@ class RemoteMirrorService : Service() {
             }
         }.collect()
         logger.info("Completed mirroring songs. New: ${session.syncedSongs}, Existing: ${session.existingSongs}")
+    }
+
+    internal suspend fun mirrorLyrics(remote: ILyricsCandidateService, remoteSongId: PlatformUUID, localSongId: PlatformUUID) {
+        val text = try {
+            val own = remote.getLyricsCandidates(remoteSongId).candidates
+                .firstOrNull { it.provider.id == LyricsCandidateService.SONG } ?: return
+            val synced = if (own.syncLevel == LyricsSyncLevel.PLAIN) null else remote.getLyricsCandidate(own.id)?.lyrics
+            synced?.takeIf { it.lines.isNotEmpty() }?.let(LrcWriter::write) ?: own.plain
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.warn("Failed to mirror lyrics of song $remoteSongId: ${e.message}")
+            return
+        }
+        if (text.isBlank()) return
+        songService.storeLyrics(localSongId, text)
     }
 
     private suspend fun syncPlaylists(session: MirrorSession, remoteStats: ServerStats) {
@@ -922,6 +943,7 @@ class RemoteMirrorService : Service() {
         val mirrorService: IMirrorService,
         val remoteImageService: IImageService,
         val remoteSongService: ISongService,
+        val remoteLyricsService: ILyricsCandidateService,
         val remotePaths: RemoteServerPaths,
     ) {
         val stageStartTime = System.currentTimeMillis()

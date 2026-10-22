@@ -1,5 +1,6 @@
 package dev.dertyp.benchmarks
 
+import dev.dertyp.testing.noLyricsCandidates
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import com.google.gson.Gson
@@ -466,6 +467,7 @@ object SearchBenchmark {
                 }
 
                 single { RedisSearchService() }
+                single { noLyricsCandidates() }
                 single { SearchIndexWorker() }
                 single { AlbumService(get()) }
                 single { ArtistService(get()) }

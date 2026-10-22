@@ -10,7 +10,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 |---|---|
 | `ApiVersion.HEADER` | `X-Api-Version` |
 | `ApiVersion.LEGACY` | `1` |
-| `ApiVersion.CURRENT` | `10` |
+| `ApiVersion.CURRENT` | `11` |
 
 ## Features
 
@@ -26,6 +26,7 @@ Guides: [API_VERSIONING.md](API_VERSIONING.md) · [AUTHENTICATION.md](AUTHENTICA
 | 9 | `ALBUM_TITLE_TAGS` | `tags` on [Album](MODELS.md#devdertypdataalbum): edition markers such as *Deluxe Edition*, *10th Anniversary* or *2011 Remaster*, split off the album name into [TitleTag](MODELS.md#devdertypdatatitletag) entries, so `name` is clean. | `name` is put back together into the full original name and `tags` is emptied. | - |
 | 9 | `ALBUM_VERSIONS` | `versions` on [Album](MODELS.md#devdertypdataalbum): the editions of one album (deluxe, anniversary, remastered, explicit or clean) are folded under a single entry in the album lists. | Every edition is its own entry, following the entry it was folded into, and `versions` is empty. | - |
 | 10 | `ENTITY_CHANGES` | The [IEntityChangeService](RPC_SERVICES.md#devdertypservicesientitychangeservice) service, which answers what changed in the library since a time the client names. | There is none, a client reads everything again. | - |
+| 11 | `LYRICS_SERVICE` | `lyricsInfo` on [Song](MODELS.md#devdertypdatasong) and [UserSong](MODELS.md#devdertypdatausersong). The `lyrics` field is gone, lyrics are read through [ILyricsCandidateService](RPC_SERVICES.md#devdertypservicesilyricscandidateservice). | Songs carry `lyrics` with the stored plain or line-synced text and no `lyricsInfo`. | - |
 
 ## UI schema version
 

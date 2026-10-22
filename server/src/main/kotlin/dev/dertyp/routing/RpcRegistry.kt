@@ -15,6 +15,8 @@ import dev.dertyp.services.import.IImportService
 import dev.dertyp.services.import.ImportRpcService
 import dev.dertyp.services.import.ImportService
 import dev.dertyp.services.import.ImporterProxy
+import dev.dertyp.services.lyrics.LyricsCandidateService
+import dev.dertyp.services.lyrics.RpcLyricsCandidateService
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.ILinkResolverService
 import dev.dertyp.services.metadata.IMetadataService
@@ -140,6 +142,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val animatedImageService = koin.get<AnimatedImageService>()
     val lyricsSearch = koin.get<LyricsSearch>()
     val lyricsService = koin.get<LyricsService>()
+    val lyricsCandidateService = koin.get<LyricsCandidateService>()
     val artistService = koin.get<ArtistService>()
     val importService = koin.get<ImportService>()
     val favSyncService = koin.get<FavSyncService>()
@@ -242,6 +245,10 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     }
     registrar.register(ILyricsService::class) {
         lyricsService.withAuthorization<ILyricsService>(user).withLogging<ILyricsService>(call)
+    }
+    registrar.register(ILyricsCandidateService::class) {
+        RpcLyricsCandidateService(user, lyricsCandidateService)
+            .withAuthorization<ILyricsCandidateService>(user).withLogging<ILyricsCandidateService>(call)
     }
     registrar.register(IArtistService::class) {
         ArtistRpcService(user, artistService).withAuthorization<IArtistService>(

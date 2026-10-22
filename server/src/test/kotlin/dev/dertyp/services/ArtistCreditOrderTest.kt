@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.testing.noLyricsCandidates
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.applyCachedAlbumCreditOrder
@@ -76,6 +77,7 @@ class ArtistCreditOrderTest : KoinTest {
                 single { LibraryMergeService() }
                 single { LibraryFileDeleter() }
                 single { mockk<RedisSearchService>(relaxed = true) }
+                single { noLyricsCandidates() }
             })
         }
     }
@@ -357,7 +359,6 @@ class ArtistCreditOrderTest : KoinTest {
                     duration = 1000,
                     explicit = false,
                     releaseDate = null,
-                    lyrics = "",
                     path = "song.flac",
                     originalUrl = "",
                     trackNumber = 1,

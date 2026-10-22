@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.testing.noLyricsCandidates
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.TestRedis
@@ -70,6 +71,7 @@ class RedisRankedSearchIntegrationTest : KoinTest {
                 single { config }
                 single { RedisCacheProvider(config) }
                 single { RedisSearchService() }
+                single { noLyricsCandidates() }
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { mockk<CachedMusicBrainzService>(relaxed = true) }
                 single { mockk<MusicBrainzCacheService>(relaxed = true) }

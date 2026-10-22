@@ -1,11 +1,13 @@
 package dev.dertyp.core.wire
 
+import dev.dertyp.rpc.annotations.LegacyWireField
 import dev.dertyp.rpc.annotations.LegacyWireName
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.PolymorphicSerializer
 import kotlinx.serialization.SealedSerializationApi
 import kotlinx.serialization.SerializationStrategy
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.PolymorphicKind
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -50,38 +52,79 @@ class LegacySealed<T : Any>(
     }
 }
 
-private class WireEntry(source: SerialDescriptor, val wire: SerialDescriptor?) {
+class LegacyFieldSource(val name: String, val untilApiVersion: Int, val value: (Any) -> String)
+
+private class WireEntry(
+    source: SerialDescriptor,
+    val decode: SerialDescriptor?,
+    val encode: SerialDescriptor?,
+    val extras: List<LegacyFieldSource>,
+) {
     private val names = Array(source.elementsCount) { source.getElementName(it) }
 
-    fun describes(desc: SerialDescriptor): Boolean = names.indices.all { names[it] == desc.getElementName(it) }
+    fun describes(desc: SerialDescriptor, fields: List<LegacyFieldSource>): Boolean =
+        names.indices.all { names[it] == desc.getElementName(it) } && fields == extras
 }
 
-class LegacyWire(sealed: List<LegacySealed<*>>) {
+class LegacyWire(
+    sealed: List<LegacySealed<*>>,
+    private val renames: Boolean = true,
+    fields: List<LegacyFieldSource> = emptyList(),
+) {
     private val descriptors = ConcurrentHashMap<SerialDescriptor, WireEntry>()
 
     private val sealedByName: Map<String, LegacySealed<*>> = sealed.associateBy { it.serialName }
 
+    private val fieldsByName: Map<String, LegacyFieldSource> = fields.associateBy { it.name }
+
     val module: SerializersModule = SerializersModule { sealed.forEach { it.register(this, this@LegacyWire) } }
 
-    fun wireDescriptor(desc: SerialDescriptor): SerialDescriptor {
-        if (desc.kind != StructureKind.CLASS) return desc
-        val entry = descriptors.computeIfAbsent(desc) { WireEntry(it, copy(it, it.serialName)) }
-        val wire = if (entry.describes(desc)) entry.wire else copy(desc, desc.serialName)
-        return wire ?: desc
+    fun wireDescriptor(desc: SerialDescriptor): SerialDescriptor = entry(desc).decode ?: desc
+
+    fun encodeDescriptor(desc: SerialDescriptor): SerialDescriptor = entry(desc).encode ?: desc
+
+    private fun entry(desc: SerialDescriptor): WireEntry {
+        if (desc.kind != StructureKind.CLASS) return plainEntry(desc)
+        val fields = extraFields(desc)
+        val entry = descriptors.computeIfAbsent(desc) { buildEntry(it, fields) }
+        return if (entry.describes(desc, fields)) entry else buildEntry(desc, fields)
     }
 
-    private fun copy(desc: SerialDescriptor, serialName: String): SerialDescriptor? {
-        val names = List(desc.elementsCount) { desc.getElementAnnotations(it).legacyName() ?: desc.getElementName(it) }
-        if (serialName == desc.serialName && names.withIndex().all { (i, name) -> name == desc.getElementName(i) }) {
-            return null
+    private fun plainEntry(desc: SerialDescriptor) = WireEntry(desc, null, null, emptyList())
+
+    private fun buildEntry(desc: SerialDescriptor, fields: List<LegacyFieldSource>) =
+        WireEntry(desc, copy(desc, desc.serialName), copy(desc, desc.serialName, fields), fields)
+
+    private fun extraFields(desc: SerialDescriptor): List<LegacyFieldSource> {
+        if (fieldsByName.isEmpty()) return emptyList()
+        return desc.annotations.filterIsInstance<LegacyWireField>().mapNotNull { field ->
+            fieldsByName[field.name]?.also {
+                require(it.untilApiVersion == field.untilApiVersion) {
+                    "${desc.serialName} declares ${field.name} until ${field.untilApiVersion}, the wire serves it until ${it.untilApiVersion}"
+                }
+            }
         }
+    }
+
+    private fun copy(
+        desc: SerialDescriptor,
+        serialName: String,
+        extras: List<LegacyFieldSource> = emptyList(),
+    ): SerialDescriptor? {
+        val names = List(desc.elementsCount) { elementName(desc, it) }
+        val renamed = serialName != desc.serialName || names.withIndex().any { (i, name) -> name != desc.getElementName(i) }
+        if (!renamed && extras.isEmpty()) return null
         return buildClassSerialDescriptor(serialName) {
             annotations = desc.annotations
             names.forEachIndexed { i, name ->
                 element(name, desc.getElementDescriptor(i), desc.getElementAnnotations(i), desc.isElementOptional(i))
             }
+            extras.forEach { element(it.name, String.serializer().descriptor, isOptional = true) }
         }
     }
+
+    private fun elementName(desc: SerialDescriptor, index: Int): String =
+        (if (renames) desc.getElementAnnotations(index).legacyName() else null) ?: desc.getElementName(index)
 
     private fun List<Annotation>.legacyName(): String? = filterIsInstance<LegacyWireName>().firstOrNull()?.name
 
@@ -109,18 +152,18 @@ class LegacyWire(sealed: List<LegacySealed<*>>) {
         return LegacyDeserializer(d)
     }
 
-    private fun encoder(real: Encoder): Encoder =
-        if (real is JsonEncoder) LegacyJsonEncoder(real) else LegacyEncoder(real)
+    private fun encoder(real: Encoder, value: Any?): Encoder =
+        if (real is JsonEncoder) LegacyJsonEncoder(real, value) else LegacyEncoder(real, value)
 
     private fun decoder(real: Decoder): Decoder =
         if (real is JsonDecoder) LegacyJsonDecoder(real) else LegacyDecoder(real)
 
     inner class Renamed<T>(private val inner: KSerializer<T>) : KSerializer<T> {
         override val descriptor: SerialDescriptor =
-            inner.descriptor.annotations.legacyName()?.let { copy(inner.descriptor, it) }
+            inner.descriptor.annotations.legacyName()?.takeIf { renames }?.let { copy(inner.descriptor, it) }
                 ?: wireDescriptor(inner.descriptor)
 
-        override fun serialize(encoder: Encoder, value: T) = inner.serialize(encoder(encoder), value)
+        override fun serialize(encoder: Encoder, value: T) = inner.serialize(encoder(encoder, value), value)
 
         override fun deserialize(decoder: Decoder): T = inner.deserialize(decoder(decoder))
     }
@@ -134,7 +177,7 @@ class LegacyWire(sealed: List<LegacySealed<*>>) {
     private inner class LegacyStrategy<T>(private val inner: SerializationStrategy<T>) : SerializationStrategy<T> {
         override val descriptor: SerialDescriptor get() = inner.descriptor
 
-        override fun serialize(encoder: Encoder, value: T) = inner.serialize(encoder(encoder), value)
+        override fun serialize(encoder: Encoder, value: T) = inner.serialize(encoder(encoder, value), value)
     }
 
     private inner class LegacyDeserializer<T>(private val inner: DeserializationStrategy<T>) :
@@ -144,9 +187,14 @@ class LegacyWire(sealed: List<LegacySealed<*>>) {
         override fun deserialize(decoder: Decoder): T = inner.deserialize(decoder(decoder))
     }
 
-    private fun beginStructure(real: Encoder, descriptor: SerialDescriptor): CompositeEncoder {
-        val wire = wireDescriptor(descriptor)
-        return LegacyCompositeEncoder(real.beginStructure(wire), wire)
+    private fun beginStructure(real: Encoder, descriptor: SerialDescriptor, value: Any?): CompositeEncoder {
+        val entry = entry(descriptor)
+        if (value == null || entry.extras.isEmpty()) {
+            val wire = entry.decode ?: descriptor
+            return LegacyCompositeEncoder(real.beginStructure(wire), wire, emptyList(), null)
+        }
+        val wire = entry.encode ?: descriptor
+        return LegacyCompositeEncoder(real.beginStructure(wire), wire, entry.extras, value)
     }
 
     private fun beginStructure(real: Decoder, descriptor: SerialDescriptor): CompositeDecoder {
@@ -154,15 +202,16 @@ class LegacyWire(sealed: List<LegacySealed<*>>) {
         return LegacyCompositeDecoder(real.beginStructure(wire), wire)
     }
 
-    private inner class LegacyEncoder(private val real: Encoder) : Encoder {
+    private inner class LegacyEncoder(private val real: Encoder, private val value: Any?) : Encoder {
         override val serializersModule: SerializersModule get() = real.serializersModule
 
-        override fun beginStructure(descriptor: SerialDescriptor): CompositeEncoder = beginStructure(real, descriptor)
+        override fun beginStructure(descriptor: SerialDescriptor): CompositeEncoder =
+            beginStructure(real, descriptor, value)
 
         override fun beginCollection(descriptor: SerialDescriptor, collectionSize: Int): CompositeEncoder =
-            LegacyCompositeEncoder(real.beginCollection(descriptor, collectionSize), descriptor)
+            LegacyCompositeEncoder(real.beginCollection(descriptor, collectionSize), descriptor, emptyList(), null)
 
-        override fun encodeInline(descriptor: SerialDescriptor): Encoder = encoder(real.encodeInline(descriptor))
+        override fun encodeInline(descriptor: SerialDescriptor): Encoder = encoder(real.encodeInline(descriptor), null)
 
         override fun <T> encodeSerializableValue(serializer: SerializationStrategy<T>, value: T) =
             real.encodeSerializableValue(strategy(serializer), value)
@@ -196,13 +245,14 @@ class LegacyWire(sealed: List<LegacySealed<*>>) {
     }
 
     @OptIn(SealedSerializationApi::class)
-    private inner class LegacyJsonEncoder(private val real: JsonEncoder) : JsonEncoder by real {
-        override fun beginStructure(descriptor: SerialDescriptor): CompositeEncoder = beginStructure(real, descriptor)
+    private inner class LegacyJsonEncoder(private val real: JsonEncoder, private val value: Any?) : JsonEncoder by real {
+        override fun beginStructure(descriptor: SerialDescriptor): CompositeEncoder =
+            beginStructure(real, descriptor, value)
 
         override fun beginCollection(descriptor: SerialDescriptor, collectionSize: Int): CompositeEncoder =
-            LegacyCompositeEncoder(real.beginCollection(descriptor, collectionSize), descriptor)
+            LegacyCompositeEncoder(real.beginCollection(descriptor, collectionSize), descriptor, emptyList(), null)
 
-        override fun encodeInline(descriptor: SerialDescriptor): Encoder = encoder(real.encodeInline(descriptor))
+        override fun encodeInline(descriptor: SerialDescriptor): Encoder = encoder(real.encodeInline(descriptor), null)
 
         override fun <T> encodeSerializableValue(serializer: SerializationStrategy<T>, value: T) =
             real.encodeSerializableValue(strategy(serializer), value)
@@ -214,10 +264,18 @@ class LegacyWire(sealed: List<LegacySealed<*>>) {
     private inner class LegacyCompositeEncoder(
         private val real: CompositeEncoder,
         private val wire: SerialDescriptor,
+        private val extras: List<LegacyFieldSource>,
+        private val value: Any?,
     ) : CompositeEncoder {
         override val serializersModule: SerializersModule get() = real.serializersModule
 
-        override fun endStructure(descriptor: SerialDescriptor) = real.endStructure(wire)
+        override fun endStructure(descriptor: SerialDescriptor) {
+            if (value != null) {
+                val first = wire.elementsCount - extras.size
+                extras.forEachIndexed { i, field -> real.encodeStringElement(wire, first + i, field.value(value)) }
+            }
+            real.endStructure(wire)
+        }
 
         override fun shouldEncodeElementDefault(descriptor: SerialDescriptor, index: Int): Boolean =
             real.shouldEncodeElementDefault(wire, index)
@@ -250,7 +308,7 @@ class LegacyWire(sealed: List<LegacySealed<*>>) {
             real.encodeStringElement(wire, index, value)
 
         override fun encodeInlineElement(descriptor: SerialDescriptor, index: Int): Encoder =
-            encoder(real.encodeInlineElement(wire, index))
+            encoder(real.encodeInlineElement(wire, index), null)
 
         override fun <T> encodeSerializableElement(
             descriptor: SerialDescriptor,

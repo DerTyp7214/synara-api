@@ -8,6 +8,12 @@ import dev.dertyp.core.wire.legacyCbor
 import dev.dertyp.data.ApiVersion
 import dev.dertyp.data.PaginatedResponse
 import dev.dertyp.data.RepeatMode
+import dev.dertyp.data.Song
+import dev.dertyp.data.SongLyricsInfo
+import dev.dertyp.data.UserSong
+import dev.dertyp.services.models.LyricsSyncLevel
+import dev.dertyp.utils.ResponseShaper
+import dev.dertyp.utils.withClientCompat
 import dev.dertyp.serializers.AppCbor
 import io.ktor.client.request.header
 import io.ktor.server.application.install
@@ -190,5 +196,78 @@ class WireFormatKrpcTest {
         assertTrue("isShuffled" in newSent)
         assertTrue("userAdded" in newSent)
         assertFalse("shuffleMode" in newSent)
+    }
+
+    @Test
+    fun `songs carry the stored lyrics up to api version 10 and lyrics info from 11`() = testApplication {
+        val fixture = LegacyLyricsFixture()
+        try {
+            val stored = "[00:01.00] Stored line\n[00:02.00] Next line"
+            val info = SongLyricsInfo(available = true, syncLevel = LyricsSyncLevel.LINE, levels = setOf(LyricsSyncLevel.LINE))
+            val id = fixture.insertSong(stored)
+            val userSong = UserSong(
+                id = id,
+                title = "Song",
+                artists = emptyList(),
+                album = null,
+                duration = 1000,
+                explicit = false,
+                path = "/song.flac",
+                lyricsInfo = info,
+            )
+            val song = Song(
+                id = id,
+                title = "Song",
+                artists = emptyList(),
+                album = null,
+                duration = 1000,
+                explicit = false,
+                path = "/song.flac",
+                lyricsInfo = info,
+            )
+            val service = object : ILyricsWireSongService {
+                override suspend fun song() = song
+                override suspend fun userSong() = userSong
+                override suspend fun page() = PaginatedResponse(listOf(userSong, userSong), total = 2)
+                override fun observe() = flowOf(userSong)
+            }
+            application {
+                install(WebSockets)
+            }
+            routing {
+                rpc("/rpc") {
+                    rpcConfig { serialization { cborFor(call.clientInfo) } }
+                    registerService(ILyricsWireSongService::class) {
+                        service.withClientCompat(ILyricsWireSongService::class.java, ResponseShaper(call.clientInfo))
+                    }
+                }
+            }
+
+            listOf("7", "10", "11").forEach { version ->
+                val connection = Connection(version, null)
+                val client = createClient {
+                    installKrpc {
+                        serialization {
+                            register(KrpcSerialFormatBuilder.Binary(RecordingKrpcFormat, connection.format) {})
+                        }
+                    }
+                }
+                val api = client.rpc("/rpc") { header(ApiVersion.HEADER, version) }.withService<ILyricsWireSongService>()
+                val current = version == "11"
+                val expectedInfo = if (current) info else null
+
+                assertEquals(song.copy(lyricsInfo = expectedInfo), api.song(), version)
+                assertEquals(userSong.copy(lyricsInfo = expectedInfo), api.userSong(), version)
+                assertEquals(List(2) { userSong.copy(lyricsInfo = expectedInfo) }, api.page().data, version)
+                assertEquals(listOf(userSong.copy(lyricsInfo = expectedInfo)), api.observe().toList(), version)
+
+                val received = connection.receivedText()
+                assertEquals(!current, "Stored line" in received, version)
+                assertEquals(!current, "Next line" in received, version)
+                assertEquals(current, "lyricsInfo" in received, version)
+            }
+        } finally {
+            fixture.close()
+        }
     }
 }

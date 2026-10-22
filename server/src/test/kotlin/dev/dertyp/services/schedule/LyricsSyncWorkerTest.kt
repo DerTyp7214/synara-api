@@ -3,12 +3,17 @@ package dev.dertyp.services.schedule
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.AlbumTable
+import dev.dertyp.db.LyricsCandidateStatus
+import dev.dertyp.db.LyricsCandidateTable
 import dev.dertyp.db.ImageTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SongVariantTable
 import dev.dertyp.db.SyncedLyricsTable
 import dev.dertyp.services.LyricsService
+import dev.dertyp.services.models.LyricsMatch
+import dev.dertyp.services.models.LyricsSyncLevel
 import dev.dertyp.services.models.SyncedLyrics
+import io.mockk.coVerify
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -36,7 +41,7 @@ import kotlin.time.Duration.Companion.seconds
 class LyricsSyncWorkerTest : KoinTest {
 
     private fun setup(dialect: DbDialect) {
-        TestDatabase.connect(dialect, "lyrics_sync_test", SongTable, SongVariantTable, AlbumTable, ImageTable, SyncedLyricsTable)
+        TestDatabase.connect(dialect, "lyrics_sync_test", SongTable, SongVariantTable, AlbumTable, ImageTable, SyncedLyricsTable, LyricsCandidateTable)
     }
 
     @AfterEach
@@ -108,6 +113,57 @@ class LyricsSyncWorkerTest : KoinTest {
                 SyncedLyricsTable.selectAll().where { SyncedLyricsTable.provider eq "not_found" }.count()
             assertEquals(1, notFoundCount)
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `worker skips songs with word synced provider lyrics`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val lyricsService = mockk<LyricsService>()
+        every { lyricsService.isConfigured() } returns true
+        coEvery { lyricsService.isReachable() } returns true
+        coEvery { lyricsService.transcribeLyrics(any(), any()) } returns mockk<SyncedLyrics>()
+
+        val wordSynced = UUID.randomUUID()
+        val lineSynced = UUID.randomUUID()
+        val wordMissed = UUID.randomUUID()
+        transaction {
+            val albumId = AlbumTable.insert { it[name] = "Test Album" }[AlbumTable.id]
+            listOf(wordSynced, lineSynced, wordMissed).forEach { songId ->
+                SongTable.insert {
+                    it[id] = songId
+                    it[title] = "Song"
+                    it[this.albumId] = albumId
+                }
+            }
+            listOf(
+                Triple(wordSynced, LyricsSyncLevel.WORD, LyricsCandidateStatus.FOUND),
+                Triple(lineSynced, LyricsSyncLevel.LINE, LyricsCandidateStatus.FOUND),
+                Triple(wordMissed, LyricsSyncLevel.WORD, LyricsCandidateStatus.MISS),
+            ).forEach { (songId, level, status) ->
+                LyricsCandidateTable.insert {
+                    it[LyricsCandidateTable.songId] = songId
+                    it[provider] = "betterlyrics"
+                    it[LyricsCandidateTable.status] = status
+                    it[syncLevel] = level
+                    it[match] = LyricsMatch.VERIFIED
+                    it[fetchedAt] = System.currentTimeMillis()
+                }
+            }
+        }
+
+        startKoin {
+            modules(module {
+                single { lyricsService }
+            })
+        }
+
+        val results = LyricsSyncWorker().run()
+
+        assertEquals(2, results["synced"])
+        coVerify(exactly = 0) { lyricsService.transcribeLyrics(wordSynced, any()) }
+        coVerify(exactly = 1) { lyricsService.transcribeLyrics(lineSynced, any()) }
+        coVerify(exactly = 1) { lyricsService.transcribeLyrics(wordMissed, any()) }
     }
 
     @ParameterizedTest

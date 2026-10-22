@@ -175,6 +175,17 @@ POST /listeningStats/relinkSong/{fromSongId} IListeningStatsService.relinkSong [
 GET /lyrics/syncedLyrics/{songId} ILyricsService.getSyncedLyrics [p:songId] JSON
 POST /lyrics/startSyncWorker ILyricsService.startSyncWorker [] JSON
 POST /lyrics/transcribeLyrics/{songId} ILyricsService.transcribeLyrics [p:songId q:lyrics?] JSON
+GET /lyricsCandidate/lyrics/{songId} ILyricsCandidateService.getLyrics [p:songId q:candidateId?] JSON
+GET /lyricsCandidate/lyricsCandidate/{candidateId} ILyricsCandidateService.getLyricsCandidate [p:candidateId] JSON
+GET /lyricsCandidate/lyricsCandidates/{songId} ILyricsCandidateService.getLyricsCandidates [p:songId q:includeContent?] JSON
+GET /lyricsCandidate/lyricsInfo ILyricsCandidateService.getLyricsInfo [q:songIds] JSON
+GET /lyricsCandidate/lyricsProviders ILyricsCandidateService.getLyricsProviders [] JSON
+GET /lyricsCandidate/streamLyrics/{songId} ILyricsCandidateService.streamLyrics [p:songId q:providers?] SSE
+POST /lyricsCandidate/importSyncedLyrics/{songId} ILyricsCandidateService.importSyncedLyrics [p:songId b:file] JSON
+POST /lyricsCandidate/lyrics/{songId} ILyricsCandidateService.findLyrics [p:songId q:providers? q:refresh?] JSON
+POST /lyricsCandidate/lyricsByQuery ILyricsCandidateService.findLyricsByQuery [q:title q:artist q:album? q:durationMs? q:providers?] JSON
+PUT /lyricsCandidate/preferredLyrics/{songId} ILyricsCandidateService.setPreferredLyrics [p:songId q:candidateId] JSON
+PUT /lyricsCandidate/syncedLyrics/{songId} ILyricsCandidateService.setSyncedLyrics [p:songId b:lyrics] JSON
 GET /lyricsSearch/lyrics ILyricsSearch.searchLyrics [q:artist q:title q:syncedOnly?] JSON
 GET /metadata/allMetadataTypes IMetadataService.allMetadataTypes [q:features?] JSON
 GET /metadata/{type}/albumByBarcode IMetadataService.getAlbumByBarcode [p:type q:barcode] JSON

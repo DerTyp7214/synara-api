@@ -6,6 +6,7 @@ import dev.dertyp.core.HttpClientPriority
 import dev.dertyp.core.RetryOnError
 import dev.dertyp.core.RetryPolicy
 import dev.dertyp.core.cleanTitle
+import dev.dertyp.core.normalizedKey
 import dev.dertyp.core.retryingGet
 import dev.dertyp.credentials.CredentialNames
 import dev.dertyp.credentials.ResolvedCredential
@@ -24,7 +25,6 @@ import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.upsert
 import org.koin.core.component.inject
-import java.text.Normalizer
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.time.Clock
@@ -134,12 +134,6 @@ class AcoustIdService(
         } catch (_: Exception) {
             null
         }
-
-        private fun String.normalizedKey(): String =
-            Normalizer.normalize(lowercase(), Normalizer.Form.NFD)
-                .replace(Regex("\\p{M}+"), "")
-                .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
-                .trim()
     }
 
     suspend fun matchRecording(

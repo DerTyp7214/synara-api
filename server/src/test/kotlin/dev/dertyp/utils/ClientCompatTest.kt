@@ -1,6 +1,8 @@
 package dev.dertyp.utils
 
+import dev.dertyp.core.ClientFeature
 import dev.dertyp.core.ClientInfo
+import dev.dertyp.core.wire.fixtures.LegacyLyricsFixture
 import dev.dertyp.data.Album
 import dev.dertyp.data.ApiVersion
 import dev.dertyp.data.ListenedSong
@@ -10,11 +12,13 @@ import dev.dertyp.data.PlaybackState
 import dev.dertyp.data.QueueItem
 import dev.dertyp.data.RecentListens
 import dev.dertyp.data.ReleaseType
+import dev.dertyp.data.SongLyricsInfo
 import dev.dertyp.data.RepeatMode
 import dev.dertyp.data.Song
 import dev.dertyp.data.TitleTag
 import dev.dertyp.data.TitleTagKind
 import dev.dertyp.data.UserSong
+import dev.dertyp.services.models.LyricsSyncLevel
 import dev.dertyp.services.models.RecentRelease
 import dev.dertyp.ui.UiSchemaVersion
 import kotlinx.coroutines.flow.Flow
@@ -22,15 +26,29 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.util.UUID
 
 class ClientCompatTest {
+    private lateinit var lyricsFixture: LegacyLyricsFixture
+
+    @BeforeEach
+    fun startLyricsFixture() {
+        lyricsFixture = LegacyLyricsFixture()
+    }
+
+    @AfterEach
+    fun closeLyricsFixture() {
+        lyricsFixture.close()
+    }
 
     interface SongApi {
         suspend fun one(): UserSong?
@@ -360,5 +378,67 @@ class ClientCompatTest {
         val identity = fake.withClientCompat(SongApi::class.java, shaper)
         assertEquals(userSong, identity.one())
         assertEquals("Title", identity.nowPlaying().song.title)
+    }
+
+    private val lyricsInfo = SongLyricsInfo(available = true, syncLevel = LyricsSyncLevel.WORD, levels = setOf(LyricsSyncLevel.WORD))
+
+    private class RecordingPrefetch : CompatRule {
+        override val feature = ClientFeature.LYRICS_SERVICE
+        val calls = mutableListOf<Set<UUID>>()
+
+        override suspend fun prefetch(songIds: Set<UUID>) {
+            calls += songIds.toSet()
+        }
+    }
+
+    @Test
+    fun `lyrics info is cleared for clients below api version 11 and kept from 11`() = runBlocking {
+        val api = object : SongApi by fake {
+            override suspend fun one() = userSong.copy(lyricsInfo = lyricsInfo)
+            override suspend fun plain() = song.copy(lyricsInfo = lyricsInfo)
+            override suspend fun page() = PaginatedResponse(listOf(userSong.copy(lyricsInfo = lyricsInfo)), total = 1)
+        }
+        val v10 = api.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(10)))
+        assertNull(v10.one()!!.lyricsInfo)
+        assertNull(v10.plain().lyricsInfo)
+        assertNull(v10.page().data.single().lyricsInfo)
+
+        val current = api.withClientCompat(SongApi::class.java, ResponseShaper(ClientInfo(11)))
+        assertEquals(lyricsInfo, current.one()!!.lyricsInfo)
+        assertEquals(lyricsInfo, current.plain().lyricsInfo)
+    }
+
+    @Test
+    fun `old clients always have an active rule and current clients none for songs`() {
+        assertEquals(false, ResponseShaper(ClientInfo(10, uiSchemaVersion = UiSchemaVersion.CURRENT)).isNoop)
+        assertEquals(true, ResponseShaper(ClientInfo(11, uiSchemaVersion = UiSchemaVersion.CURRENT)).isNoop)
+        assertEquals(true, ResponseShaper(ClientInfo(11), rules = listOf(LegacyLyricsCompat)).isNoop)
+    }
+
+    @Test
+    fun `prefetch runs once per response with every walked song`() = runBlocking {
+        val rule = RecordingPrefetch()
+        val shaper = ResponseShaper(ClientInfo(10), rules = listOf(rule))
+        val other = userSong.copy(id = UUID.randomUUID())
+        val playing = userSong.copy(id = UUID.randomUUID())
+
+        shaper.shape(RecentListens(NowPlaying(playing, 1), listOf(ListenedSong(userSong, 2), ListenedSong(other, 3))))
+        shaper.shape(PaginatedResponse(listOf(userSong, other), total = 2))
+        shaper.shape(mapOf("a" to song))
+        shaper.shape("no songs")
+
+        assertEquals(
+            listOf(setOf(playing.id, userSong.id, other.id), setOf(userSong.id, other.id), setOf(song.id)),
+            rule.calls,
+        )
+    }
+
+    @Test
+    fun `a flow prefetches per emitted item`() = runBlocking {
+        val rule = RecordingPrefetch()
+        val second = song.copy(id = UUID.randomUUID())
+        val shaped = ResponseShaper(ClientInfo(10), rules = listOf(rule)).shape(flowOf(song, second)) as Flow<*>
+        shaped.toList()
+        assertEquals(listOf(setOf(song.id), setOf(second.id)), rule.calls)
     }
 }

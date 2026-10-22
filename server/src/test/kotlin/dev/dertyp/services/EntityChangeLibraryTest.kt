@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.testing.noLyricsCandidates
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
@@ -69,6 +70,7 @@ abstract class EntityChangeLibraryTest : KoinTest {
                 single { GenreService() }
                 single { LibraryFileDeleter() }
                 single { SongService() }
+                single { noLyricsCandidates() }
                 single { AlbumService() }
                 single { ArtistService() }
                 single { LibraryMergeService() }

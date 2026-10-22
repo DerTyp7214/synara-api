@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.testing.noLyricsCandidates
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.config.ServerConfig
@@ -53,6 +54,7 @@ class MosaicSearchTest : KoinTest {
 
         startKoin {
             modules(module {
+                single { noLyricsCandidates() }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { ServerConfig(get<ApplicationEnvironment>().config) }
                 single { ArtistService() }

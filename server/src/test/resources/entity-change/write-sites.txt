@@ -209,6 +209,7 @@ server/src/main/kotlin/dev/dertyp/services/SongService.kt | setLyrics | SongTabl
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | setMusicBrainzId | SongMusicBrainzTable | insert | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | setMusicBrainzId | SongMusicBrainzTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | setMusicBrainzId | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/SongService.kt | storeLyrics | SongTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | updateSong | SongArtistTable | batchInsert | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | updateSong | SongArtistTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/SongService.kt | updateSong | SongTable | update | 1 | RECORDED
@@ -250,6 +251,14 @@ server/src/main/kotlin/dev/dertyp/services/cover/CoverGenerationService.kt | res
 server/src/main/kotlin/dev/dertyp/services/import/TidalBaseImporter.kt | importContent | AlbumTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/import/TidalBaseImporter.kt | importContent | SongTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/import/TidalBaseImporter.kt | updateAlbumMetadata | AlbumTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | clearPin | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | persistRanks | LyricsCandidateTable | update | 1 | BOOKKEEPING: rank only, candidate ranks and lyricsInfo are computed from the current candidates on every read
+server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | setPreferredLyrics | SongTable | update | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | setSyncedLyrics | LyricsCandidateTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | store | LyricsCandidateTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | touchRow | LyricsCandidateTable | update | 1 | BOOKKEEPING: fetched_at only, which decides when a provider is asked again and is not part of lyricsInfo
+server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | writeRow | LyricsCandidateTable | insert | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | writeRow | LyricsCandidateTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/metadata/AppleMusicArtistResolver.kt | persist | ArtistProviderTable | upsert | 1 | BOOKKEEPING: artist_provider is read only by the resolver, no client model exposes it
 server/src/main/kotlin/dev/dertyp/services/schedule/LrcLibWorker.kt | execute | SongTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/schedule/LrcLibWorker.kt | execute | SongTable | update | 2 | BOOKKEEPING: lastLyricsFetchAttempt only

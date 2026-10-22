@@ -6,7 +6,9 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
+import io.ktor.client.request.request
 import io.ktor.client.statement.HttpResponse
+import io.ktor.http.HttpMethod
 import io.ktor.http.Url
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.*
@@ -57,6 +59,25 @@ suspend inline fun <reified T> HttpClientQueueService.safeQueuedGet(
     null
 }
 
+suspend inline fun <reified T> HttpClientQueueService.queuedPost(
+    urlString: String,
+    priority: HttpClientPriority = HttpClientPriority.NORMAL,
+    noinline block: suspend HttpRequestBuilder.() -> Unit = {}
+): T = enqueueRequest(urlString, priority, HttpMethod.Post, block = block).body<T>()
+
+suspend inline fun <reified T> HttpClientQueueService.safeQueuedPost(
+    urlString: String,
+    priority: HttpClientPriority = HttpClientPriority.NORMAL,
+    noinline block: suspend HttpRequestBuilder.() -> Unit = {}
+): T? = try {
+    val response = enqueueRequest(urlString, priority, HttpMethod.Post, block = block)
+    if (response.status.isSuccess()) response.body<T>() else null
+} catch (e: CancellationException) {
+    throw e
+} catch (_: Exception) {
+    null
+}
+
 suspend fun HttpClientQueueService.safeQueuedGetImage(
     urlString: String,
     priority: HttpClientPriority = HttpClientPriority.NORMAL,
@@ -79,6 +100,16 @@ class HttpClientQueueService : Service() {
     private val hostRateLimits = ConcurrentHashMap<String, RateLimitState>()
 
     private val stopped = AtomicBoolean(false)
+
+    @Volatile
+    private var noRedirectClient: Pair<HttpClient, HttpClient>? = null
+
+    private fun clientFor(followRedirects: Boolean): HttpClient {
+        val base = ApiClient.instance
+        if (followRedirects) return base
+        noRedirectClient?.takeIf { it.first === base }?.let { return it.second }
+        return base.config { this.followRedirects = false }.also { noRedirectClient = base to it }
+    }
 
     private fun updateRateLimit(host: String, response: HttpResponse) {
         val limit = response.headers["X-RateLimit-Limit"]?.toIntOrNull()
@@ -108,6 +139,8 @@ class HttpClientQueueService : Service() {
         val priority: HttpClientPriority,
         val queuedAt: Instant,
         val urlString: String,
+        val method: HttpMethod,
+        val followRedirects: Boolean,
         val block: suspend HttpRequestBuilder.() -> Unit,
         val deferred: CompletableDeferred<HttpResponse>
     ) : Comparable<QueuedRequest> {
@@ -132,6 +165,14 @@ class HttpClientQueueService : Service() {
         urlString: String,
         priority: HttpClientPriority = HttpClientPriority.NORMAL,
         block: suspend HttpRequestBuilder.() -> Unit = {}
+    ): HttpResponse = enqueueRequest(urlString, priority, HttpMethod.Get, true, block)
+
+    suspend fun enqueueRequest(
+        urlString: String,
+        priority: HttpClientPriority = HttpClientPriority.NORMAL,
+        method: HttpMethod = HttpMethod.Get,
+        followRedirects: Boolean = true,
+        block: suspend HttpRequestBuilder.() -> Unit = {}
     ): HttpResponse {
         val host = try {
             Url(urlString).host
@@ -140,7 +181,7 @@ class HttpClientQueueService : Service() {
         }
 
         val deferred = CompletableDeferred<HttpResponse>()
-        val request = QueuedRequest(priority, Clock.System.now(), urlString, block, deferred)
+        val request = QueuedRequest(priority, Clock.System.now(), urlString, method, followRedirects, block, deferred)
 
         val queue = hostQueues.computeIfAbsent(host) { PriorityBlockingQueue() }
         queue.put(request)
@@ -166,6 +207,7 @@ class HttpClientQueueService : Service() {
                 val now = Clock.System.now()
 
                 var delayTime = when {
+                    LYRICS_PROVIDER_HOSTS.any { host == it || host.endsWith(".$it") } -> 2.seconds
                     host.contains("musicbrainz.org") -> 1.seconds
                     host.contains("linkresolver.synara.audio") -> 10.milliseconds
                     host.contains("theaudiodb.com") -> 500.milliseconds
@@ -199,8 +241,9 @@ class HttpClientQueueService : Service() {
                 }
 
                 try {
-                    val client = ApiClient.instance
-                    var response = client.get(next.urlString) {
+                    val client = clientFor(next.followRedirects)
+                    var response = client.request(next.urlString) {
+                        this.method = next.method
                         next.block(this)
                     }
                     updateRateLimit(host, response)
@@ -211,7 +254,8 @@ class HttpClientQueueService : Service() {
                             response.headers["Retry-After"]?.toIntOrNull()?.seconds ?: (delayTime + 500.milliseconds)
                         logger.warn("Rate limit exceeded for $host (attempt $attempts), waiting $retryAfter before retry")
                         delay(retryAfter)
-                        response = client.get(next.urlString) {
+                        response = client.request(next.urlString) {
+                            this.method = next.method
                             next.block(this)
                         }
                         updateRateLimit(host, response)
@@ -239,5 +283,14 @@ class HttpClientQueueService : Service() {
 
     companion object {
         private const val STOPPED_MESSAGE = "HTTP queue stopped"
+        private val LYRICS_PROVIDER_HOSTS = setOf(
+            "lyrics-api.boidu.dev",
+            "unison.betterlyrics.org",
+            "lyricsplus.binimum.org",
+            "mobilecdn.kugou.com",
+            "krcs.kugou.com",
+            "lyrics.kugou.com",
+            "music.youtube.com",
+        )
     }
 }

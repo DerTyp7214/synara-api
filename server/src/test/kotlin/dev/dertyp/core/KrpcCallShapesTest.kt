@@ -2,6 +2,7 @@
 
 package dev.dertyp.core
 
+import dev.dertyp.core.wire.fixtures.LegacyLyricsFixture
 import dev.dertyp.data.ApiVersion
 import dev.dertyp.data.ArtistPlaylistSortStrategy
 import dev.dertyp.data.InsertablePlaylist
@@ -130,7 +131,11 @@ class KrpcCallShapesTest {
         coEvery { songs.byIds(any()) } returns listOf(newSong)
     }
 
-    private fun callEveryShape(version: String) =
+    private fun callEveryShape(version: String) {
+        LegacyLyricsFixture().use { callEveryShapeWithLyrics(version) }
+    }
+
+    private fun callEveryShapeWithLyrics(version: String) =
         testApplication {
             stubServices()
             application {

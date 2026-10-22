@@ -44,6 +44,7 @@ class ProvidersConfig(config: ApplicationConfig) {
     val youtube: YoutubeApiConfig by lazy { config.toYoutubeApiConfig() }
     val appleMusicKey: AppleMusicKeyConfig by lazy { config.toAppleMusicKeyConfig() }
     val imageCache: ImageCacheConfig by lazy { config.toImageCacheConfig() }
+    val lyrics: LyricsProvidersConfig by lazy { config.toLyricsProvidersConfig() }
 }
 
 class ImportersConfig(config: ApplicationConfig) {
@@ -297,6 +298,22 @@ data class ImageCacheConfig(val url: String?, val token: String?)
 fun ApplicationConfig.toImageCacheConfig(): ImageCacheConfig = ImageCacheConfig(
     url = propertyOrNull("imageCache.url")?.getString(),
     token = propertyOrNull("imageCache.token")?.getString(),
+)
+
+data class LyricsProvidersConfig(val providers: List<String>) {
+    companion object {
+        const val PROVIDERS_PATH = "lyrics.providers"
+        val DEFAULT_PROVIDERS = listOf("betterlyrics", "unison", "lyricsplus", "kugou", "lrclib", "youtubemusic")
+    }
+}
+
+fun ApplicationConfig.toLyricsProvidersConfig(): LyricsProvidersConfig = LyricsProvidersConfig(
+    providers = propertyOrNull(LyricsProvidersConfig.PROVIDERS_PATH)?.getString()
+        ?.split(',')
+        ?.map { it.trim().lowercase() }
+        ?.filter { it.isNotEmpty() }
+        ?.distinct()
+        ?: LyricsProvidersConfig.DEFAULT_PROVIDERS,
 )
 
 data class LinkResolverConfig(val apiKey: String)

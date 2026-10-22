@@ -13,7 +13,11 @@ import dev.dertyp.ui.UiComponent
 import dev.dertyp.ui.UiContext
 import dev.dertyp.ui.UiInvokePayload
 import dev.dertyp.ui.UiInvokeResult
+import dev.dertyp.services.LegacyLyricsCache
 import io.ktor.server.application.ApplicationCall
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
+import java.util.UUID
 
 data class CompatScope(
     val client: ClientInfo,
@@ -38,6 +42,7 @@ interface CompatRule {
     ): UiInvokeResult? = null
     fun shapeAlbums(albums: List<Album>): List<Album> = albums
     fun shapeRecentReleases(releases: List<RecentRelease>): List<RecentRelease> = releases
+    suspend fun prefetch(songIds: Set<UUID>) {}
 }
 
 object TitleTagsCompat : CompatRule {
@@ -80,7 +85,25 @@ object AlbumVersionsCompat : CompatRule {
         albums.flatMap { album -> listOf(album.copy(versions = emptyList())) + album.versions.map { it.copy(versions = emptyList()) } }
 }
 
+object LegacyLyricsCompat : CompatRule, KoinComponent {
+    override val feature = ClientFeature.LYRICS_SERVICE
+
+    override fun shapeSong(song: Song): Song = song.copy(lyricsInfo = null)
+
+    override fun shapeUserSong(song: UserSong): UserSong = song.copy(lyricsInfo = null)
+
+    override suspend fun prefetch(songIds: Set<UUID>) {
+        if (songIds.isNotEmpty()) get<LegacyLyricsCache>().prefetch(songIds)
+    }
+}
+
 object CompatRules {
-    val all: List<CompatRule> =
-        listOf(TitleTagsCompat, ReleaseVersionsCompat, AlbumTitleTagsCompat, AlbumVersionsCompat, UiSchemaCompat())
+    val all: List<CompatRule> = listOf(
+        TitleTagsCompat,
+        ReleaseVersionsCompat,
+        AlbumTitleTagsCompat,
+        AlbumVersionsCompat,
+        LegacyLyricsCompat,
+        UiSchemaCompat(),
+    )
 }

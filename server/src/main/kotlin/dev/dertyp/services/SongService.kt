@@ -19,7 +19,9 @@ import dev.dertyp.services.AlbumService.Companion.calculateAlbumStats
 import dev.dertyp.services.AlbumService.Companion.mapAlbum
 import dev.dertyp.services.ArtistService.Companion.mapArtist
 import dev.dertyp.services.import.Type
+import dev.dertyp.services.lyrics.LyricsCandidateService
 import dev.dertyp.services.metadata.*
+import dev.dertyp.services.models.LyricsSyncLevel
 import dev.dertyp.utils.Barcodes
 import dev.dertyp.utils.LogParam
 import dev.dertyp.utils.parsers.ParserFactory
@@ -314,6 +316,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
     private val redisSearchService by inject<RedisSearchService>()
     private val transcoder by inject<Transcoder>()
     private val transcodedSongRepository by inject<TranscodedSongRepository>()
+    private val lyricsCandidateService by inject<LyricsCandidateService>()
 
     val albumArtistAlias = ArtistTable.alias("albumArtistAlias")
     val albumArtistMusicBrainzAlias = ArtistMusicBrainzTable.alias("albumArtistMusicBrainzAlias")
@@ -361,7 +364,6 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 duration = resultRow[SongTable.duration],
                 explicit = resultRow[SongTable.explicit],
                 releaseDate = getDateFromISO(resultRow[SongTable.releaseDate]),
-                lyrics = resultRow[SongTable.lyrics],
                 path = resultRow[SongTable.filePath],
                 originalUrl = resultRow[SongTable.originalUrl],
                 trackNumber = resultRow[SongTable.trackNumber],
@@ -423,7 +425,6 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             duration = duration,
             explicit = explicit,
             releaseDate = releaseDate,
-            lyrics = lyrics,
             path = path,
             originalUrl = originalUrl,
             trackNumber = trackNumber,
@@ -626,6 +627,13 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
         }
     }
 
+    suspend fun storeLyrics(id: UUID, lyrics: String) = dbQuery {
+        val changed = SongTable.update({ (SongTable.id eq id) and (SongTable.lyrics neq lyrics) }) {
+            it[SongTable.lyrics] = lyrics
+        }
+        if (changed > 0) entityEvents.updated(EntityType.SONG, listOf(id))
+    }
+
     suspend fun setMusicBrainzId(id: UUID, musicBrainzId: UUID?, userId: UUID): UserSong? {
         val mbRecording = if (musicBrainzId != null) {
             cachedMusicBrainzService.getRecording(musicBrainzId, HttpClientPriority.HIGH)
@@ -701,7 +709,6 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 it[titleTags] = encodeTitleTags(normalized.tags)
                 normalized.album?.id?.let { albumUuid -> it[albumId] = EntityID(albumUuid, AlbumTable) }
                 it[releaseDate] = getISOFromDate(normalized.releaseDate)
-                it[lyrics] = normalized.lyrics
                 it[trackNumber] = normalized.trackNumber
                 it[discNumber] = normalized.discNumber
             }
@@ -743,7 +750,6 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                         for (name in s.artists.map { artist -> artist.name }.sorted()) {
                             addField(FieldKey.ARTIST, name)
                         }
-                        setField(FieldKey.LYRICS, s.lyrics)
                     }
                     file.commit()
                 } catch (e: Exception) {
@@ -1546,14 +1552,20 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 SyncedLyricsTable,
                 onColumn = { SongTable.id },
                 otherColumn = { SyncedLyricsTable.songId })
+                .leftJoin(
+                    LyricsCandidateTable,
+                    onColumn = { SongTable.id },
+                    otherColumn = { LyricsCandidateTable.songId },
+                    additionalConstraint = { LyricsCandidateTable.status eq LyricsCandidateStatus.FOUND })
         }) {
             rankedSearchQuery(
                 redisSearchService,
                 query,
-                listOf(10, 8),
+                listOf(10, 8, 8),
                 listOf(
                     SyncedLyricsTable.rawLyrics,
-                    SongTable.lyrics
+                    SongTable.lyrics,
+                    LyricsCandidateTable.plain
                 ),
                 SongTable.id
             )
@@ -1874,6 +1886,16 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 SongTag.B_16 -> (SongTable.bitsPerSample eq 16)
                 SongTag.B_24 -> (SongTable.bitsPerSample eq 24)
                 SongTag.HAS_LYRICS -> (SongTable.lyrics neq "")
+                SongTag.HAS_SYNCED_LYRICS ->
+                    (SongTable.id inSubQuery LyricsCandidateTable.select(LyricsCandidateTable.songId)
+                        .where { LyricsCandidateTable.status eq LyricsCandidateStatus.FOUND }
+                        .andWhere { LyricsCandidateTable.syncLevel neq LyricsSyncLevel.PLAIN }) or
+                        (SongTable.id inSubQuery SyncedLyricsTable.select(SyncedLyricsTable.songId).where { SyncedLyricsTable.content.isNotNull() })
+                SongTag.HAS_WORD_SYNCED_LYRICS ->
+                    (SongTable.id inSubQuery LyricsCandidateTable.select(LyricsCandidateTable.songId)
+                        .where { LyricsCandidateTable.status eq LyricsCandidateStatus.FOUND }
+                        .andWhere { LyricsCandidateTable.syncLevel eq LyricsSyncLevel.WORD }) or
+                        (SongTable.id inSubQuery SyncedLyricsTable.select(SyncedLyricsTable.songId).where { SyncedLyricsTable.content.isNotNull() })
                 SongTag.CUSTOM_UPLOAD -> (SongTable.filePath like "$customAudioPath%")
                 SongTag.HAS_MUSICBRAINZ_ID -> (SongMusicBrainzTable.musicBrainzId.isNotNull())
             }
@@ -2390,6 +2412,8 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                 .toList()
         }.associateBy { it[SongVariantTable.songId].value }
 
+        val lyricsInfo = lyricsCandidateService.lyricsInfoFor(loadedIds)
+
         val playbackTags = if (T::class == UserSong::class && userId != null) {
             TimecodeTagService.playbackTags(userId, loadedIds)
         } else {
@@ -2431,6 +2455,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     originalUrl = originalUrl,
                     atmos = variant?.let(::mapVariant),
                     atmosVariantPath = variant?.get(SongVariantTable.path),
+                    lyricsInfo = lyricsInfo[songId],
                 ) as T
 
                 is UserSong -> song.copy(
@@ -2441,6 +2466,7 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
                     atmos = variant?.let(::mapVariant),
                     atmosVariantPath = variant?.get(SongVariantTable.path),
                     playbackTags = playbackTags[songId] ?: emptyList(),
+                    lyricsInfo = lyricsInfo[songId],
                 ) as T
 
                 else -> throw Exception("Unknown song type: $song")
@@ -2923,7 +2949,6 @@ class SongService(private val searchIndexWorker: SearchIndexWorker? = null) : So
             it[duration] = song.duration
             it[explicit] = song.explicit
             it[releaseDate] = getISOFromDate(song.releaseDate)
-            it[lyrics] = song.lyrics
             it[filePath] = song.path
             it[format] = formatOf(song.path)
             it[originalUrl] = song.originalUrl

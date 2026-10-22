@@ -89,6 +89,8 @@ linkresolver:
   apiKey: ${LINKRESOLVER_API_KEY:}
 youtube:
   apiKey: ${YOUTUBE_API_KEY:}
+lyrics:
+  providers: ${LYRICS_PROVIDERS:betterlyrics,unison,lyricsplus,kugou,lrclib,youtubemusic}
 tiddl:
   auth: ${TIDDL_AUTH:}
 ytdlp:

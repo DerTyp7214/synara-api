@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.testing.noLyricsCandidates
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.core.*
@@ -10,6 +11,7 @@ import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.IMetadataService
 import dev.dertyp.services.metadata.MusicBrainzCacheService
 import dev.dertyp.services.metadata.MusicBrainzService
+import dev.dertyp.services.models.LyricsSyncLevel
 import dev.dertyp.utils.ColorUtils
 import io.ktor.server.application.ApplicationEnvironment
 import io.mockk.mockk
@@ -40,6 +42,7 @@ class SongQueryEquivalenceTest : KoinTest {
 
         startKoin {
             modules(module {
+                single { noLyricsCandidates() }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { mockk<MusicBrainzService>(relaxed = true) }
                 single { mockk<CachedMusicBrainzService>(relaxed = true) }
@@ -242,6 +245,16 @@ class SongQueryEquivalenceTest : KoinTest {
                     SongTag.B_16 -> (SongTable.bitsPerSample eq 16)
                     SongTag.B_24 -> (SongTable.bitsPerSample eq 24)
                     SongTag.HAS_LYRICS -> (SongTable.lyrics neq "")
+                    SongTag.HAS_SYNCED_LYRICS ->
+                        (SongTable.id inSubQuery LyricsCandidateTable.select(LyricsCandidateTable.songId)
+                            .where { LyricsCandidateTable.status eq LyricsCandidateStatus.FOUND }
+                            .andWhere { LyricsCandidateTable.syncLevel neq LyricsSyncLevel.PLAIN }) or
+                            (SongTable.id inSubQuery SyncedLyricsTable.select(SyncedLyricsTable.songId).where { SyncedLyricsTable.content.isNotNull() })
+                    SongTag.HAS_WORD_SYNCED_LYRICS ->
+                        (SongTable.id inSubQuery LyricsCandidateTable.select(LyricsCandidateTable.songId)
+                            .where { LyricsCandidateTable.status eq LyricsCandidateStatus.FOUND }
+                            .andWhere { LyricsCandidateTable.syncLevel eq LyricsSyncLevel.WORD }) or
+                            (SongTable.id inSubQuery SyncedLyricsTable.select(SyncedLyricsTable.songId).where { SyncedLyricsTable.content.isNotNull() })
                     SongTag.CUSTOM_UPLOAD -> Op.FALSE
                     SongTag.HAS_MUSICBRAINZ_ID -> (SongMusicBrainzTable.musicBrainzId.isNotNull())
                 }

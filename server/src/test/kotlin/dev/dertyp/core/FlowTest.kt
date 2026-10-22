@@ -1,5 +1,6 @@
 package dev.dertyp.core
 
+import dev.dertyp.testing.noLyricsCandidates
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.data.User
@@ -48,6 +49,7 @@ class FlowTest {
 
         startKoin {
             modules(module {
+                single { noLyricsCandidates() }
                 single { mockk<dev.dertyp.services.StorageService>(relaxed = true) }
             })
         }

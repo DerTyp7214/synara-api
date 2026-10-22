@@ -175,6 +175,17 @@ GET /listeningStats/topSongs IListeningStatsService.getTopSongs | Return the cur
 POST /lyrics/startSyncWorker ILyricsService.startSyncWorker | Start the background lyrics synchronization worker. | lyrics | UserAuth | - | body:no
 GET /lyrics/syncedLyrics/{songId} ILyricsService.getSyncedLyrics | Get time-synced lyrics for a song if they exist. | lyrics | UserAuth | songId:path | body:no
 POST /lyrics/transcribeLyrics/{songId} ILyricsService.transcribeLyrics | Trigger AI-based transcription or manual alignment of lyrics. | lyrics | UserAuth | songId:path,lyrics:query | body:no
+POST /lyricsCandidate/importSyncedLyrics/{songId} ILyricsCandidateService.importSyncedLyrics | Store synced lyrics parsed from a file as the manual candidate of a song. | lyricsCandidate | UserAuth | songId:path | body:yes
+GET /lyricsCandidate/lyrics/{songId} ILyricsCandidateService.getLyrics | Get the lyrics a player shows. This is the default candidate or the given one, with the lyrics filled. Providers are not asked. | lyricsCandidate | UserAuth | songId:path,candidateId:query | body:no
+POST /lyricsCandidate/lyrics/{songId} ILyricsCandidateService.findLyrics | Get the stored candidates of a song and ask the providers that have not answered yet or are due again. New answers are stored and ranked. | lyricsCandidate | UserAuth | songId:path,providers:query,refresh:query | body:no
+POST /lyricsCandidate/lyricsByQuery ILyricsCandidateService.findLyricsByQuery | Ask the providers for the lyrics of any track. Nothing is stored and the candidates are not tied to a song. | lyricsCandidate | UserAuth | title:query,artist:query,album:query,durationMs:query,providers:query | body:no
+GET /lyricsCandidate/lyricsCandidate/{candidateId} ILyricsCandidateService.getLyricsCandidate | Get one candidate with the lyrics filled. | lyricsCandidate | UserAuth | candidateId:path | body:no
+GET /lyricsCandidate/lyricsCandidates/{songId} ILyricsCandidateService.getLyricsCandidates | Get the stored candidates of a song. Providers are not asked. | lyricsCandidate | UserAuth | songId:path,includeContent:query | body:no
+GET /lyricsCandidate/lyricsInfo ILyricsCandidateService.getLyricsInfo | Get the lyrics summary of songs a client already has. | lyricsCandidate | UserAuth | songIds:query | body:no
+GET /lyricsCandidate/lyricsProviders ILyricsCandidateService.getLyricsProviders | Get the enabled providers in priority order. | lyricsCandidate | UserAuth | - | body:no
+PUT /lyricsCandidate/preferredLyrics/{songId} ILyricsCandidateService.setPreferredLyrics | Pin the default candidate of a song for everyone. | lyricsCandidate | UserAuth | songId:path,candidateId:query | body:no
+GET /lyricsCandidate/streamLyrics/{songId} ILyricsCandidateService.streamLyrics | Ask the providers for the lyrics of a song and emit each candidate as soon as its provider answers. | lyricsCandidate | UserAuth | songId:path,providers:query | body:no
+PUT /lyricsCandidate/syncedLyrics/{songId} ILyricsCandidateService.setSyncedLyrics | Store hand-edited synced lyrics as the manual candidate of a song. A null value removes the manual candidate. | lyricsCandidate | UserAuth | songId:path | body:yes
 GET /lyricsSearch/lyrics ILyricsSearch.searchLyrics | Search for lyrics text on external services. | lyricsSearch | UserAuth | artist:query,title:query,syncedOnly:query | body:no
 GET /metadata/allMetadataTypes IMetadataService.allMetadataTypes | Get all registered metadata providers, optionally filtered by supported features. | metadata | UserAuth | features:query | body:no
 GET /metadata/{type}/albumByBarcode IMetadataService.getAlbumByBarcode | Get an album by its barcode. | metadata | UserAuth | type:path,barcode:query | body:no
@@ -371,7 +382,7 @@ POST /song/moveSongs ISongService.moveSongs | Batch update song file paths. | so
 POST /song/musicBrainzId/{id} ISongService.fetchMusicBrainzId | Trigger automatic MusicBrainz ID matching for a song. | song | UserAuth | id:path | body:no
 PUT /song/musicBrainzId/{id} ISongService.setMusicBrainzId | Link a song to its MusicBrainz Recording record. | song | UserAuth | id:path,musicBrainzId:query | body:no
 GET /song/search ISongService.rankedSearch | Perform a ranked search for songs. | song | UserAuth | page:query,pageSize:query,query:query,explicit:query,liked:query | body:no
-PUT /song/song ISongService.updateSong | Update a song's editable metadata (title, artists and their credited names, MusicBrainz link, album, lyrics, release date, track and disc number). | song | UserAuth | - | body:yes
+PUT /song/song ISongService.updateSong | Update a song's editable metadata (title, artists and their credited names, MusicBrainz link, album, release date, track and disc number). | song | UserAuth | - | body:yes
 GET /song/songIdsByAlbum/{albumId} ISongService.songIdsByAlbum | Stream song IDs belonging to an album. | song | UserAuth | albumId:path | body:no
 GET /song/songIdsByArtist/{artistId} ISongService.songIdsByArtist | Stream song IDs belonging to an artist. | song | UserAuth | artistId:path | body:no
 GET /song/songIdsByPlaylist/{playlistId} ISongService.songIdsByPlaylist | Stream song IDs belonging to a system playlist. | song | UserAuth | playlistId:path | body:no

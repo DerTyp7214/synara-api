@@ -1,14 +1,21 @@
 package dev.dertyp.services.schedule
 
 import dev.dertyp.data.TaskKeys
+import dev.dertyp.db.LyricsCandidateStatus
+import dev.dertyp.db.LyricsCandidateTable
 import dev.dertyp.db.SongTable
 import dev.dertyp.db.SyncedLyricsTable
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.LyricsService
+import dev.dertyp.services.models.LyricsSyncLevel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.leftJoin
+import org.jetbrains.exposed.v1.core.notInSubQuery
+import org.jetbrains.exposed.v1.jdbc.andWhere
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.upsert
 import org.koin.core.component.inject
@@ -48,6 +55,11 @@ class LyricsSyncWorker : Worker("LyricsSyncWorker") {
                 otherColumn = { SyncedLyricsTable.songId })
                 .selectAll()
                 .where { SyncedLyricsTable.songId.isNull() }
+                .andWhere {
+                    SongTable.id notInSubQuery LyricsCandidateTable.select(LyricsCandidateTable.songId)
+                        .where { LyricsCandidateTable.status eq LyricsCandidateStatus.FOUND }
+                        .andWhere { LyricsCandidateTable.syncLevel eq LyricsSyncLevel.WORD }
+                }
                 .map {
                     SongInfo(
                         id = it[SongTable.id].value,

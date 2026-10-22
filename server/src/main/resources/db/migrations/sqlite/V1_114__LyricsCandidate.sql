@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS lyrics_candidate (id BINARY(16) NOT NULL PRIMARY KEY, songId BINARY(16) NOT NULL, provider TEXT NOT NULL, status VARCHAR(16) NOT NULL, sync_level VARCHAR(16) DEFAULT 'PLAIN' NOT NULL, instrumental BOOLEAN DEFAULT 0 NOT NULL, "match" VARCHAR(16) NOT NULL, duration_gap_sec INT NULL, "rank" INT DEFAULT 0 NOT NULL, content BLOB NULL, plain TEXT NULL, fetched_at BIGINT NOT NULL, CONSTRAINT fk_lyrics_candidate_songId__id FOREIGN KEY (songId) REFERENCES song(id) ON DELETE CASCADE ON UPDATE RESTRICT, CONSTRAINT chk_lyrics_candidate_signed_integer_duration_gap_sec CHECK (duration_gap_sec BETWEEN -2147483648 AND 2147483647), CONSTRAINT chk_lyrics_candidate_signed_integer_rank CHECK ("rank" BETWEEN -2147483648 AND 2147483647));
+CREATE INDEX lyrics_candidate_songId ON lyrics_candidate (songId);
+CREATE UNIQUE INDEX lyrics_candidate_songId_provider ON lyrics_candidate (songId, provider);
+ALTER TABLE song ADD preferred_lyrics_candidate BINARY(16) NULL;

@@ -1,6 +1,7 @@
 package dev.dertyp.routing.rest
 
 import dev.dertyp.StreamInfo
+import dev.dertyp.core.wire.fixtures.LegacyLyricsFixture
 import dev.dertyp.core.UnauthorizedException
 import dev.dertyp.data.*
 import dev.dertyp.serializers.AppJson
@@ -14,11 +15,13 @@ import dev.dertyp.services.IPodcastService
 import dev.dertyp.services.IQueueService
 import dev.dertyp.services.IRemoteControlService
 import dev.dertyp.services.IRemoteMirrorService
+import dev.dertyp.services.ISongService
 import dev.dertyp.services.`import`.GamdlCredentials
 import dev.dertyp.services.`import`.IImportService
 import dev.dertyp.services.`import`.ImportBackend
 import dev.dertyp.services.`import`.ImporterCredentials
 import dev.dertyp.services.metadata.IMetadataService
+import dev.dertyp.services.models.LyricsSyncLevel
 import io.github.smiley4.ktoropenapi.OpenApi
 import io.github.smiley4.ktoropenapi.config.SchemaGenerator
 import io.github.smiley4.ktoropenapi.openApi
@@ -76,6 +79,7 @@ class GeneratedRestRoutesSmokeTest {
     private val hue = mockk<IHueService>()
     private val clientRequest = mockk<IClientRequestService>()
     private val remoteControl = mockk<IRemoteControlService>()
+    private val songs = mockk<ISongService>()
 
     private lateinit var directory: File
     private lateinit var episodeFile: File
@@ -626,5 +630,53 @@ class GeneratedRestRoutesSmokeTest {
 
         assertEquals(emptySet<Pair<String, String>>(), documented - routed, "documented but not routed")
         assertEquals(emptySet<Pair<String, String>>(), routed - documented, "routed but not documented")
+    }
+
+    @Test
+    fun `songs carry the stored lyrics up to api version 10 and lyrics info from 11`() = testApplication {
+        val fixture = LegacyLyricsFixture()
+        try {
+            setUpApplication()
+            routing { registerISongServiceRest { songs } }
+            val stored = "Stored first line\nStored second line"
+            val info = SongLyricsInfo(available = true, syncLevel = LyricsSyncLevel.WORD, levels = setOf(LyricsSyncLevel.WORD))
+            val id = fixture.insertSong(stored)
+            val song = UserSong(
+                id = id,
+                title = "Song",
+                artists = emptyList(),
+                album = null,
+                duration = 1000,
+                explicit = false,
+                path = "/song.flac",
+                lyricsInfo = info,
+            )
+            coEvery { songs.byId(id) } returns song
+            coEvery { songs.allSongs(any(), any(), any(), any(), any(), any(), any()) } returns
+                PaginatedResponse(listOf(song, song), total = 2)
+            val infoJson = AppJson.encodeToJsonElement(SongLyricsInfo.serializer(), info)
+
+            listOf(null, "7", "10", "11").forEach { version ->
+                val legacy = version != "11"
+                val one = client.get("/song/byId/$id") { version?.let { header(ApiVersion.HEADER, it) } }
+                val page = client.get("/song/allSongs?explicit=true") { version?.let { header(ApiVersion.HEADER, it) } }
+                assertEquals(HttpStatusCode.OK, one.status, "$version")
+                assertEquals(HttpStatusCode.OK, page.status, "$version")
+                val bodies = listOf(AppJson.parseToJsonElement(one.bodyAsText()).jsonObject) +
+                    AppJson.parseToJsonElement(page.bodyAsText()).jsonObject.getValue("data").jsonArray.map { it.jsonObject }
+                assertEquals(3, bodies.size)
+                bodies.forEach { body ->
+                    if (legacy) {
+                        assertEquals(JsonPrimitive(stored), body["lyrics"], "$version")
+                        assertFalse("lyricsInfo" in body, "$version")
+                    } else {
+                        assertFalse("lyrics" in body)
+                        assertEquals(infoJson, body["lyricsInfo"])
+                    }
+                }
+            }
+        } finally {
+            fixture.close()
+        }
     }
 }

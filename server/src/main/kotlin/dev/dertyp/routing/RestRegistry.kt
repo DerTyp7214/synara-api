@@ -11,6 +11,7 @@ import dev.dertyp.services.cover.RpcCoverGenerationService
 import dev.dertyp.services.hue.RpcHueService
 import dev.dertyp.services.import.IImportService
 import dev.dertyp.services.import.ImportRpcService
+import dev.dertyp.services.lyrics.RpcLyricsCandidateService
 import dev.dertyp.services.metadata.CachedMusicBrainzService
 import dev.dertyp.services.metadata.ILinkResolverService
 import dev.dertyp.services.metadata.IMetadataService
@@ -69,6 +70,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     registerILyricsServiceRest(authenticated = true) {
         val user = call.getUser()
         koin.get<LyricsService>().withAuthorization<ILyricsService>(user)
+    }
+    registerILyricsCandidateServiceRest(authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcLyricsCandidateService(user, koin.get()).withAuthorization<ILyricsCandidateService>(user)
     }
     registerIArtistServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")

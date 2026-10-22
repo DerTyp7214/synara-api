@@ -32,6 +32,11 @@ object SongTable : UUIDTable("song") {
     val lastLyricsFetchAttempt = long("lastLyricsFetchAttempt").default(0L)
     val lastProviderEnrichment = long("lastProviderEnrichment").default(0L)
     val searchVector = tsvector("search_vector").nullable()
+    val preferredLyricsCandidate = reference(
+        "preferred_lyrics_candidate",
+        LyricsCandidateTable.id,
+        onDelete = ReferenceOption.SET_NULL
+    ).nullable()
 
     init {
         index(false, albumId)

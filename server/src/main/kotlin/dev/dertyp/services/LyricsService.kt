@@ -3,6 +3,7 @@ package dev.dertyp.services
 import dev.dertyp.ApiClient
 import dev.dertyp.PlatformUUID
 import dev.dertyp.data.EntityType
+import dev.dertyp.db.SongTable
 import dev.dertyp.db.SyncedLyricsTable
 import dev.dertyp.core.db.dbQuery
 import dev.dertyp.serializers.AppCbor
@@ -66,7 +67,9 @@ class LyricsService : ILyricsService, Service() {
         }
 
         if (rawLyrics.isNullOrBlank()) {
-            rawLyrics = song.lyrics
+            rawLyrics = dbQuery {
+                SongTable.select(SongTable.lyrics).where { SongTable.id eq songId }.singleOrNull()?.get(SongTable.lyrics)
+            }.orEmpty()
         }
 
         if (rawLyrics.isBlank()) {

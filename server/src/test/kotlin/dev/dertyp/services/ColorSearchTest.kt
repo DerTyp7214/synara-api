@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.testing.noLyricsCandidates
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
@@ -43,6 +44,7 @@ class ColorSearchTest : KoinTest {
 
         startKoin {
             modules(module {
+                single { noLyricsCandidates() }
                 single { mockk<ApplicationEnvironment>(relaxed = true) }
                 single { mockk<ArtistService>(relaxed = true) }
                 single { mockk<AlbumService>(relaxed = true) }

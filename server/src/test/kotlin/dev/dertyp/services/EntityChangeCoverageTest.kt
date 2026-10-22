@@ -47,6 +47,7 @@ class EntityChangeCoverageTest {
         "ImageTable",
         "AnimatedImageTable",
         "SyncedLyricsTable",
+        "LyricsCandidateTable",
         "SongAudioDataTable",
         "SongAudioTimelineTable",
         "SongComposerTable",

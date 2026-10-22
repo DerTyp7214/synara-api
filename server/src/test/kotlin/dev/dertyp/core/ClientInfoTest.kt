@@ -5,6 +5,7 @@ import dev.dertyp.serializers.AppJson
 import dev.dertyp.ui.UiSchemaVersion
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -140,10 +141,20 @@ class ClientInfoTest {
     }
 
     @Test
-    fun `wire formats send old keys only below api version 8`() {
-        assertSame(LegacyServerJson, jsonFor(ClientInfo.LEGACY).format)
-        assertSame(LegacyServerJson, jsonFor(ClientInfo(7)).format)
-        assertSame(AppJson, jsonFor(ClientInfo(8)).format)
+    fun `lyrics service requires api version 11`() {
+        assertFalse(ClientInfo.LEGACY.supports(ClientFeature.LYRICS_SERVICE))
+        assertFalse(ClientInfo(10).supports(ClientFeature.LYRICS_SERVICE))
+        assertTrue(ClientInfo(11).supports(ClientFeature.LYRICS_SERVICE))
+    }
+
+    @Test
+    fun `wire formats are shared by clients with the same legacy rules and plain from api version 11`() {
+        assertSame(jsonFor(ClientInfo.LEGACY), jsonFor(ClientInfo(7)))
+        assertNotSame(jsonFor(ClientInfo(7)), jsonFor(ClientInfo(8)))
+        assertSame(jsonFor(ClientInfo(8)), jsonFor(ClientInfo(10)))
+        assertNotSame(AppJson, jsonFor(ClientInfo(7)).format)
+        assertNotSame(AppJson, jsonFor(ClientInfo(10)).format)
+        assertSame(AppJson, jsonFor(ClientInfo(11)).format)
         assertSame(AppJson, jsonFor(ClientInfo(ApiVersion.CURRENT)).format)
     }
 

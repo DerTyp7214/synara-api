@@ -99,6 +99,9 @@ An admin implicitly has every capability, so every method on this page is open t
 | [IArtistService](RPC_SERVICES.md#devdertypservicesiartistservice) | `setMusicBrainzId` | Link an artist record to a MusicBrainz ID. |
 | [IArtistService](RPC_SERVICES.md#devdertypservicesiartistservice) | `splitArtist` | Split an artist record into multiple artists. |
 | [ICustomAudioService](RPC_SERVICES.md#devdertypservicesicustomaudioservice) | `uploadCustomAudio` | Upload a custom audio file and its metadata. |
+| [ILyricsCandidateService](RPC_SERVICES.md#devdertypservicesilyricscandidateservice) | `importSyncedLyrics` | Store synced lyrics parsed from a file as the manual candidate of a song. |
+| [ILyricsCandidateService](RPC_SERVICES.md#devdertypservicesilyricscandidateservice) | `setPreferredLyrics` | Pin the default candidate of a song for everyone. |
+| [ILyricsCandidateService](RPC_SERVICES.md#devdertypservicesilyricscandidateservice) | `setSyncedLyrics` | Store hand-edited synced lyrics as the manual candidate of a song. A null value removes the manual candidate. |
 | [IReleaseService](RPC_SERVICES.md#devdertypservicesireleaseservice) | `confirmRelease` | Confirm that a provider entry flagged as possibly belonging to another artist is correct: clears the flag and records the entry's copyright holder, record label and ISRC registrants as known sources of the artist so future catalog runs do not flag matching entries again. Returns the updated entry. |
 | [IReleaseService](RPC_SERVICES.md#devdertypservicesireleaseservice) | `refreshRecentRelease` | Kick off a background refresh of the cached metadata, provider links and cover image for a single recent release, returning immediately. |
 | [IReleaseService](RPC_SERVICES.md#devdertypservicesireleaseservice) | `setReleaseHidden` | Hide an entry of the release feed for every user, or show it again. With includeRelated the other Apple Music entries of the same artist sharing the entry's copyright holder (or record label when no holder is known) are hidden or shown as well, and the holder or label is recorded as blocked (or unblocked) for the artist so future catalog runs hide matching entries automatically. Returns the number of entries whose visibility changed. The change applies to the whole display group, i.e. every edition the feed folds under one entry. |
@@ -106,7 +109,7 @@ An admin implicitly has every capability, so every method on this page is open t
 | [ISongService](RPC_SERVICES.md#devdertypservicesisongservice) | `setArtists` | Update song artists. |
 | [ISongService](RPC_SERVICES.md#devdertypservicesisongservice) | `setLyrics` | Manually set song lyrics. |
 | [ISongService](RPC_SERVICES.md#devdertypservicesisongservice) | `setMusicBrainzId` | Link a song to its MusicBrainz Recording record. |
-| [ISongService](RPC_SERVICES.md#devdertypservicesisongservice) | `updateSong` | Update a song's editable metadata (title, artists and their credited names, MusicBrainz link, album, lyrics, release date, track and disc number). |
+| [ISongService](RPC_SERVICES.md#devdertypservicesisongservice) | `updateSong` | Update a song's editable metadata (title, artists and their credited names, MusicBrainz link, album, release date, track and disc number). |
 
 ## IMPORT
 

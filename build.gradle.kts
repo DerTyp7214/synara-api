@@ -125,6 +125,10 @@ tasks.register("generateEnvDocs") {
             "IMAGE_CACHE_URL" to mapOf("desc" to "Image Cache service URL.", "cat" to "External Services"),
             "IMAGE_CACHE_TOKEN" to mapOf("desc" to "Image Cache auth token.", "cat" to "External Services"),
             "TRANSCRIBER_URL" to mapOf("desc" to "Transcriber service URL.", "cat" to "External Services"),
+            "LYRICS_PROVIDERS" to mapOf(
+                "desc" to "Comma separated online lyrics providers to ask, in order of preference. Known ids are betterlyrics, unison, lyricsplus, kugou, lrclib and youtubemusic. Empty asks no online provider and only reads lyrics files next to the songs.",
+                "cat" to "External Services"
+            ),
             "AUDIO_EMBED_URL" to mapOf(
                 "desc" to "URL of the audio embedding service (MusiCNN). Empty disables per-song audio embeddings.",
                 "cat" to "Recommendations"

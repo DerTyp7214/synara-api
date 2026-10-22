@@ -126,7 +126,7 @@ class FlywayMigrationTest {
                     )
                 )
                 assertEquals(
-                    18,
+                    19,
                     names(
                         connection,
                         "SELECT indexname FROM pg_indexes " +
@@ -167,6 +167,7 @@ class FlywayMigrationTest {
             if (dialect == DbDialect.POSTGRES) "userplaylistshare" else "userPlaylistShare",
             "listen_song_redirect",
             "listen_share",
+            "lyrics_candidate",
         )
         assertEquals(createdByLaterMigrations, after.tables - before.tables)
         assertEquals(before.copy(tables = before.tables + createdByLaterMigrations, history = history), after)

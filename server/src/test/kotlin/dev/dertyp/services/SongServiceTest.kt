@@ -7,6 +7,7 @@ import dev.dertyp.TestDatabase
 import dev.dertyp.audio.LosslessFormat
 import dev.dertyp.audio.Transcoder
 import dev.dertyp.core.ApplicationScope
+import dev.dertyp.config.ServerConfig
 import dev.dertyp.core.ClientInfo
 import dev.dertyp.core.HttpClientQueueService
 import dev.dertyp.core.date
@@ -18,6 +19,11 @@ import dev.dertyp.db.*
 import dev.dertyp.plugins.HookEvent
 import dev.dertyp.services.credentials.CredentialProvider
 import dev.dertyp.services.import.Type
+import dev.dertyp.services.lyrics.LyricsCandidateService
+import dev.dertyp.services.lyrics.providers.LyricsProviderRegistry
+import dev.dertyp.services.lyrics.providers.SidecarLyricsProvider
+import dev.dertyp.services.models.LyricsMatch
+import dev.dertyp.services.models.LyricsSyncLevel
 import dev.dertyp.testing.FakeCredentialProvider
 import dev.dertyp.services.metadata.*
 import dev.dertyp.testing.entityChangeTables
@@ -36,6 +42,7 @@ import io.ktor.http.Url
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationEnvironment
+import io.ktor.server.config.MapApplicationConfig
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -44,6 +51,7 @@ import io.mockk.mockkObject
 import io.mockk.spyk
 import io.mockk.unmockkObject
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.toSet
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
@@ -116,6 +124,10 @@ class SongServiceTest : KoinTest {
                 single { LibraryMergeService() }
                 single { LibraryFileDeleter() }
                 single { mockk<RedisSearchService>(relaxed = true) }
+                single { ServerConfig(MapApplicationConfig("lyrics.providers" to "")) }
+                single { LyricsProviderRegistry() }
+                single { SidecarLyricsProvider() }
+                single { LyricsCandidateService() }
             })
         }
 
@@ -154,6 +166,8 @@ class SongServiceTest : KoinTest {
             AlbumProviderTable,
             SongAudioDataTable,
             TimecodeTagTable,
+            SyncedLyricsTable,
+            LyricsCandidateTable,
             *allMusicBrainzTables
         )
         transaction(database) {
@@ -1050,6 +1064,52 @@ class SongServiceTest : KoinTest {
 
     @ParameterizedTest
     @EnumSource(DbDialect::class)
+    fun `createBatch stores the lyrics of new songs and offers them as the song candidate`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val album = InsertableAlbum("Batch Album", listOf("Batch Artist"))
+        val result = songService.createBatch(
+            listOf(
+                InsertableSong(
+                    title = "Sung",
+                    artists = listOf("Batch Artist"),
+                    album = album,
+                    duration = 100,
+                    explicit = false,
+                    lyrics = "First line\nSecond line",
+                    path = "/path/sung",
+                    audio = AudioInfo("flac", 44100, 16, 128000, 0, 2)
+                )
+            )
+        )
+
+        val songId = result.values.single().id
+        val stored = transaction(database) {
+            SongTable.select(SongTable.lyrics).where { SongTable.id eq songId }.single()[SongTable.lyrics]
+        }
+        assertEquals("First line\nSecond line", stored)
+        val info = songService.byId(songId)?.lyricsInfo
+        assertEquals(LyricsCandidateService.SONG, info?.defaultProvider)
+        assertEquals(LyricsSyncLevel.PLAIN, info?.syncLevel)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `storeLyrics writes the song lyrics`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = transaction(database) { insertAlbum() }
+        val songId = insertTitledSong(albumId, "Mirrored", lyrics = "Old text")
+
+        songService.storeLyrics(songId, "[00:01.000]Hello")
+
+        val stored = transaction(database) {
+            SongTable.select(SongTable.lyrics).where { SongTable.id eq songId }.single()[SongTable.lyrics]
+        }
+        assertEquals("[00:01.000]Hello", stored)
+        assertEquals(LyricsSyncLevel.LINE, songService.byId(songId)?.lyricsInfo?.syncLevel)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
     fun `createBatch should handle new songs and bitrate comparison`(dialect: DbDialect) = runBlocking {
         setup(dialect)
         val album = InsertableAlbum("Batch Album", listOf("Batch Artist"))
@@ -1679,6 +1739,138 @@ class SongServiceTest : KoinTest {
 
         val notHighQuality = songService.allSongIds(true, excludeTags = listOf(SongTag.Q_96)).toList()
         assertEquals(2, notHighQuality.size)
+    }
+
+    private fun insertCandidate(
+        songId: UUID,
+        provider: String,
+        level: LyricsSyncLevel,
+        status: LyricsCandidateStatus = LyricsCandidateStatus.FOUND,
+        plain: String? = null,
+    ): UUID {
+        val candidateId = UUID.randomUUID()
+        transaction(database) {
+            LyricsCandidateTable.insert {
+                it[id] = candidateId
+                it[LyricsCandidateTable.songId] = songId
+                it[LyricsCandidateTable.provider] = provider
+                it[LyricsCandidateTable.status] = status
+                it[syncLevel] = level
+                it[match] = LyricsMatch.VERIFIED
+                it[LyricsCandidateTable.plain] = plain
+                it[fetchedAt] = System.currentTimeMillis()
+            }
+        }
+        return candidateId
+    }
+
+    private fun insertTitledSong(albumId: UUID, title: String, lyrics: String = ""): UUID {
+        val songId = UUID.randomUUID()
+        transaction(database) {
+            SongTable.insert {
+                it[id] = songId
+                it[SongTable.title] = title
+                it[SongTable.albumId] = albumId
+                it[SongTable.lyrics] = lyrics
+            }
+        }
+        return songId
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `songs carry their lyrics info on single, list and paginated loads`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = transaction(database) { insertAlbum() }
+        val withCandidates = insertTitledSong(albumId, "Candidates", lyrics = "La la la")
+        val candidateId = insertCandidate(withCandidates, "betterlyrics", LyricsSyncLevel.WORD, plain = "La la la")
+        insertCandidate(withCandidates, "kugou", LyricsSyncLevel.LINE, status = LyricsCandidateStatus.MISS)
+        val without = insertTitledSong(albumId, "Silent")
+
+        val expected = SongLyricsInfo(
+            available = true,
+            syncLevel = LyricsSyncLevel.WORD,
+            levels = setOf(LyricsSyncLevel.WORD, LyricsSyncLevel.PLAIN),
+            defaultCandidateId = candidateId,
+            defaultProvider = "betterlyrics",
+            candidateCount = 2,
+        )
+        val empty = SongLyricsInfo(available = false, syncLevel = null, levels = emptySet())
+
+        assertEquals(expected, songService.byId(withCandidates)?.lyricsInfo)
+        assertEquals(empty, songService.byId(without)?.lyricsInfo)
+        assertEquals(expected, rpcService.byId(withCandidates)?.lyricsInfo)
+
+        val listed = songService.byIds(listOf(withCandidates, without), user.id).associate { it.id to it.lyricsInfo }
+        assertEquals(mapOf(withCandidates to expected, without to empty), listed)
+
+        val page = rpcService.allSongs(0, 10, true, emptyList())
+        assertEquals(mapOf(withCandidates to expected, without to empty), page.data.associate { it.id to it.lyricsInfo })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `allSongIds filters by synced and word synced lyrics`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = transaction(database) { insertAlbum() }
+        insertTitledSong(albumId, "Plain", lyrics = "Only text")
+        val line = insertTitledSong(albumId, "Line").also { insertCandidate(it, "lrclib", LyricsSyncLevel.LINE) }
+        val word = insertTitledSong(albumId, "Word").also { insertCandidate(it, "betterlyrics", LyricsSyncLevel.WORD) }
+        insertTitledSong(albumId, "Missed").also {
+            insertCandidate(it, "betterlyrics", LyricsSyncLevel.WORD, status = LyricsCandidateStatus.MISS)
+        }
+        insertTitledSong(albumId, "Plain candidate").also { insertCandidate(it, "lrclib", LyricsSyncLevel.PLAIN) }
+        val whisperx = insertTitledSong(albumId, "Transcribed")
+        transaction(database) {
+            SyncedLyricsTable.insert {
+                it[songId] = whisperx
+                it[content] = byteArrayOf(1)
+            }
+            SyncedLyricsTable.insert {
+                it[songId] = insertTitledSong(albumId, "Failed transcription")
+                it[content] = null
+            }
+        }
+
+        assertEquals(
+            setOf(line, word, whisperx),
+            songService.allSongIds(true, tags = listOf(SongTag.HAS_SYNCED_LYRICS)).toSet()
+        )
+        assertEquals(
+            setOf(word, whisperx),
+            songService.allSongIds(true, tags = listOf(SongTag.HAS_WORD_SYNCED_LYRICS)).toSet()
+        )
+        assertEquals(
+            setOf(line),
+            songService.allSongIds(
+                true,
+                tags = listOf(SongTag.HAS_SYNCED_LYRICS),
+                excludeTags = listOf(SongTag.HAS_WORD_SYNCED_LYRICS)
+            ).toSet()
+        )
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `searchByLyrics finds the text of found lyrics candidates`(dialect: DbDialect) = runBlocking {
+        setup(dialect)
+        val albumId = transaction(database) { insertAlbum() }
+        val found = insertTitledSong(albumId, "Found").also {
+            insertCandidate(it, "betterlyrics", LyricsSyncLevel.WORD, plain = "lanterns drifting over water")
+            insertCandidate(it, "lrclib", LyricsSyncLevel.LINE, plain = "lanterns drifting over water")
+        }
+        val own = insertTitledSong(albumId, "Own", lyrics = "lanterns in the song tag")
+        insertTitledSong(albumId, "Missed").also {
+            insertCandidate(it, "kugou", LyricsSyncLevel.LINE, status = LyricsCandidateStatus.MISS, plain = "lanterns")
+        }
+        insertTitledSong(albumId, "Unrelated", lyrics = "something else entirely")
+
+        val lanterns = songService.searchByLyrics(0, 10, "lanterns", true, user.id)
+        assertEquals(setOf(found, own), lanterns.data.map { it.id }.toSet())
+        assertEquals(2, lanterns.total)
+
+        val drifting = songService.searchByLyrics(0, 10, "drifting", true, user.id)
+        assertEquals(listOf(found), drifting.data.map { it.id })
     }
 
     @ParameterizedTest
@@ -3067,7 +3259,6 @@ class SongServiceTest : KoinTest {
             duration = row[SongTable.duration],
             explicit = row[SongTable.explicit],
             releaseDate = getDateFromISO(row[SongTable.releaseDate]),
-            lyrics = row[SongTable.lyrics],
             path = row[SongTable.filePath],
             originalUrl = row[SongTable.originalUrl],
             trackNumber = row[SongTable.trackNumber],

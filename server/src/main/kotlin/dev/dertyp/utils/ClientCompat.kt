@@ -51,51 +51,11 @@ open class ResponseShaper(
     fun scope(contributionId: String? = null, context: UiContext = UiContext()): CompatScope =
         CompatScope(client, user, contributionId, context, call)
 
-    @Suppress("UNCHECKED_CAST")
-    suspend fun shape(value: Any?, scope: CompatScope = scope()): Any? = when (value) {
-        is Album -> shapeAlbum(value)
-        is ListenedAlbum -> value.copy(album = shapeAlbum(value.album))
-        is CollectionSearchResults -> value.copy(
-            songs = shapePaginated(value.songs as PaginatedResponse<Any?>, scope) as PaginatedResponse<CollectionSongMatch>,
-            albums = shapePaginated(value.albums as PaginatedResponse<Any?>, scope) as PaginatedResponse<Album>,
-        )
-
-        is RadioChannelSearchResults -> value.copy(
-            songs = shapePaginated(value.songs as PaginatedResponse<Any?>, scope) as PaginatedResponse<RadioChannelSongMatch>,
-            albums = shapePaginated(value.albums as PaginatedResponse<Any?>, scope) as PaginatedResponse<Album>,
-        )
-
-        is UserSong -> shapeUserSong(value)
-        is Song -> shapeSong(value)
-        is UiComponent -> shapeUiComponent(value, scope)
-        is UiRender -> scope.copy(contributionId = value.contributionId).let { renderScope ->
-            value.copy(
-                root = shapeUiComponent(value.root, renderScope),
-                toolbar = value.toolbar.map { shapeUiComponent(it, renderScope) },
-                schemaVersion = minOf(value.schemaVersion, client.uiSchemaVersion),
-            )
-        }
-
-        is UiSlotRender -> value.copy(items = value.items.map { shape(it, scope) as UiRender })
-        is UiLiveUpdate.Replace -> value.copy(child = shapeUiComponent(value.child, scope))
-        is RecentRelease -> shapeRecentReleases(listOf(value)).first()
-        is PaginatedResponse<*> -> shapePaginated(value as PaginatedResponse<Any?>, scope)
-        is List<*> -> shapeList(value, scope)
-        is Map<*, *> -> value.mapValues { shape(it.value, scope) }
-        is Flow<*> -> value.map { shape(it, scope) }
-        is NowPlaying -> value.copy(song = shapeUserSong(value.song))
-        is RecentListens -> value.copy(
-            nowPlaying = value.nowPlaying?.let { shape(it, scope) as NowPlaying },
-            recent = value.recent.map { shape(it, scope) as ListenedSong },
-        )
-
-        is ListenedSong -> value.copy(song = shapeUserSong(value.song))
-        is CollectionSongMatch -> value.copy(song = shapeUserSong(value.song))
-        is RadioChannelSongMatch -> value.copy(song = shapeUserSong(value.song))
-        is PlaybackState -> value.copy(queue = value.queue.map { shape(it, scope) as PlaybackState.QueueEntry })
-        is PlaybackState.QueueEntry.WithSong -> value.copy(song = shapeUserSong(value.song))
-        is QueueItem -> value.copy(song = value.song?.let(::shapeUserSong))
-        else -> value
+    suspend fun shape(value: Any?, scope: CompatScope = scope()): Any? {
+        val walk = Walk(scope)
+        val shaped = walk.shape(value)
+        if (walk.songIds.isNotEmpty()) activeRules.forEach { it.prefetch(walk.songIds) }
+        return shaped
     }
 
     suspend fun interceptUiInvoke(
@@ -105,16 +65,71 @@ open class ResponseShaper(
         payload: UiInvokePayload,
     ): UiInvokeResult? = activeRules.firstNotNullOfOrNull { it.interceptUiInvoke(scope, contributionId, actionId, payload) }
 
-    @Suppress("UNCHECKED_CAST")
-    private suspend fun shapeList(list: List<*>, scope: CompatScope): List<Any?> = when {
-        list.isNotEmpty() && list.all { it is RecentRelease } -> shapeRecentReleases(list as List<RecentRelease>)
-        list.isNotEmpty() && list.all { it is Album } -> shapeAlbums(list as List<Album>).map(::shapeAlbum)
-        else -> list.map { shape(it, scope) }
-    }
+    private inner class Walk(private val scope: CompatScope) {
+        val songIds = LinkedHashSet<UUID>()
 
-    private suspend fun shapePaginated(response: PaginatedResponse<Any?>, scope: CompatScope): PaginatedResponse<Any?> {
-        val data = shapeList(response.data, scope)
-        return response.copy(data = data, total = response.total + (data.size - response.data.size))
+        private fun song(song: Song): Song = shapeSong(song).also { songIds += it.id }
+
+        private fun userSong(song: UserSong): UserSong = shapeUserSong(song).also { songIds += it.id }
+
+        @Suppress("UNCHECKED_CAST")
+        suspend fun shape(value: Any?): Any? = when (value) {
+            is Album -> shapeAlbum(value)
+            is ListenedAlbum -> value.copy(album = shapeAlbum(value.album))
+            is CollectionSearchResults -> value.copy(
+                songs = shapePaginated(value.songs as PaginatedResponse<Any?>) as PaginatedResponse<CollectionSongMatch>,
+                albums = shapePaginated(value.albums as PaginatedResponse<Any?>) as PaginatedResponse<Album>,
+            )
+
+            is RadioChannelSearchResults -> value.copy(
+                songs = shapePaginated(value.songs as PaginatedResponse<Any?>) as PaginatedResponse<RadioChannelSongMatch>,
+                albums = shapePaginated(value.albums as PaginatedResponse<Any?>) as PaginatedResponse<Album>,
+            )
+
+            is UserSong -> userSong(value)
+            is Song -> song(value)
+            is UiComponent -> shapeUiComponent(value, scope)
+            is UiRender -> scope.copy(contributionId = value.contributionId).let { renderScope ->
+                value.copy(
+                    root = shapeUiComponent(value.root, renderScope),
+                    toolbar = value.toolbar.map { shapeUiComponent(it, renderScope) },
+                    schemaVersion = minOf(value.schemaVersion, client.uiSchemaVersion),
+                )
+            }
+
+            is UiSlotRender -> value.copy(items = value.items.map { shape(it) as UiRender })
+            is UiLiveUpdate.Replace -> value.copy(child = shapeUiComponent(value.child, scope))
+            is RecentRelease -> shapeRecentReleases(listOf(value)).first()
+            is PaginatedResponse<*> -> shapePaginated(value as PaginatedResponse<Any?>)
+            is List<*> -> shapeList(value)
+            is Map<*, *> -> value.mapValues { shape(it.value) }
+            is Flow<*> -> value.map { this@ResponseShaper.shape(it, scope) }
+            is NowPlaying -> value.copy(song = userSong(value.song))
+            is RecentListens -> value.copy(
+                nowPlaying = value.nowPlaying?.let { shape(it) as NowPlaying },
+                recent = value.recent.map { shape(it) as ListenedSong },
+            )
+
+            is ListenedSong -> value.copy(song = userSong(value.song))
+            is CollectionSongMatch -> value.copy(song = userSong(value.song))
+            is RadioChannelSongMatch -> value.copy(song = userSong(value.song))
+            is PlaybackState -> value.copy(queue = value.queue.map { shape(it) as PlaybackState.QueueEntry })
+            is PlaybackState.QueueEntry.WithSong -> value.copy(song = userSong(value.song))
+            is QueueItem -> value.copy(song = value.song?.let(::userSong))
+            else -> value
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        private suspend fun shapeList(list: List<*>): List<Any?> = when {
+            list.isNotEmpty() && list.all { it is RecentRelease } -> shapeRecentReleases(list as List<RecentRelease>)
+            list.isNotEmpty() && list.all { it is Album } -> shapeAlbums(list as List<Album>).map(::shapeAlbum)
+            else -> list.map { shape(it) }
+        }
+
+        private suspend fun shapePaginated(response: PaginatedResponse<Any?>): PaginatedResponse<Any?> {
+            val data = shapeList(response.data)
+            return response.copy(data = data, total = response.total + (data.size - response.data.size))
+        }
     }
 
     protected open fun shapeRecentReleases(releases: List<RecentRelease>): List<RecentRelease> =

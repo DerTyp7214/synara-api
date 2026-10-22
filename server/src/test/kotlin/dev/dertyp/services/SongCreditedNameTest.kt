@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.testing.noLyricsCandidates
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
 import dev.dertyp.db.*
@@ -61,6 +62,7 @@ class SongCreditedNameTest : KoinTest {
                 single { LibraryMergeService() }
                 single { LibraryFileDeleter() }
                 single { mockk<RedisSearchService>(relaxed = true) }
+                single { noLyricsCandidates() }
             })
         }
     }

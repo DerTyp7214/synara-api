@@ -1,5 +1,6 @@
 package dev.dertyp.services
 
+import dev.dertyp.testing.noLyricsCandidates
 import dev.dertyp.TestDatabase
 import dev.dertyp.config.ServerConfig
 import dev.dertyp.db.*
@@ -76,6 +77,7 @@ class SearchIndexIntegrationTest : KoinTest {
                 single { LibraryMergeService() }
                 single { LibraryFileDeleter() }
                 single { mockk<RedisSearchService>(relaxed = true) }
+                single { noLyricsCandidates() }
                 single { SearchIndexWorker() }
             })
         }

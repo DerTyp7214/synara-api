@@ -2,11 +2,14 @@ package dev.dertyp.services
 
 import dev.dertyp.Indexer
 import dev.dertyp.plugins.*
+import dev.dertyp.services.lyrics.LyricsCandidateService
+import dev.dertyp.services.lyrics.providers.lyricsProvidersModule
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 
 val libraryModule = module {
+    includes(lyricsProvidersModule)
     singleOf(::Indexer) { bind<IPluginIndexer>() }
     singleOf(::SongService) { bind<SongLibrary>() }
     singleOf(::AlbumService) { bind<AlbumLibrary>() }
@@ -21,6 +24,7 @@ val libraryModule = module {
     singleOf(::VersionGroupTrigger) { bind<HookSubscriber>() }
     singleOf(::DuplicateAlbumMergeTrigger) { bind<HookSubscriber>() }
     singleOf(::SearchIndexRemover) { bind<HookSubscriber>() }
+    singleOf(::LegacyLyricsCache) { bind<HookSubscriber>() }
     singleOf(::CustomAudioService)
     singleOf(::TimecodeTagService)
     singleOf(::EntityChangeRecorder) { bind<HookSubscriber>() }
@@ -30,6 +34,7 @@ val libraryModule = module {
     singleOf(::AnimatedImageService)
     singleOf(::LyricsSearch)
     singleOf(::LyricsService)
+    singleOf(::LyricsCandidateService)
     singleOf(::LrcLibService) { bind<ILrcLibService>() }
     singleOf(::SearchIndexWorker)
     singleOf(::RedisSearchService)

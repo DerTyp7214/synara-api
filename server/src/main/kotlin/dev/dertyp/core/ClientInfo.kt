@@ -75,6 +75,12 @@ enum class ClientFeature(val minApiVersion: Int, val maxApiVersion: Int? = null)
         fallback = "There is none, a client reads everything again.",
     )
     ENTITY_CHANGES(10),
+
+    @FeatureDoc(
+        introduces = "`lyricsInfo` on @Song and @UserSong. The `lyrics` field is gone, lyrics are read through @ILyricsCandidateService.",
+        fallback = "Songs carry `lyrics` with the stored plain or line-synced text and no `lyricsInfo`.",
+    )
+    LYRICS_SERVICE(11),
 }
 
 data class ClientInfo(
