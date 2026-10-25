@@ -26,7 +26,7 @@ class LyricsProviderWorker : Worker("LyricsProviderWorker") {
         songs.forEachIndexed { index, songId ->
             onProgress((index / total) * 100, "Looking up lyrics for song ${index + 1}/${songs.size}")
             try {
-                val result = lyricsCandidateService.findLyrics(songId, priority = HttpClientPriority.LOW)
+                val result = lyricsCandidateService.findLyrics(songId, priority = HttpClientPriority.LOW, timeout = null)
                 if (result.candidates.isEmpty()) withoutLyrics++ else withLyrics++
                 if (result.pending.isNotEmpty()) pending++
             } catch (e: CancellationException) {

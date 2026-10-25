@@ -17,9 +17,14 @@ import dev.dertyp.testing.insertAlbum
 import io.ktor.server.config.MapApplicationConfig
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runTest
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -31,9 +36,11 @@ import org.koin.core.context.stopKoin
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import org.koin.test.KoinTest
+import org.koin.test.get
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.seconds
 
 class LyricsProviderWorkerTest : KoinTest {
     private lateinit var database: Database
@@ -48,6 +55,29 @@ class LyricsProviderWorkerTest : KoinTest {
         override suspend fun fetch(req: LyricsRequest, priority: HttpClientPriority): ProviderResult {
             asked += req.title to priority
             return ProviderResult.Miss
+        }
+    }
+
+    private class SlowProvider(override val id: String) : LyricsProvider {
+        override val name = id
+        override val url: String? = null
+        override val usuallyWordSynced = true
+
+        override suspend fun fetch(req: LyricsRequest, priority: HttpClientPriority): ProviderResult {
+            delay(30.seconds)
+            return ProviderResult.Found(LyricsPayload.Lrc("[00:01.00]<00:01.00>Hello <00:01.50>there"))
+        }
+    }
+
+    private class FailingProvider(override val id: String) : LyricsProvider {
+        override val name = id
+        override val url: String? = null
+        override val usuallyWordSynced = true
+        var calls = 0
+
+        override suspend fun fetch(req: LyricsRequest, priority: HttpClientPriority): ProviderResult {
+            calls++
+            return ProviderResult.Error(IllegalStateException("down"))
         }
     }
 
@@ -144,5 +174,42 @@ class LyricsProviderWorkerTest : KoinTest {
 
         assertEquals(1, provider.asked.size)
         assertEquals(emptyMap<String, Any?>(), second)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `worker waits for a provider slower than the interactive deadline and stores its answer`(dialect: DbDialect): Unit = runTest {
+        setup(dialect, SlowProvider("online"))
+        val songId = song("Slow")
+
+        val results = LyricsProviderWorker().run()
+
+        assertTrue(currentTime >= 30.seconds.inWholeMilliseconds)
+        assertEquals(1, results["withLyrics"])
+        assertEquals(0, results["pending"])
+        transaction(database) {
+            val row = LyricsCandidateTable.selectAll().where { LyricsCandidateTable.songId eq songId }.single()
+            assertEquals(LyricsCandidateStatus.FOUND, row[LyricsCandidateTable.status])
+            assertEquals(LyricsSyncLevel.WORD, row[LyricsCandidateTable.syncLevel])
+        }
+        assertTrue(get<LyricsCandidateService>().songsDue().isEmpty())
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a failing provider is not asked again by the next nightly run`(dialect: DbDialect): Unit = runBlocking {
+        val provider = FailingProvider("online")
+        setup(dialect, provider)
+        val songId = song("Broken")
+
+        LyricsProviderWorker().run()
+        val second = LyricsProviderWorker().run()
+
+        assertEquals(1, provider.calls)
+        assertEquals(emptyMap<String, Any?>(), second)
+        transaction(database) {
+            val row = LyricsCandidateTable.selectAll().where { LyricsCandidateTable.songId eq songId }.single()
+            assertEquals(LyricsCandidateStatus.ERROR, row[LyricsCandidateTable.status])
+        }
     }
 }

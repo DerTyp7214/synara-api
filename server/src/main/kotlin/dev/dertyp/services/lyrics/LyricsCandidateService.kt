@@ -31,6 +31,7 @@ import java.util.Date
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -76,6 +77,7 @@ class LyricsCandidateService : Service() {
         val parsed: ParsedLyrics?,
         val match: LyricsMatch,
         val durationGapSec: Int?,
+        val failed: Boolean = false,
     )
 
     private enum class AskMode { NEW, UPGRADE, REFRESH }
@@ -126,10 +128,11 @@ class LyricsCandidateService : Service() {
         providers: List<String>? = null,
         refresh: Boolean = false,
         priority: HttpClientPriority = HttpClientPriority.HIGH,
+        timeout: Duration? = LOOKUP_TIMEOUT,
     ): LyricsSearchResult {
         val request = requestFor(songId) ?: throw IllegalArgumentException("Song not found")
         val plan = askPlan(songId, providers, refresh)
-        val (answers, pending) = askAll(plan.keys.toList(), request, priority)
+        val (answers, pending) = askAll(plan.keys.toList(), request, priority, timeout)
         return store(songId, answers, plan, pending)
     }
 
@@ -147,7 +150,7 @@ class LyricsCandidateService : Service() {
             durationSec = durationMs?.let { (it / 1000.0).roundToInt() },
         )
         val asked = selectProviders(providers).filterNot { it.id == SIDECAR }
-        val (answers, pending) = askAll(asked, request, HttpClientPriority.HIGH)
+        val (answers, pending) = askAll(asked, request, HttpClientPriority.HIGH, LOOKUP_TIMEOUT)
         val infos = providerInfos()
         val now = System.currentTimeMillis()
         val entries = answers.mapNotNull { entryOf(it, null, now) }.sortedWith(rankOrder(infos))
@@ -168,7 +171,7 @@ class LyricsCandidateService : Service() {
                 .forEach { send(toCandidate(it, state, infos, includeContent = true)) }
         }
         val collected = mutableListOf<Answer>()
-        val pending = askEach(plan.keys.toList(), request, HttpClientPriority.HIGH) { answer ->
+        val pending = askEach(plan.keys.toList(), request, HttpClientPriority.HIGH, LOOKUP_TIMEOUT) { answer ->
             collected += answer
             val entry = entryOf(answer, songId, System.currentTimeMillis()) ?: return@askEach
             send(toCandidate(entry, SongState(songId, emptyList(), emptyMap(), null), infos, true, 0))
@@ -254,26 +257,28 @@ class LyricsCandidateService : Service() {
     suspend fun songsDue(): List<UUID> {
         val providers = registry.enabled().map { it.id }
         if (providers.isEmpty()) return emptyList()
-        val due = System.currentTimeMillis() - RETRY_AFTER.inWholeMilliseconds
+        val now = System.currentTimeMillis()
         val songIds = dbQuery { SongTable.select(SongTable.id).orderBy(SongTable.inserted).map { it[SongTable.id].value } }
         return songIds.chunked(INFO_CHUNK).flatMap { chunk ->
             val rows = dbQuery { storedRows(chunk) }
-            chunk.filter { songId -> providers.any { askMode(it, rows[songId]?.get(it), refresh = false, due) != null } }
+            chunk.filter { songId -> providers.any { askMode(it, rows[songId]?.get(it), refresh = false, now) != null } }
         }
     }
 
     private suspend fun askPlan(songId: UUID, filter: List<String>?, refresh: Boolean): Map<LyricsProvider, AskMode> {
         val rows = dbQuery { storedRows(listOf(songId)) }[songId].orEmpty()
-        val due = System.currentTimeMillis() - RETRY_AFTER.inWholeMilliseconds
+        val now = System.currentTimeMillis()
         return selectProviders(filter).mapNotNull { provider ->
-            askMode(provider.id, rows[provider.id], refresh, due)?.let { provider to it }
+            askMode(provider.id, rows[provider.id], refresh, now)?.let { provider to it }
         }.toMap()
     }
 
-    private fun askMode(provider: String, row: StoredRow?, refresh: Boolean, due: Long): AskMode? = when {
+    private fun askMode(provider: String, row: StoredRow?, refresh: Boolean, now: Long): AskMode? = when {
         refresh || provider == SIDECAR -> AskMode.REFRESH
         row == null -> AskMode.NEW
-        row.fetchedAt > due -> null
+        row.status == LyricsCandidateStatus.ERROR ->
+            AskMode.NEW.takeIf { row.fetchedAt <= now - ERROR_RETRY_AFTER.inWholeMilliseconds }
+        row.fetchedAt > now - RETRY_AFTER.inWholeMilliseconds -> null
         row.status == LyricsCandidateStatus.MISS -> AskMode.NEW
         row.syncLevel == LyricsSyncLevel.LINE -> AskMode.UPGRADE
         else -> null
@@ -283,9 +288,10 @@ class LyricsCandidateService : Service() {
         providers: List<LyricsProvider>,
         request: LyricsRequest,
         priority: HttpClientPriority,
+        timeout: Duration?,
     ): Pair<List<Answer>, List<String>> {
         val answers = mutableListOf<Answer>()
-        val pending = askEach(providers, request, priority) { answers += it }
+        val pending = askEach(providers, request, priority, timeout) { answers += it }
         return answers to pending
     }
 
@@ -293,41 +299,42 @@ class LyricsCandidateService : Service() {
         providers: List<LyricsProvider>,
         request: LyricsRequest,
         priority: HttpClientPriority,
+        timeout: Duration?,
         onAnswer: suspend (Answer) -> Unit,
     ): List<String> = coroutineScope {
-        val results = Channel<Pair<String, Answer?>>(Channel.UNLIMITED)
+        val results = Channel<Answer>(Channel.UNLIMITED)
         val jobs = providers.map { provider ->
-            launch { results.send(provider.id to ask(provider, request, priority)) }
+            launch { results.send(ask(provider, request, priority)) }
         }
         val done = mutableSetOf<String>()
-        withTimeoutOrNull(LOOKUP_TIMEOUT) {
+        withTimeoutOrNull(timeout ?: Duration.INFINITE) {
             repeat(providers.size) {
-                val (id, answer) = results.receive()
-                done += id
-                if (answer != null) onAnswer(answer)
+                val answer = results.receive()
+                done += answer.provider
+                onAnswer(answer)
             }
         }
         jobs.forEach { it.cancel() }
         providers.map { it.id }.filterNot { it in done }
     }
 
-    private suspend fun ask(provider: LyricsProvider, request: LyricsRequest, priority: HttpClientPriority): Answer? {
+    private suspend fun ask(provider: LyricsProvider, request: LyricsRequest, priority: HttpClientPriority): Answer {
         val result = try {
             provider.fetch(request, priority)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             logger.warn("Lyrics provider ${provider.id} failed: ${e.message}")
-            return null
+            return Answer(provider.id, null, LyricsMatch.PROVIDER, null, failed = true)
         }
         return when (result) {
-            is ProviderResult.Error -> null
+            is ProviderResult.Error -> Answer(provider.id, null, LyricsMatch.PROVIDER, null, failed = true)
             is ProviderResult.Miss -> Answer(provider.id, null, LyricsMatch.PROVIDER, null)
             is ProviderResult.Found -> answerOf(provider.id, result, request)
         }
     }
 
-    private fun answerOf(provider: String, found: ProviderResult.Found, request: LyricsRequest): Answer? {
+    private fun answerOf(provider: String, found: ProviderResult.Found, request: LyricsRequest): Answer {
         val parsed = parsePayload(found.payload, request)?.takeIf { !it.isEmpty() }
             ?: return Answer(provider, null, LyricsMatch.PROVIDER, null)
         val title = found.trackTitle ?: parsed.title
@@ -374,6 +381,18 @@ class LyricsCandidateService : Service() {
                 val row = rows[answer.provider]
                 val parsed = answer.parsed
                 val mode = modes[answer.provider] ?: AskMode.NEW
+                if (answer.failed) {
+                    if (answer.provider == SIDECAR) continue
+                    if (row == null || row.status == LyricsCandidateStatus.MISS) {
+                        writeRow(
+                            songId, answer.provider, row?.id, LyricsCandidateStatus.ERROR, LyricsSyncLevel.PLAIN, false,
+                            LyricsMatch.PROVIDER, null, null, null
+                        )
+                    } else {
+                        touchRow(row.id)
+                    }
+                    continue
+                }
                 if (answer.provider == SIDECAR && parsed == null) {
                     if (row != null) {
                         clearPin(songId, row.id)
@@ -383,7 +402,7 @@ class LyricsCandidateService : Service() {
                     continue
                 }
                 val replace = when {
-                    row == null -> true
+                    row == null || row.status == LyricsCandidateStatus.ERROR -> true
                     parsed == null -> false
                     mode == AskMode.UPGRADE -> parsed.syncLevel == LyricsSyncLevel.WORD
                     else -> true
@@ -720,6 +739,7 @@ class LyricsCandidateService : Service() {
         const val SONG = "song"
         private val VIRTUAL_PROVIDERS = listOf(WHISPERX, SONG)
         private val RETRY_AFTER = 14.days
+        private val ERROR_RETRY_AFTER = 3.days
         private val LOOKUP_TIMEOUT = 12.seconds
         private const val INFO_CHUNK = 1000
 

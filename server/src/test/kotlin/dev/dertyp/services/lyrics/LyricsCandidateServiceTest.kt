@@ -18,8 +18,11 @@ import io.ktor.server.config.MapApplicationConfig
 import io.mockk.coEvery
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToByteArray
@@ -43,8 +46,10 @@ import java.io.File
 import java.util.UUID
 import kotlin.io.path.createTempDirectory
 import kotlin.test.assertNotNull
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalSerializationApi::class)
 class LyricsCandidateServiceTest {
@@ -64,6 +69,21 @@ class LyricsCandidateServiceTest {
 
         override suspend fun fetch(req: LyricsRequest, priority: HttpClientPriority): ProviderResult {
             calls++
+            return result
+        }
+    }
+
+    private class SlowProvider(
+        override val id: String,
+        private val after: Duration,
+        private val result: ProviderResult,
+    ) : LyricsProvider {
+        override val name = "Slow $id"
+        override val url: String? = null
+        override val usuallyWordSynced = false
+
+        override suspend fun fetch(req: LyricsRequest, priority: HttpClientPriority): ProviderResult {
+            delay(after)
             return result
         }
     }
@@ -412,9 +432,15 @@ class LyricsCandidateServiceTest {
         assertTrue(fetchedAt(songId, "online") > old + 1.days.inWholeMilliseconds)
     }
 
+    private fun status(songId: UUID, provider: String): LyricsCandidateStatus = transaction(database) {
+        LyricsCandidateTable.selectAll()
+            .where { LyricsCandidateTable.songId eq songId and (LyricsCandidateTable.provider eq provider) }
+            .single()[LyricsCandidateTable.status]
+    }
+
     @ParameterizedTest
     @EnumSource(DbDialect::class)
-    fun `misses are stored and retried after 14 days and errors are never stored`(dialect: DbDialect) = runBlocking {
+    fun `misses are retried after 14 days and errors are stored and retried after 3 days`(dialect: DbDialect): Unit = runBlocking {
         val missing = FakeProvider("missing", ProviderResult.Miss)
         val broken = FakeProvider("broken", ProviderResult.Error(IllegalStateException("down")))
         setup(dialect, missing, broken)
@@ -424,19 +450,157 @@ class LyricsCandidateServiceTest {
         service.findLyrics(songId)
 
         assertTrue(result.candidates.isEmpty())
+        assertTrue(result.pending.isEmpty())
         assertEquals(1, missing.calls)
-        assertEquals(2, broken.calls)
+        assertEquals(1, broken.calls)
         transaction(database) {
-            val rows = LyricsCandidateTable.selectAll().toList()
-            assertEquals(listOf("missing"), rows.map { it[LyricsCandidateTable.provider] })
-            assertEquals(LyricsCandidateStatus.MISS, rows.single()[LyricsCandidateTable.status])
+            val rows = LyricsCandidateTable.selectAll().associate { it[LyricsCandidateTable.provider] to it }
+            assertEquals(setOf("missing", "broken"), rows.keys)
+            assertEquals(LyricsCandidateStatus.MISS, rows.getValue("missing")[LyricsCandidateTable.status])
+            rows.getValue("broken").let {
+                assertEquals(LyricsCandidateStatus.ERROR, it[LyricsCandidateTable.status])
+                assertEquals(LyricsSyncLevel.PLAIN, it[LyricsCandidateTable.syncLevel])
+                assertEquals(LyricsMatch.PROVIDER, it[LyricsCandidateTable.match])
+                assertNull(it[LyricsCandidateTable.content])
+                assertNull(it[LyricsCandidateTable.plain])
+            }
         }
+        assertTrue(service.songsDue().isEmpty())
+
+        age(songId, "broken", 2.days.inWholeMilliseconds)
+        assertTrue(service.songsDue().isEmpty())
+        service.findLyrics(songId)
+        assertEquals(1, broken.calls)
+
+        age(songId, "broken", 4.days.inWholeMilliseconds)
+        assertEquals(listOf(songId), service.songsDue())
+        val old = System.currentTimeMillis() - 4.days.inWholeMilliseconds
+        service.findLyrics(songId)
+        assertEquals(2, broken.calls)
+        assertEquals(1, missing.calls)
+        assertEquals(LyricsCandidateStatus.ERROR, status(songId, "broken"))
+        assertTrue(fetchedAt(songId, "broken") > old + 1.days.inWholeMilliseconds)
+        assertTrue(service.songsDue().isEmpty())
+
+        age(songId, "broken", 4.days.inWholeMilliseconds)
+        broken.result = ProviderResult.Miss
+        service.findLyrics(songId)
+        assertEquals(LyricsCandidateStatus.MISS, status(songId, "broken"))
 
         age(songId, "missing", 15.days.inWholeMilliseconds)
         missing.result = found(lineLrc)
         val retried = service.findLyrics(songId)
         assertEquals(2, missing.calls)
         assertEquals(listOf("missing"), retried.candidates.map { it.provider.id })
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an error turns a miss into an error row that a later answer replaces`(dialect: DbDialect): Unit = runBlocking {
+        val provider = FakeProvider("online", ProviderResult.Miss)
+        setup(dialect, provider)
+        val songId = song()
+        service.findLyrics(songId)
+        val missId = transaction(database) { LyricsCandidateTable.selectAll().single()[LyricsCandidateTable.id].value }
+
+        age(songId, "online", 15.days.inWholeMilliseconds)
+        provider.result = ProviderResult.Error(IllegalStateException("down"))
+        service.findLyrics(songId)
+        assertEquals(2, provider.calls)
+        assertEquals(LyricsCandidateStatus.ERROR, status(songId, "online"))
+        assertEquals(missId, transaction(database) { LyricsCandidateTable.selectAll().single()[LyricsCandidateTable.id].value })
+
+        age(songId, "online", 4.days.inWholeMilliseconds)
+        provider.result = found(wordLrc)
+        val result = service.findLyrics(songId)
+        assertEquals(3, provider.calls)
+        assertEquals(LyricsCandidateStatus.FOUND, status(songId, "online"))
+        assertEquals(missId, result.candidates.single().id)
+        assertEquals(LyricsSyncLevel.WORD, result.candidates.single().syncLevel)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an error keeps a found candidate and only refreshes its fetch time`(dialect: DbDialect): Unit = runBlocking {
+        val provider = FakeProvider("online", found(lineLrc))
+        setup(dialect, provider)
+        val songId = song()
+        val first = service.findLyrics(songId).candidates.single()
+        val stored = assertNotNull(service.getLyrics(songId, first.id))
+
+        age(songId, "online", 15.days.inWholeMilliseconds)
+        val old = System.currentTimeMillis() - 15.days.inWholeMilliseconds
+        provider.result = ProviderResult.Error(IllegalStateException("down"))
+        val upgrade = service.findLyrics(songId)
+        assertEquals(2, provider.calls)
+        assertEquals(LyricsCandidateStatus.FOUND, status(songId, "online"))
+        assertTrue(fetchedAt(songId, "online") > old + 1.days.inWholeMilliseconds)
+        assertEquals(listOf(first.id), upgrade.candidates.map { it.id })
+        assertTrue(service.songsDue().isEmpty())
+
+        val refreshed = service.findLyrics(songId, refresh = true)
+        assertEquals(3, provider.calls)
+        assertEquals(listOf(first.id), refreshed.candidates.map { it.id })
+        val kept = assertNotNull(service.getLyrics(songId, first.id))
+        assertEquals(LyricsSyncLevel.LINE, kept.syncLevel)
+        assertEquals(stored.plain, kept.plain)
+        assertEquals(stored.lyrics, kept.lyrics)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `error rows are never candidates, ranked, pinned or counted`(dialect: DbDialect): Unit = runBlocking {
+        val online = FakeProvider("online", found(wordLrc))
+        val broken = FakeProvider("broken", ProviderResult.Error(IllegalStateException("down")))
+        setup(dialect, online, broken)
+        val songId = song(lyrics = lineLrc)
+
+        val result = service.findLyrics(songId)
+        val errorId = transaction(database) {
+            LyricsCandidateTable.selectAll()
+                .where { LyricsCandidateTable.songId eq songId and (LyricsCandidateTable.provider eq "broken") }
+                .single().let {
+                    assertEquals(LyricsCandidateStatus.ERROR, it[LyricsCandidateTable.status])
+                    assertEquals(0, it[LyricsCandidateTable.rank])
+                    it[LyricsCandidateTable.id].value
+                }
+        }
+
+        val expected = listOf("online", LyricsCandidateService.SONG)
+        assertEquals(expected, result.candidates.map { it.provider.id })
+        assertEquals(listOf(1, 2), result.candidates.map { it.rank })
+        assertEquals(expected, service.getLyricsCandidates(songId, includeContent = true).candidates.map { it.provider.id })
+        assertEquals("online", service.getLyrics(songId)?.provider?.id)
+        assertNull(service.getLyrics(songId, errorId))
+        assertNull(service.getLyricsCandidate(errorId))
+        assertThrows<IllegalArgumentException> { service.setPreferredLyrics(songId, errorId) }
+        service.lyricsInfoFor(listOf(songId)).getValue(songId).let {
+            assertEquals(2, it.candidateCount)
+            assertEquals(setOf(LyricsSyncLevel.WORD, LyricsSyncLevel.LINE), it.levels)
+            assertEquals("online", it.defaultProvider)
+        }
+        assertEquals(expected, service.streamLyrics(songId).toList().map { it.provider.id })
+        verify(exactly = 1) { entityEvents.updated(EntityType.SONG, listOf(songId)) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `an interactive lookup leaves a slow provider pending and a lookup without deadline stores it`(dialect: DbDialect): Unit = runTest {
+        val slow = SlowProvider("slow", 13.seconds, found(wordLrc))
+        setup(dialect, slow)
+        val songId = song()
+
+        val interactive = service.findLyrics(songId)
+        assertEquals(listOf("slow"), interactive.pending)
+        assertTrue(interactive.candidates.isEmpty())
+        transaction(database) { assertEquals(0L, LyricsCandidateTable.selectAll().count()) }
+
+        val start = currentTime
+        val waited = service.findLyrics(songId, timeout = null)
+        assertTrue(currentTime - start >= 13.seconds.inWholeMilliseconds)
+        assertTrue(waited.pending.isEmpty())
+        assertEquals(listOf("slow"), waited.candidates.map { it.provider.id })
+        assertEquals(LyricsCandidateStatus.FOUND, status(songId, "slow"))
     }
 
     @ParameterizedTest

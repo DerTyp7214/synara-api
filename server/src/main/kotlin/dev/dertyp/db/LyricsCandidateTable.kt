@@ -5,7 +5,7 @@ import dev.dertyp.services.models.LyricsSyncLevel
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.dao.id.java.UUIDTable
 
-enum class LyricsCandidateStatus { FOUND, MISS }
+enum class LyricsCandidateStatus { FOUND, MISS, ERROR }
 
 object LyricsCandidateTable : UUIDTable("lyrics_candidate") {
     val songId = reference("songId", SongTable.id, onDelete = ReferenceOption.CASCADE)
