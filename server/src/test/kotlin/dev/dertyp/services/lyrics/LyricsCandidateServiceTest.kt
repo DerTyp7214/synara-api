@@ -590,13 +590,13 @@ class LyricsCandidateServiceTest {
         setup(dialect, slow)
         val songId = song()
 
-        val interactive = service.findLyrics(songId)
+        val interactive = service.findLyrics(songId, providers = listOf("slow"))
         assertEquals(listOf("slow"), interactive.pending)
         assertTrue(interactive.candidates.isEmpty())
         transaction(database) { assertEquals(0L, LyricsCandidateTable.selectAll().count()) }
 
         val start = currentTime
-        val waited = service.findLyrics(songId, timeout = null)
+        val waited = service.findLyrics(songId, providers = listOf("slow"), timeout = null)
         assertTrue(currentTime - start >= 13.seconds.inWholeMilliseconds)
         assertTrue(waited.pending.isEmpty())
         assertEquals(listOf("slow"), waited.candidates.map { it.provider.id })
