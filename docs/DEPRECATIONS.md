@@ -8,7 +8,10 @@ The API version is `ApiVersion.CURRENT` ([ApiVersion.kt](../common-rpc/src/commo
 
 ### When `ApiVersion.LEGACY` reaches 11
 
-- The `lyrics` field of `Song` and `UserSong` was removed in version 11 (`ClientFeature.LYRICS_SERVICE`). Older clients still get it as an extra wire field. Remove `@LegacyWireField("lyrics", untilApiVersion = 10)` from both models in [Song.kt](../common-rpc/src/commonMain/kotlin/dev/dertyp/data/Song.kt), the `lyrics` entry of `LegacyWireFields` in [WireFormats.kt](../server/src/main/kotlin/dev/dertyp/core/WireFormats.kt), `LegacyLyricsCompat` from `CompatRules.all` and [LegacyLyricsCache.kt](../server/src/main/kotlin/dev/dertyp/services/LegacyLyricsCache.kt) with its Koin binding. When no rule uses `CompatRule.prefetch` any more, the hook and the song id collection in `ResponseShaper` can go as well. Rewrite the `fallback` of `LYRICS_SERVICE` to say that there is no fallback.
+- The `lyrics` field of `Song` and `UserSong` was removed in version 11 (`ClientFeature.LYRICS_SERVICE`). Older clients still get it as an extra wire field. To remove it:
+  - Remove `@LegacyWireField("lyrics", untilApiVersion = 10)` from both models in [Song.kt](../common-rpc/src/commonMain/kotlin/dev/dertyp/data/Song.kt), the `lyrics` entry of `LegacyWireFields` in [WireFormats.kt](../server/src/main/kotlin/dev/dertyp/core/WireFormats.kt), `LegacyLyricsCompat` from `CompatRules.all` and [LegacyLyricsCache.kt](../server/src/main/kotlin/dev/dertyp/services/LegacyLyricsCache.kt) with its Koin binding.
+  - When no rule uses `CompatRule.prefetch` any more, the hook and the song id collection in `ResponseShaper` can go as well.
+  - Rewrite the `fallback` of `LYRICS_SERVICE` to say that there is no fallback.
 
 ### No target version yet
 

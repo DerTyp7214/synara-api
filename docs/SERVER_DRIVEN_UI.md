@@ -153,7 +153,14 @@ Rules: one subscription per `live` node while it is on screen; cancel it when th
 
 ### Pages and the toolbar
 
-Every `UiRender` carries `contributionId`, `root`, `revision` and `schemaVersion`, the UI schema version the tree was shaped for. A `UiRender` of a `PAGE` contribution additionally has `title` (use it as the screen title) and `toolbar`: a list of components for the native app bar — `button`s (render as icon buttons using `icon`, with `label` as tooltip/accessibility text), `icon`s and `native` portals. A toolbar button with an `openMenu` action is the overflow menu. Nothing in `toolbar` appears in `root`, so the page body stays free of chrome. Slot items and home cards always have an empty `toolbar`.
+Every `UiRender` carries `contributionId`, `root`, `revision` and `schemaVersion`, the UI schema version the tree was shaped for.
+
+A `UiRender` of a `PAGE` contribution additionally has:
+
+- **`title`** (use it as the screen title)
+- **`toolbar`**: a list of components for the native app bar — `button`s (render as icon buttons using `icon`, with `label` as tooltip/accessibility text), `icon`s and `native` portals. A toolbar button with an `openMenu` action is the overflow menu.
+
+Nothing in `toolbar` appears in `root`, so the page body stays free of chrome. Slot items and home cards always have an empty `toolbar`.
 
 The `song.menu` slot (and future `*.menu` slots) is the native context menu of an entity: render each item's `root` as menu entries — contributions return `listItem`s or `button`s there, whose actions you perform when chosen.
 
@@ -206,7 +213,11 @@ Example — an ambiguous link:
 ]}
 ```
 
-An Apple Music album link or a MusicBrainz release / release-group link can point at a release that is not out yet (its release date is in the future, or Apple still marks the album incomplete). Tidal has no album for it, so nothing would normally resolve — but when Tidal is the default importer its handler offers anyway, with a description and a confirm text saying that only the tracks already released are imported now. On submit the server takes the album's track list from the platform the link came from, prefers a matching MusicBrainz release for titles, positions and ids, looks every ISRC up on Tidal and queues the tracks it finds, tagged as the album (title, track and disc numbers, cover); the receipt reports `intake.import.upcomingQueued`. Tracks that are not on Tidal yet are skipped and listed in the import log — import the album again on release day: the tracks already in the library for that release (same ISRC and barcode) are skipped and the rest is added.
+An Apple Music album link or a MusicBrainz release / release-group link can point at a release that is not out yet (its release date is in the future, or Apple still marks the album incomplete). Tidal has no album for it, so nothing would normally resolve — but when Tidal is the default importer its handler offers anyway, with a description and a confirm text saying that only the tracks already released are imported now.
+
+On submit the server takes the album's track list from the platform the link came from, prefers a matching MusicBrainz release for titles, positions and ids, looks every ISRC up on Tidal and queues the tracks it finds, tagged as the album (title, track and disc numbers, cover); the receipt reports `intake.import.upcomingQueued`.
+
+Tracks that are not on Tidal yet are skipped and listed in the import log — import the album again on release day: the tracks already in the library for that release (same ISRC and barcode) are skipped and the rest is added.
 
 Work accepted by an intake handler runs in server-side **jobs**, queued per kind (imports never block a favourites sync); the queue page shows their progress and offers Cancel.
 
@@ -224,7 +235,10 @@ When the app receives a shared URL or text, call `dispatchHook(UiHookEvent.Share
 
 Nothing is executed on the server during dispatch, so offering never has side effects.
 
-`listHookHandlers(kind?)` (`GET /ui/hookHandlers?kind=`) lists every handler that may offer to take hook events for the current user, without an event: a `UiHookHandlerInfo` per handler with `id`, `source`, `title`, `description?`, `icon?` and the `kinds` it serves. Use it to build a picker or a settings list, for example a default-importer choice. Unlike `dispatchHook` it carries no `action` and says nothing about a specific URL or text, so whether a handler accepts a given event is only known from `dispatchHook`. Its `id` matches `UiHookHandler.id` and `UiMenuItem.id`, and it is what you pass as `resolverId` to `intake`.
+`listHookHandlers(kind?)` (`GET /ui/hookHandlers?kind=`) lists every handler that may offer to take hook events for the current user, without an event: a `UiHookHandlerInfo` per handler with `id`, `source`, `title`, `description?`, `icon?` and the `kinds` it serves. Use it to build a picker or a settings list, for example a default-importer choice.
+
+- Unlike `dispatchHook` it carries no `action` and says nothing about a specific URL or text, so whether a handler accepts a given event is only known from `dispatchHook`.
+- Its `id` matches `UiHookHandler.id` and `UiMenuItem.id`, and it is what you pass as `resolverId` to `intake`.
 
 Shared URLs and text are parsed into `IntakeItem`s, so the handlers are the intake handlers (an `intake` action per importer that can take the link — "Import with Tidal", confirm "Import this link?") plus contribution offers such as the importer page's "Open in importer" (`openPage` with the text pre-filled) and, for plain text, "Search catalog".
 
@@ -324,7 +338,21 @@ Show `message` as a toast and clear the editor. A `VALIDATION_ERROR` returns `fi
 
 ### 5. Queue sheet
 
-The toolbar's Queue button is `openPage` with `modal: true`: present `subscribe("core.importer.queue")` as a sheet with a close control. The tree mirrors the iOS sheet — a stat card (`Total URLs` / `Importing`, only when URLs are queued), a "Currently Importing" header with one entry card, and a "Pending Imports" header with one card per entry; each card has an icon + "URLs"/"Favorites" title row, the joined URLs as a `listItem` whose action opens a menu listing every URL, a `progress` while it runs (value from the job when the importer reports one, otherwise indeterminate), a badge row (`TRACK`, user chip with `icon: "user"`) and a **Cancel** button (`invoke` `cancel` with the job id) in the card's `actions`. With nothing queued the root is an `emptyState` ("Queue is empty") — render it as a `ContentUnavailableView`. It re-emits on every queue change, so there is no polling.
+The toolbar's Queue button is `openPage` with `modal: true`: present `subscribe("core.importer.queue")` as a sheet with a close control. The tree mirrors the iOS sheet:
+
+- a stat card (`Total URLs` / `Importing`, only when URLs are queued)
+- a "Currently Importing" header with one entry card
+- a "Pending Imports" header with one card per entry
+
+Each card has:
+
+- an icon + "URLs"/"Favorites" title row
+- the joined URLs as a `listItem` whose action opens a menu listing every URL
+- a `progress` while it runs (value from the job when the importer reports one, otherwise indeterminate)
+- a badge row (`TRACK`, user chip with `icon: "user"`)
+- a **Cancel** button (`invoke` `cancel` with the job id) in the card's `actions`
+
+With nothing queued the root is an `emptyState` ("Queue is empty") — render it as a `ContentUnavailableView`. It re-emits on every queue change, so there is no polling.
 
 ### 6. Log in and importer settings
 

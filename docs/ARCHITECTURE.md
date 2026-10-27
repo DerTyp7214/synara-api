@@ -17,7 +17,13 @@ How the Synara server is put together: modules, request flow, package layout, an
 | `:plugin-api` | Interfaces (`ISynaraPlugin`, `IImporter`, ...) third-party plugins implement; see [PLUGINS.md](PLUGINS.md). |
 | `:mock-server` | Generates RPC and REST endpoints with dummy data for client development; see [MOCK_SERVER.md](MOCK_SERVER.md). |
 
-Three Python sidecars run alongside the server (see `docker-compose.yml`): `transcriber/` (WhisperX-based lyrics/vocal transcription and alignment), `audio-embed/` (Essentia MusiCNN audio embeddings for recommendations) and `recsys/` (Word2Vec/K-Means-based recommendation model training). Each is a small FastAPI/script service with its own `Dockerfile`. The transcriber is called over HTTP from `services/LyricsService.kt` (`analysis.transcriber`, `TRANSCRIBER_URL`) and audio-embed from `services/AudioEmbeddingService.kt` (`analysis.audioEmbedding`, `AUDIO_EMBED_URL`). The recsys sidecar has no HTTP API: `services/RecommendationService.kt` writes the training data and a `request.ready` marker into the shared directory `recsys.dataDir` (`RECSYS_DATA_DIR`, mounted into both containers) and reads the embeddings back once `result.ready` appears.
+Three Python sidecars run alongside the server (see `docker-compose.yml`). Each is a small FastAPI/script service with its own `Dockerfile`.
+
+| Sidecar | What it does | How the server talks to it |
+| --- | --- | --- |
+| `transcriber/` | WhisperX-based lyrics/vocal transcription and alignment | Over HTTP, from `services/LyricsService.kt` (`analysis.transcriber`, `TRANSCRIBER_URL`). |
+| `audio-embed/` | Essentia MusiCNN audio embeddings for recommendations | Over HTTP, from `services/AudioEmbeddingService.kt` (`analysis.audioEmbedding`, `AUDIO_EMBED_URL`). |
+| `recsys/` | Word2Vec/K-Means-based recommendation model training | No HTTP API: `services/RecommendationService.kt` writes the training data and a `request.ready` marker into the shared directory `recsys.dataDir` (`RECSYS_DATA_DIR`, mounted into both containers) and reads the embeddings back once `result.ready` appears. |
 
 ## Request flow
 
@@ -36,17 +42,35 @@ flowchart LR
     Service --> Files[("Files: audio, images, backups")]
 ```
 
-Both `/rpc/services` (kRPC over CBOR, see `Routing.kt`) and the generated REST routes reach the same service instances and go through the same wrapper chain, so behavior (caching, metrics, client compatibility, authorization, logging) is identical regardless of transport. `/rpc` and `/rpc/auth` (`registerPublicServices` in `routing/RpcRegistry.kt`) are unauthenticated: stats, auth/login, and the handshake. Their REST counterpart, `registerPublicRestServices` (`routing/RestRegistry.kt`), is mounted inside an optional `synara-auth` scope (`authenticate("synara-auth", optional = true) { ... }` in `Routing.kt`): a bearer token is honoured when present, but only functions annotated `@RestPublic` (for example the image/cover-data endpoints) work without one — the rest of that block still requires a user to resolve. Everything under `jwtService.authenticated { ... }` (`registerAuthenticatedServices`/`registerAuthenticatedRestServices`) requires a valid JWT.
+Both `/rpc/services` (kRPC over CBOR, see `Routing.kt`) and the generated REST routes reach the same service instances and go through the same wrapper chain, so behavior (caching, metrics, client compatibility, authorization, logging) is identical regardless of transport. Authentication differs by where a route is registered:
+
+- **`/rpc` and `/rpc/auth`** (`registerPublicServices` in `routing/RpcRegistry.kt`) are unauthenticated: stats, auth/login, and the handshake.
+- **Their REST counterpart**, `registerPublicRestServices` (`routing/RestRegistry.kt`), is mounted inside an optional `synara-auth` scope (`authenticate("synara-auth", optional = true) { ... }` in `Routing.kt`): a bearer token is honoured when present, but only functions annotated `@RestPublic` (for example the image/cover-data endpoints) work without one — the rest of that block still requires a user to resolve.
+- **Everything under `jwtService.authenticated { ... }`** (`registerAuthenticatedServices`/`registerAuthenticatedRestServices`) requires a valid JWT.
 
 ### Reverse proxy
 
 The standalone `:proxy` does not connect to the servers behind it. Each server dials out to `/proxy/server` and keeps that websocket open (`services/ReverseProxyService.kt`), and the proxy assigns it an instance id. Clients reach the instance at `<proxyHost>:<port>/<instanceId>/...`. A websocket upgrade is relayed as kRPC. A plain HTTP request is tunnelled over the same connection (`HttpTunnelRoute.kt` in `:proxy`) when the server registered with `http=1`, the frame format is in [Tunnel protocol](DEVELOPMENT.md#proxy-tunnel-protocol).
 
-The server replays every tunnelled request against its own HTTP port on 127.0.0.1 (`services/ReverseProxyHttpGateway.kt`), so it passes through the same authentication, wrapper chain, `Range` handling, SSE and compression as a direct request. Sessions created this way record the address 127.0.0.1, as they do over proxied kRPC. Before it replays a request, `ReverseProxyRouteAllowlist` checks the method and path against the routes the generated code registers (`GeneratedRestRoutes.manifest`) plus the hand-written auth routes (`JwtService.HTTP_ROUTES`). `OPTIONS` is allowed for any of those paths. Anything else, such as Swagger, `/api.json`, `/static`, the mirror, MCP, the radio stream routes and the Subsonic API, is answered with `404` and never reaches the router. A path with a trailing slash, a `?` or `#` inside the path, or a `.` or `..` segment after decoding is not allowed.
+The server replays every tunnelled request against its own HTTP port on 127.0.0.1 (`services/ReverseProxyHttpGateway.kt`), so it passes through the same authentication, wrapper chain, `Range` handling, SSE and compression as a direct request. Sessions created this way record the address 127.0.0.1, as they do over proxied kRPC.
+
+Before it replays a request, `ReverseProxyRouteAllowlist` checks the method and path against the routes the generated code registers (`GeneratedRestRoutes.manifest`) plus the hand-written auth routes (`JwtService.HTTP_ROUTES`):
+
+- `OPTIONS` is allowed for any of those paths.
+- Anything else, such as Swagger, `/api.json`, `/static`, the mirror, MCP, the radio stream routes and the Subsonic API, is answered with `404` and never reaches the router.
+- A path with a trailing slash, a `?` or `#` inside the path, or a `.` or `..` segment after decoding is not allowed.
 
 ### Wrapper chain
 
-Each authenticated service instance is wrapped, outermost first: `withCaching` (`utils/Caching.kt`, `@Cached` annotation) → `withMetrics` (`utils/Metrics.kt`, records to `RpcMetricsCollector` when enabled) → `withClientCompat` (`utils/ClientCompat.kt`, reshapes responses per `CompatRule` in `utils/CompatRule.kt` based on the client's declared feature support) → `withAuthorization` (`utils/Authorization.kt`, enforces `@RequiresCapability`/`@RequiresAdmin` from `common-rpc`) → `withLogging` (`utils/Logging.kt`). All five are Java dynamic proxies over the service interface; read `RpcRegistry.wrap` for the exact composition.
+Each authenticated service instance is wrapped, outermost first:
+
+1. `withCaching` (`utils/Caching.kt`, `@Cached` annotation)
+2. `withMetrics` (`utils/Metrics.kt`, records to `RpcMetricsCollector` when enabled)
+3. `withClientCompat` (`utils/ClientCompat.kt`, reshapes responses per `CompatRule` in `utils/CompatRule.kt` based on the client's declared feature support)
+4. `withAuthorization` (`utils/Authorization.kt`, enforces `@RequiresCapability`/`@RequiresAdmin` from `common-rpc`)
+5. `withLogging` (`utils/Logging.kt`)
+
+All five are Java dynamic proxies over the service interface; read `RpcRegistry.wrap` for the exact composition.
 
 ## Package layout (`server/src/main/kotlin/dev/dertyp/`)
 
@@ -65,27 +89,72 @@ Each authenticated service instance is wrapped, outermost first: `withCaching` (
 | `audio/` | Audio processing (e.g. `AtmosProcessor`, `Transcoder`, `LosslessFormat`). |
 | `docs/` | `ApiConstantsDocs`, the program behind `:server:generateApiConstantsDocs` that writes [API_CONSTANTS.md](API_CONSTANTS.md), and `MarkdownDocReferences`, which turns `@Service.member` references in its doc texts into links to the generated RPC and model docs and fails the generator on an unresolved one. |
 
-`Application.kt` is the Ktor entry point. It prints the startup banner (version, commit, build time, runtime), installs `CallLogging` and `JmDNSPlugin`, then installs Koin with `mainModule`, which only `includes(...)` one Koin module per domain: `coreModule`, `configModule`, `systemModule`, `authModule`, `libraryModule`, `listeningModule`, `audioModule`, `credentialsModule`, `metadataModule`, `releaseModule`, `importModule`, `intakeModule`, `podcastModule`, `coverModule`, `uiModule`, `scheduleModule`, `syncModule`, `hueModule`, `subsonicModule` and `mcpModule`. Each module lives next to the services it binds (`services/LibraryModule.kt`, `services/hue/HueModule.kt`, ...). `scheduleModule` binds every `@WorkerTask`-annotated class as a `Worker`, found by the `ClassGraph` scan in `services/schedule/WorkerTasks.kt`. After Koin the order is: `configureHooks()` (`Hooks.kt`, subscribes every bound `HookSubscriber` before the database is ready), `DatabaseManager.init()` (checks the schema state, runs Flyway and seeds the first admin, a refused database halts the process), `configureCache()` (`HTTP.kt`), the optional first-start setup from a backup or a mirror (`setup.fromBackup`, `setup.fromMirror`), then `CustomMigrationService.runMigrations()` and the SQLite foreign key check launched in the background on `ApplicationScope`, the seeding of the scheduled task defaults and `ScheduleService`, `configureHTTP()`, `configureRouting()`, `CoreUiContributions.register()`, `ImporterResolvers.register(...)`, `configureServices()` (`Services.kt`) and finally `configureShutdown()`, which stops every started service, cancels `ApplicationScope` and kills child processes when the application stops.
+`Application.kt` is the Ktor entry point. It prints the startup banner (version, commit, build time, runtime), installs `CallLogging` and `JmDNSPlugin`, then installs Koin with `mainModule`, which only `includes(...)` one Koin module per domain: `coreModule`, `configModule`, `systemModule`, `authModule`, `libraryModule`, `listeningModule`, `audioModule`, `credentialsModule`, `metadataModule`, `releaseModule`, `importModule`, `intakeModule`, `podcastModule`, `coverModule`, `uiModule`, `scheduleModule`, `syncModule`, `hueModule`, `subsonicModule` and `mcpModule`. Each module lives next to the services it binds (`services/LibraryModule.kt`, `services/hue/HueModule.kt`, ...). `scheduleModule` binds every `@WorkerTask`-annotated class as a `Worker`, found by the `ClassGraph` scan in `services/schedule/WorkerTasks.kt`.
+
+After Koin the order is:
+
+1. `configureHooks()` (`Hooks.kt`, subscribes every bound `HookSubscriber` before the database is ready)
+2. `DatabaseManager.init()` (checks the schema state, runs Flyway and seeds the first admin, a refused database halts the process)
+3. `configureCache()` (`HTTP.kt`)
+4. the optional first-start setup from a backup or a mirror (`setup.fromBackup`, `setup.fromMirror`)
+5. `CustomMigrationService.runMigrations()` and the SQLite foreign key check launched in the background on `ApplicationScope`
+6. the seeding of the scheduled task defaults and `ScheduleService`
+7. `configureHTTP()`
+8. `configureRouting()`
+9. `CoreUiContributions.register()`
+10. `ImporterResolvers.register(...)`
+11. `configureServices()` (`Services.kt`)
+12. finally `configureShutdown()`, which stops every started service, cancels `ApplicationScope` and kills child processes when the application stops.
 
 ## Dependency injection and service lifecycle
 
-Services are plain classes extending `services/Service.kt` (`startService`/`stopService`, both no-ops by default) registered as Koin singletons in the domain modules that `mainModule` includes. `Services.kt` (`configureServices`) hands the services that run continuous background work to `ServiceLifecycle.start(...)`, in this order: the reverse proxy connection, the local and the remote credential provider, the plugin manager, the importer state, the import service, storage, cover asset packs, cover generation, the cover auto-trigger and Hue. `SearchIndexWorker` is started only on PostgreSQL. `ServiceLifecycle` remembers every started service so `configureShutdown()` can stop them all. Most services are otherwise just called synchronously from RPC/REST handlers.
+Services are plain classes extending `services/Service.kt` (`startService`/`stopService`, both no-ops by default) registered as Koin singletons in the domain modules that `mainModule` includes. `Services.kt` (`configureServices`) hands the services that run continuous background work to `ServiceLifecycle.start(...)`, in this order:
+
+1. the reverse proxy connection
+2. the local and the remote credential provider
+3. the plugin manager
+4. the importer state
+5. the import service
+6. storage
+7. cover asset packs
+8. cover generation
+9. the cover auto-trigger
+10. Hue
+
+`SearchIndexWorker` is started only on PostgreSQL. `ServiceLifecycle` remembers every started service so `configureShutdown()` can stop them all. Most services are otherwise just called synchronously from RPC/REST handlers.
 
 ## Workers and task logs
 
-Recurring jobs are `Worker` subclasses (`services/schedule/Worker.kt`) annotated with `@WorkerTask(key, name)` (`services/schedule/WorkerTask.kt`); keys are mirrored in `common-rpc`'s `data/TaskKeys.kt`. `Worker.run` guards against overlapping runs, logs start/finish, and dynamically shares CPU threads across concurrently active workers (`runParallel`, thread grants scaled by `workers.threadMultiplier`). `ScheduledTaskConfigurationService` holds each task's schedule (cron or "after another task") and seeds `DEFAULTS` on startup; `ScheduleService` triggers workers on schedule; `ScheduledTaskLogService` records each run's progress and result for the admin UI. New periodic work should always be a `@WorkerTask`, never an ad hoc loop.
+Recurring jobs are `Worker` subclasses (`services/schedule/Worker.kt`) annotated with `@WorkerTask(key, name)` (`services/schedule/WorkerTask.kt`); keys are mirrored in `common-rpc`'s `data/TaskKeys.kt`. `Worker.run` guards against overlapping runs, logs start/finish, and dynamically shares CPU threads across concurrently active workers (`runParallel`, thread grants scaled by `workers.threadMultiplier`).
+
+- `ScheduledTaskConfigurationService` holds each task's schedule (cron or "after another task") and seeds `DEFAULTS` on startup.
+- `ScheduleService` triggers workers on schedule.
+- `ScheduledTaskLogService` records each run's progress and result for the admin UI.
+
+New periodic work should always be a `@WorkerTask`, never an ad hoc loop.
 
 ## Migrations
 
 The schema starts from one frozen base per database type, `B1_109__Base.sql`, in `server/src/main/resources/db/migrations/postgres/` and `.../sqlite/`. It runs only on an empty database. Every schema change after it is a pair of SQL files, `V1_<n>__Name.sql`, one per database type in the same two folders, applied by Flyway in `DatabaseManager.init()` on every startup. A released migration and the base are never edited. There are no Flyway Kotlin classes.
 
-Before Flyway runs, `MigrationBaseCheck` reads the migration history without writing anything. An empty database, one that holds nothing but an empty history table (a base run that failed and was rolled back), one created from the base and one that already ran the base's schema version with all custom migrations of 0.0.1 are accepted. Anything else is refused with one clear message and a non-zero exit: tables without a history, a failed migration, a schema older than the base, a migration the server does not contain, or custom migrations that never finished. A database from before the base has to be started once with the last `0.0.1` image first, see [Updating from 0.0.1](../README.md#updating-from-001).
+Before Flyway runs, `MigrationBaseCheck` reads the migration history without writing anything.
+
+- **Accepted:** an empty database, one that holds nothing but an empty history table (a base run that failed and was rolled back), one created from the base and one that already ran the base's schema version with all custom migrations of 0.0.1.
+- **Refused** with one clear message and a non-zero exit: tables without a history, a failed migration, a schema older than the base, a migration the server does not contain, or custom migrations that never finished.
+
+A database from before the base has to be started once with the last `0.0.1` image first, see [Updating from 0.0.1](../README.md#updating-from-001).
 
 Data backfills and one-off cleanups that need Kotlin logic are `migrations/custom/` classes annotated `@Migration("3.x")`, extending `CustomMigration`, numbered from `3.33`. `CustomMigrationService.runMigrations()` discovers them, sorts by version, and runs the ones not yet recorded in `CustomMigrationTable`, after Flyway has run. Writing a schema migration is described in [DEVELOPMENT.md](DEVELOPMENT.md#schema-changes).
 
 A backup records the schema version of the database it was made from, as its own `schema.version` entry and as a section of the database dump. A restore compares it before any table is cleared: a backup older than the base, one from a newer server, or one without a version whose custom migrations did not finish is refused and nothing is changed. This holds for the startup restore, `IBackupService.loadBackup` and `IDbManagementService.importData`.
 
-An import replaces the database in one transaction: `DbManagementService.importData` clears and fills every table of the dump inside a single `dbQuery` and restarts the entity change tracking as its last step. A failure at any point, such as a row that violates a constraint, rolls the whole import back, so every table including users and sessions and the tracking are as they were before. The transaction is attempted once (`maxAttempts = 1`): an SQL error reaches the caller after the first rollback instead of after the three attempts Exposed makes by default, and a transaction the import was called in is not run again either once the import has started. The dump is spooled to a temporary file and scanned completely before the transaction opens, so a truncated dump is rejected before anything is touched. The import runs on one connection for its whole duration, which on SQLite is the only connection of the pool: nothing called inside it may open a transaction of its own outside the coroutine of the import, and other database users wait until it has finished. `BackupService.loadBackup` imports the database before it restores images, and it only adds image files that are missing.
+An import replaces the database in one transaction: `DbManagementService.importData` clears and fills every table of the dump inside a single `dbQuery` and restarts the entity change tracking as its last step. A failure at any point, such as a row that violates a constraint, rolls the whole import back, so every table including users and sessions and the tracking are as they were before.
+
+- **Single attempt:** the transaction is attempted once (`maxAttempts = 1`): an SQL error reaches the caller after the first rollback instead of after the three attempts Exposed makes by default, and a transaction the import was called in is not run again either once the import has started.
+- **Pre-scan:** the dump is spooled to a temporary file and scanned completely before the transaction opens, so a truncated dump is rejected before anything is touched.
+- **One connection:** the import runs on one connection for its whole duration, which on SQLite is the only connection of the pool: nothing called inside it may open a transaction of its own outside the coroutine of the import, and other database users wait until it has finished.
+
+`BackupService.loadBackup` imports the database before it restores images, and it only adds image files that are missing.
 
 The database dump leaves out derived search data: the `search_vector` columns (every column of type `TsVectorColumnType`) and the work queue `search_index_queue`. An import ignores both in dumps that contain them. On PostgreSQL the insert triggers queue every restored song, album and artist in the transaction of the import, so the queue entries appear with its commit and vanish with a rollback, and `SearchIndexWorker` computes the vectors again.
 

@@ -56,7 +56,11 @@ Pick a transport first: Kotlin/KMP apps use the typed RPC SDK ([docs/CLIENT_KOTL
 | **Gradle** | `./gradlew :server:run` |
 | **Docker** | `docker compose up`     |
 
-`docker-compose.yml` does not compile the server. Its `api` service is built from `Dockerfile.nobuild`, which copies a prebuilt `*.jar` from the repository root into the image, so build the fat jar first with `./gradlew :server:shadowJar` and copy `server/build/libs/server-all.jar` to the repository root. The file also uses host networking, reads a `.server.env` file next to it and mounts a music directory from the host (`/home/typ/Music`), so adjust the volume paths and create `.server.env` before the first start. The root `Dockerfile` builds the server from source instead, and `docker-compose.server.yml` and `docker-compose-prod.yml` run the published `ghcr.io/dertyp7214/synara*` images.
+`docker-compose.yml` does not compile the server. Its `api` service is built from `Dockerfile.nobuild`, which copies a prebuilt `*.jar` from the repository root into the image, so build the fat jar first with `./gradlew :server:shadowJar` and copy `server/build/libs/server-all.jar` to the repository root.
+
+The file also uses host networking, reads a `.server.env` file next to it and mounts a music directory from the host (`/home/typ/Music`), so adjust the volume paths and create `.server.env` before the first start.
+
+The root `Dockerfile` builds the server from source instead, and `docker-compose.server.yml` and `docker-compose-prod.yml` run the published `ghcr.io/dertyp7214/synara*` images.
 
 ### Development Setup
 

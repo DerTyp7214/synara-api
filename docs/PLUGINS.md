@@ -37,7 +37,18 @@ Additional capabilities are opt-in through marker interfaces your plugin class c
 
 ### `PluginContext`
 
-Passed to `init`. Provides the `logger`, `storageService`, the `indexer` and `importService` of the server, the library APIs (`songLibrary`, `albumLibrary`, `artistLibrary`, `playlistLibrary`, `imageLibrary`), `metadataService` and `lrcLibService`, the `scheduleService` for scheduled tasks, the `hooks` of the plugin (see [Hooks](#hooks)), `apiKeyScopes`, `ui`, `settings` and `i18n` (see [Server-Driven UI](#server-driven-ui)), `intake` and `jobs` (see [Intake resolvers](#intake-resolvers) and [Jobs](#jobs)) and `credentials` (see [Credentials](#credentials)). Every member is available to every plugin that loads, whatever `apiVersion` it declares.
+Passed to `init`. Provides:
+
+- the `logger`, `storageService`, the `indexer` and `importService` of the server
+- the library APIs (`songLibrary`, `albumLibrary`, `artistLibrary`, `playlistLibrary`, `imageLibrary`)
+- `metadataService` and `lrcLibService`
+- the `scheduleService` for scheduled tasks
+- the `hooks` of the plugin (see [Hooks](#hooks))
+- `apiKeyScopes`, `ui`, `settings` and `i18n` (see [Server-Driven UI](#server-driven-ui))
+- `intake` and `jobs` (see [Intake resolvers](#intake-resolvers) and [Jobs](#jobs))
+- `credentials` (see [Credentials](#credentials))
+
+Every member is available to every plugin that loads, whatever `apiVersion` it declares.
 
 ## Hooks
 
@@ -254,7 +265,14 @@ The Credentials pages show your credentials under a label from your own translat
 
 ### Podcast indexes
 
-An `IPodcastIndex` is a searchable external podcast directory. `id` must be unique and stable — clients pass it to `searchIndex` — and `name` is shown to users. `isConfigured()` says whether the index can be searched right now (for example credentials are present); unconfigured indexes are skipped. `search(query, limit)` returns up to `limit` `PodcastIndexEntry` values with at least `feedUrl` and `title`; it may throw, in which case the server logs the failure and treats the index as empty for that call, and applies a 10 second timeout per index. The server normalizes and deduplicates results by feed URL across indexes and leaves out feeds it already follows.
+An `IPodcastIndex` is a searchable external podcast directory.
+
+- **`id`** must be unique and stable — clients pass it to `searchIndex`.
+- **`name`** is shown to users.
+- **`isConfigured()`** says whether the index can be searched right now (for example credentials are present); unconfigured indexes are skipped.
+- **`search(query, limit)`** returns up to `limit` `PodcastIndexEntry` values with at least `feedUrl` and `title`; it may throw, in which case the server logs the failure and treats the index as empty for that call, and applies a 10 second timeout per index.
+
+The server normalizes and deduplicates results by feed URL across indexes and leaves out feeds it already follows.
 
 The built-in `podcastindex` plugin (Podcast Index, credentials via `PODCAST_INDEX_API_KEY`/`PODCAST_INDEX_API_SECRET` or the admin settings page) is the reference implementation.
 
@@ -272,4 +290,8 @@ Plugins specify an `apiVersion`. Synara will only load plugins with an `apiVersi
 
 Current Supported API Version: **4** (adds `hookGroups` to `ISynaraPlugin`, scopes `context.hooks` to the plugin and adds the entity events, `LikesChanged`, `TimecodesChanged` and `LibraryIndexed`). Version 3 added `credentials` to `PluginContext`. Version 2 added `ui`, `settings` and `i18n` to `PluginContext` and the `IUiPlugin` interface. Plugins with version 3, 2 or 1 still load.
 
-A plugin declares its `hookGroups` from version 4 on, and a version 4 plugin that subscribes to an event of a group it does not declare does not load. A plugin with version 3, 2 or 1 could not declare groups, so the server grants it `PLAYLISTS` and `PLAYBACK` in addition to anything it declares. These are the groups of the four events that existed before version 4: `PlaylistChanged`, `CollectionChanged`, `NowPlayingChanged` and `ListenIngested`. Such a plugin keeps receiving them without a change and cannot subscribe to an event of another group. `hooks.emit` throws for every version, so a plugin that called it has to stop doing so.
+A plugin declares its `hookGroups` from version 4 on, and a version 4 plugin that subscribes to an event of a group it does not declare does not load.
+
+A plugin with version 3, 2 or 1 could not declare groups, so the server grants it `PLAYLISTS` and `PLAYBACK` in addition to anything it declares. These are the groups of the four events that existed before version 4: `PlaylistChanged`, `CollectionChanged`, `NowPlayingChanged` and `ListenIngested`. Such a plugin keeps receiving them without a change and cannot subscribe to an event of another group.
+
+`hooks.emit` throws for every version, so a plugin that called it has to stop doing so.

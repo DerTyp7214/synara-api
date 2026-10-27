@@ -156,7 +156,13 @@ A controller picks a device from `getOnlineDevices`, then sends `POST /remoteCon
 
 Playing a particular song on the target goes through the shared queue described below, so that loading a queue and starting a song in it cannot race. The controller writes the queue first — an upload or an incremental insert, any write that returns the new version — and then sends `PlayQueueItem` with the entry's `queueId` and exactly that version. The target applies at least that version of the shared queue, pulling it when it has not seen it yet, before it selects the entry, and answers `REJECTED` when the entry is not in its queue afterwards. Versions only ever grow, so a later write of the target itself cannot invalidate the check. A device that is being controlled should apply shared queue changes right away instead of asking its user about them.
 
-[`RemotePlaybackStatus`](MODELS.md#devdertypdataremoteplaybackstatus) carries `songId`, `isPlaying`, `positionMs`, `durationMs`, `isShuffled`, `repeatMode`, `volume`, `currentQueueId`, `queueVersion` and `reportedAt` (server epoch ms, stamped on receipt). `currentQueueId` is the shared queue entry the device is playing, so a controller can highlight it in the queue it shows, and `queueVersion` is the version the device has applied, so the controller knows how far behind the target is; both are null on a device that does not play its shared queue or does not take part in queue sync. A controlled device reports on every change and, while playing, every 10 to 15 seconds — the same rhythm as playback reporting above — and a controller should project the position forward instead of waiting for the next report: `positionMs + (now - reportedAt)` while playing.
+[`RemotePlaybackStatus`](MODELS.md#devdertypdataremoteplaybackstatus) carries `songId`, `isPlaying`, `positionMs`, `durationMs`, `isShuffled`, `repeatMode`, `volume`, `currentQueueId`, `queueVersion` and `reportedAt` (server epoch ms, stamped on receipt).
+
+- `currentQueueId` is the shared queue entry the device is playing, so a controller can highlight it in the queue it shows.
+- `queueVersion` is the version the device has applied, so the controller knows how far behind the target is.
+- Both are null on a device that does not play its shared queue or does not take part in queue sync.
+
+A controlled device reports on every change and, while playing, every 10 to 15 seconds — the same rhythm as playback reporting above — and a controller should project the position forward instead of waiting for the next report: `positionMs + (now - reportedAt)` while playing.
 
 | Route | Purpose |
 |---|---|
@@ -165,7 +171,13 @@ Playing a particular song on the target goes through the shared queue described 
 | `GET /remoteControl/observeStatus/{sessionId}` (SSE) | follow that status, replaying the last one immediately |
 | `POST /remoteControl/sendCommand/{sessionId}` | deliver a `PlaybackCommand` and wait for the ack |
 
-A session belonging to another user answers `403`. A target that is not online, lacks `REMOTE_CONTROL`, or a `SetVolume` outside `0..1` or sent to a device without `REMOTE_VOLUME`, all answer `400`. The two status routes check the target the same way: `GET /remoteControl/status/{sessionId}` and `GET /remoteControl/observeStatus/{sessionId}` answer `400` for a device that is not online and `403` for another user's session, so a controller reads them only for devices from `getOnlineDevices`. As with queue observation, presence and pending requests live in the memory of a single server instance — there is no cross-instance fan-out.
+Errors for remote control requests:
+
+- A session belonging to another user answers `403`.
+- A target that is not online, lacks `REMOTE_CONTROL`, or a `SetVolume` outside `0..1` or sent to a device without `REMOTE_VOLUME`, all answer `400`.
+- The two status routes check the target the same way: `GET /remoteControl/status/{sessionId}` and `GET /remoteControl/observeStatus/{sessionId}` answer `400` for a device that is not online and `403` for another user's session, so a controller reads them only for devices from `getOnlineDevices`.
+
+As with queue observation, presence and pending requests live in the memory of a single server instance — there is no cross-instance fan-out.
 
 ## The shared queue
 
