@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Commit statistics for this repository and its sibling client checkouts.
+"""Commit statistics for this repository, its client checkouts and the common-rpc submodule.
 
 See USAGE below, or run with --help.
 """
@@ -17,12 +17,16 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SIBLING_REPOS = ("synara-android", "SynaraComposeMultiplatform")
+EXTRA_REPOS = (
+    ("synara-android", "../synara-android"),
+    ("SynaraDesktop", "../SynaraComposeMultiplatform"),
+    ("common-rpc", "common-rpc"),
+)
 TITLE = "Synara"
 
 USAGE = """Collects commit history and line counts with read-only git commands and writes docs/STATS.html,
 one self-contained interactive page (data inlined, no network requests) to open locally in a browser.
-Covers this repository and the sibling checkouts next to it (see SIBLING_REPOS); a missing sibling is skipped.
+Covers this repository, the client checkouts next to it and the common-rpc submodule (see EXTRA_REPOS); a missing checkout is skipped.
 Repository paths given as arguments, or --workspace with a JetBrains jb-workspace.xml, replace that set.
 -o writes the page elsewhere, --json also saves the collected data.
 Unchanged history gives a byte-identical page. Standard library only."""
@@ -413,7 +417,7 @@ def render(data: dict, title: str) -> str:
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description=USAGE, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("repos", nargs="*", type=Path, help="git repositories to include (default: this repository and its siblings)")
+    parser.add_argument("repos", nargs="*", type=Path, help="git repositories to include (default: this repository and EXTRA_REPOS)")
     parser.add_argument("--workspace", type=Path, help="JetBrains jb-workspace.xml whose projects are the repositories")
     parser.add_argument("-o", "--output", type=Path, default=REPO_ROOT / "docs" / "STATS.html", help="page to write (default: docs/STATS.html in this repository)")
     parser.add_argument("--title", default=TITLE, help=f"page title (default: {TITLE})")
@@ -423,8 +427,8 @@ def parse_arguments():
 
 def default_targets() -> list[tuple[str, Path]]:
     targets = [(REPO_ROOT.name, REPO_ROOT)]
-    for name in SIBLING_REPOS:
-        path = REPO_ROOT.parent / name
+    for name, rel in EXTRA_REPOS:
+        path = (REPO_ROOT / rel).resolve()
         if is_repo_root(path):
             targets.append((name, path))
         else:
@@ -1292,7 +1296,7 @@ let saved = null; try { saved = localStorage.getItem('commit-stats-theme'); } ca
 setTheme(MODES.includes(params.get('theme')) ? params.get('theme') : MODES.includes(saved) ? saved : 'auto');
 
 const foot = document.getElementById('foot');
-const subs = [...new Set(R.flatMap(r => r.submodules))];
+const subs = [...new Set(R.flatMap(r => r.submodules))].filter(s => !R.some(r => r.name === s));
 [
   `History is everything reachable from the checked-out commit of each repository (${R.map(r => `${r.name} at ${r.branch} ${r.head}`).join(', ')}). Commit counts include merge commits. Line changes come from git log --numstat with rename detection off; git prints no diff for a merge, so merged work is counted once, on the commits that made it. Binary changes are skipped. Conflict resolutions made inside a merge are therefore missing from the history charts, which is why the running total can end a few hundred lines away from today's count.`,
   `Lines of code are counted in the files of the current commit, read from git rather than the working folder. Left out of line counts, on both the current totals and the history: lockfiles, IDE and Xcode project metadata, generated or vendored files (Gradle wrapper, database schema snapshots, build output, minified files), SVG and binary files.${subs.length ? ` The ${subs.join(', ')} submodule is a link to another repository; its contents are not counted in any repository here.` : ''}`,

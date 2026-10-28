@@ -34,8 +34,23 @@ jobs:
       - name: Generate relation map
         run: python3 scripts/relation-map/generate.py
 
+      - name: Checkout SynaraDesktop
+        uses: actions/checkout@v7
+        with:
+          repository: DerTyp7214/SynaraDesktop
+          path: .stats/SynaraDesktop
+          fetch-depth: 0
+
+      - name: Checkout synara-android
+        uses: actions/checkout@v7
+        with:
+          repository: DerTyp7214/synara-android
+          path: .stats/synara-android
+          token: ${{ secrets.STATS_REPOS_TOKEN }}
+          fetch-depth: 0
+
       - name: Generate commit statistics
-        run: python3 scripts/commit-stats.py
+        run: python3 scripts/commit-stats.py . common-rpc .stats/SynaraDesktop .stats/synara-android
 
       - name: Assemble site
         env:
