@@ -307,13 +307,12 @@ class LyricsCandidateService : Service() {
             launch { results.send(ask(provider, request, priority)) }
         }
         val done = mutableSetOf<String>()
-        withTimeoutOrNull(timeout ?: Duration.INFINITE) {
-            repeat(providers.size) {
-                val answer = results.receive()
-                done += answer.provider
-                onAnswer(answer)
-            }
+        suspend fun receiveAll() = repeat(providers.size) {
+            val answer = results.receive()
+            done += answer.provider
+            onAnswer(answer)
         }
+        if (timeout == null) receiveAll() else withTimeoutOrNull(timeout) { receiveAll() }
         jobs.forEach { it.cancel() }
         providers.map { it.id }.filterNot { it in done }
     }
