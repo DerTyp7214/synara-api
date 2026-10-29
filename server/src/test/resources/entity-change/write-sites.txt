@@ -253,6 +253,8 @@ server/src/main/kotlin/dev/dertyp/services/import/TidalBaseImporter.kt | importC
 server/src/main/kotlin/dev/dertyp/services/import/TidalBaseImporter.kt | updateAlbumMetadata | AlbumTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | clearPin | SongTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | persistRanks | LyricsCandidateTable | update | 1 | BOOKKEEPING: rank only, candidate ranks and lyricsInfo are computed from the current candidates on every read
+server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | refreshUncensored | LyricsCandidateTable | deleteWhere | 1 | RECORDED
+server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | refreshUncensored | SongTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | setPreferredLyrics | SongTable | update | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | setSyncedLyrics | LyricsCandidateTable | deleteWhere | 1 | RECORDED
 server/src/main/kotlin/dev/dertyp/services/lyrics/LyricsCandidateService.kt | store | LyricsCandidateTable | deleteWhere | 1 | RECORDED

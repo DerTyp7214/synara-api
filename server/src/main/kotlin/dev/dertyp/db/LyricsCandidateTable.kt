@@ -19,6 +19,7 @@ object LyricsCandidateTable : UUIDTable("lyrics_candidate") {
     val content = binary("content").nullable()
     val plain = text("plain").nullable()
     val fetchedAt = long("fetched_at")
+    val sourceCandidate = optReference("source_candidate", LyricsCandidateTable, onDelete = ReferenceOption.CASCADE)
 
     init {
         index(false, songId)

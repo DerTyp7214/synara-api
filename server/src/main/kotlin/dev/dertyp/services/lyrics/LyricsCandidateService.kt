@@ -54,6 +54,8 @@ class LyricsCandidateService : Service() {
         val fetchedAt: Long,
         val plain: Lazy<String>,
         val lyrics: Lazy<SyncedLyrics?>,
+        val sourceId: UUID? = null,
+        val rankProvider: String = provider,
     )
 
     private class StoredRow(
@@ -203,6 +205,7 @@ class LyricsCandidateService : Service() {
                     LyricsMatch.VERIFIED, null, lyrics, LyricsAssembler.plainText(lyrics)
                 )
             }
+            refreshUncensored(songId, infos)
             val state = loadState(songId, infos)!!
             persistRanks(state)
             entityEvents.updated(EntityType.SONG, listOf(songId))
@@ -424,6 +427,7 @@ class LyricsCandidateService : Service() {
                     parsed?.plain,
                 )
             }
+            if (refreshUncensored(songId, infos)) changed = true
             val state = loadState(songId, infos)!!
             persistRanks(state)
             if (changed) entityEvents.updated(EntityType.SONG, listOf(songId))
@@ -485,7 +489,8 @@ class LyricsCandidateService : Service() {
         durationGapSec: Int?,
         lyrics: SyncedLyrics?,
         plain: String?,
-    ) {
+        source: UUID? = null,
+    ): UUID {
         val content = lyrics?.let { AppCbor.encodeToByteArray(it) }
         val now = System.currentTimeMillis()
         if (existing != null) {
@@ -497,11 +502,14 @@ class LyricsCandidateService : Service() {
                 it[LyricsCandidateTable.durationGapSec] = durationGapSec
                 it[LyricsCandidateTable.content] = content
                 it[LyricsCandidateTable.plain] = plain
+                it[sourceCandidate] = source
                 it[fetchedAt] = now
             }
+            return existing
         } else {
+            val id = UUID.randomUUID()
             LyricsCandidateTable.insert {
-                it[id] = UUID.randomUUID()
+                it[LyricsCandidateTable.id] = id
                 it[LyricsCandidateTable.songId] = songId
                 it[LyricsCandidateTable.provider] = provider
                 it[LyricsCandidateTable.status] = status
@@ -511,9 +519,70 @@ class LyricsCandidateService : Service() {
                 it[LyricsCandidateTable.durationGapSec] = durationGapSec
                 it[LyricsCandidateTable.content] = content
                 it[LyricsCandidateTable.plain] = plain
+                it[sourceCandidate] = source
                 it[fetchedAt] = now
             }
+            return id
         }
+    }
+
+    suspend fun refreshUncensored(songIds: Collection<UUID>) {
+        val infos = providerInfos()
+        songIds.distinct().chunked(UNCENSOR_CHUNK).forEach { chunk ->
+            dbQuery {
+                val changed = chunk.filter { refreshUncensored(it, infos) }
+                changed.forEach { songId -> loadState(songId, infos)?.let(::persistRanks) }
+                if (changed.isNotEmpty()) entityEvents.updated(EntityType.SONG, changed)
+            }
+        }
+    }
+
+    private fun refreshUncensored(songId: UUID, infos: Map<String, LyricsProviderInfo>): Boolean {
+        val candidates = LyricsCandidateTable.select(LyricsCandidateTable.provider, LyricsCandidateTable.plain)
+            .where { LyricsCandidateTable.songId eq songId }
+            .andWhere { LyricsCandidateTable.status eq LyricsCandidateStatus.FOUND }
+            .map { it[LyricsCandidateTable.provider] to it[LyricsCandidateTable.plain] }
+        val relevant = candidates.any { (provider, plain) ->
+            provider == UNCENSORED || (provider !in NEVER_UNCENSORED && plain != null && LyricsUncensor.hasMask(plain))
+        }
+        if (!relevant) return false
+        val state = loadState(songId, infos) ?: return false
+        val existing = state.entries.firstOrNull { it.provider == UNCENSORED }
+        val target = state.entries.firstOrNull {
+            it.provider !in NEVER_UNCENSORED && !it.instrumental && LyricsUncensor.hasMask(it.plain.value)
+        }
+        val restored = target?.let { source ->
+            val donors = state.entries.filter { it.id != source.id && it.provider != UNCENSORED }
+                .map { UncensorDonor(it.lyrics.value, it.plain.value) }
+            val lyrics = source.lyrics.value
+            if (lyrics != null) LyricsUncensor.uncensor(lyrics, donors)?.let { it to LyricsAssembler.plainText(it) }
+            else LyricsUncensor.uncensorPlain(source.plain.value, donors)?.let { null to it }
+        }
+        if (target == null || restored == null) {
+            if (existing == null) return false
+            clearPin(songId, existing.id)
+            LyricsCandidateTable.deleteWhere { LyricsCandidateTable.id eq existing.id }
+            return true
+        }
+        val (lyrics, plain) = restored
+        val unchanged = existing != null &&
+            existing.sourceId == target.id &&
+            existing.syncLevel == target.syncLevel &&
+            existing.match == target.match &&
+            existing.durationGapSec == target.durationGapSec &&
+            existing.plain.value == plain &&
+            existing.lyrics.value == lyrics
+        val id = existing?.takeIf { unchanged }?.id ?: writeRow(
+            songId, UNCENSORED, existing?.id, LyricsCandidateStatus.FOUND, target.syncLevel, false,
+            target.match, target.durationGapSec, lyrics, plain, target.id
+        )
+        val movePin = existing == null && state.preferred == target.id
+        if (movePin) {
+            SongTable.update({ SongTable.id eq songId }) {
+                it[preferredLyricsCandidate] = id
+            }
+        }
+        return !unchanged || movePin
     }
 
     private fun clearPin(songId: UUID, candidateId: UUID) {
@@ -548,12 +617,15 @@ class LyricsCandidateService : Service() {
             .where { SongTable.id eq songId }
             .singleOrNull() ?: return null
         val rows = LyricsCandidateTable.selectAll().where { LyricsCandidateTable.songId eq songId }.toList()
+        val providers = rows.associate { it[LyricsCandidateTable.id].value to it[LyricsCandidateTable.provider] }
         val stored = rows.filter { it[LyricsCandidateTable.status] == LyricsCandidateStatus.FOUND }.map { row ->
             val content = row[LyricsCandidateTable.content]
+            val provider = row[LyricsCandidateTable.provider]
+            val sourceId = row[LyricsCandidateTable.sourceCandidate]?.value
             Entry(
                 id = row[LyricsCandidateTable.id].value,
                 songId = songId,
-                provider = row[LyricsCandidateTable.provider],
+                provider = provider,
                 syncLevel = row[LyricsCandidateTable.syncLevel],
                 instrumental = row[LyricsCandidateTable.instrumental],
                 match = row[LyricsCandidateTable.match],
@@ -561,6 +633,8 @@ class LyricsCandidateService : Service() {
                 fetchedAt = row[LyricsCandidateTable.fetchedAt],
                 plain = lazyOf(row[LyricsCandidateTable.plain].orEmpty()),
                 lyrics = lazy { content?.let { AppCbor.decodeFromByteArray<SyncedLyrics>(it) } },
+                sourceId = sourceId,
+                rankProvider = rankProvider(provider, sourceId, providers),
             )
         }
         val whisperx = SyncedLyricsTable.select(SyncedLyricsTable.content)
@@ -584,7 +658,7 @@ class LyricsCandidateService : Service() {
         val songs = SongTable.select(SongTable.id, SongTable.lyrics, SongTable.preferredLyricsCandidate, SongTable.inserted)
             .where { SongTable.id inList chunk }
             .toList()
-        val stored = LyricsCandidateTable.select(
+        val rows = LyricsCandidateTable.select(
             LyricsCandidateTable.id,
             LyricsCandidateTable.songId,
             LyricsCandidateTable.provider,
@@ -593,22 +667,29 @@ class LyricsCandidateService : Service() {
             LyricsCandidateTable.match,
             LyricsCandidateTable.durationGapSec,
             LyricsCandidateTable.fetchedAt,
+            LyricsCandidateTable.sourceCandidate,
         ).where { LyricsCandidateTable.songId inList chunk }
             .andWhere { LyricsCandidateTable.status eq LyricsCandidateStatus.FOUND }
-            .groupBy({ it[LyricsCandidateTable.songId].value }) { row ->
-                Entry(
-                    id = row[LyricsCandidateTable.id].value,
-                    songId = row[LyricsCandidateTable.songId].value,
-                    provider = row[LyricsCandidateTable.provider],
-                    syncLevel = row[LyricsCandidateTable.syncLevel],
-                    instrumental = row[LyricsCandidateTable.instrumental],
-                    match = row[LyricsCandidateTable.match],
-                    durationGapSec = row[LyricsCandidateTable.durationGapSec],
-                    fetchedAt = row[LyricsCandidateTable.fetchedAt],
-                    plain = lazyOf(""),
-                    lyrics = lazyOf(null),
-                )
-            }
+            .toList()
+        val providers = rows.associate { it[LyricsCandidateTable.id].value to it[LyricsCandidateTable.provider] }
+        val stored = rows.groupBy({ it[LyricsCandidateTable.songId].value }) { row ->
+            val provider = row[LyricsCandidateTable.provider]
+            val sourceId = row[LyricsCandidateTable.sourceCandidate]?.value
+            Entry(
+                id = row[LyricsCandidateTable.id].value,
+                songId = row[LyricsCandidateTable.songId].value,
+                provider = provider,
+                syncLevel = row[LyricsCandidateTable.syncLevel],
+                instrumental = row[LyricsCandidateTable.instrumental],
+                match = row[LyricsCandidateTable.match],
+                durationGapSec = row[LyricsCandidateTable.durationGapSec],
+                fetchedAt = row[LyricsCandidateTable.fetchedAt],
+                plain = lazyOf(""),
+                lyrics = lazyOf(null),
+                sourceId = sourceId,
+                rankProvider = rankProvider(provider, sourceId, providers),
+            )
+        }
         val whisperx = SyncedLyricsTable.select(SyncedLyricsTable.songId)
             .where { SyncedLyricsTable.songId inList chunk }
             .andWhere { SyncedLyricsTable.content.isNotNull() }
@@ -669,9 +750,12 @@ class LyricsCandidateService : Service() {
         )
     }
 
+    private fun rankProvider(provider: String, sourceId: UUID?, providers: Map<UUID, String>): String =
+        if (provider == UNCENSORED) sourceId?.let(providers::get) ?: provider else provider
+
     private fun rankOrder(infos: Map<String, LyricsProviderInfo>): Comparator<Entry> = compareBy<Entry>(
         {
-            when (it.provider) {
+            when (it.rankProvider) {
                 MANUAL -> 0
                 SIDECAR -> 1
                 else -> 2
@@ -680,8 +764,9 @@ class LyricsCandidateService : Service() {
         { -rankLevel(it).ordinal },
         { if (it.provider == WHISPERX) 1 else 0 },
         { it.match.ordinal },
-        { infos[it.provider]?.priority ?: Int.MAX_VALUE },
+        { infos[it.rankProvider]?.priority ?: Int.MAX_VALUE },
         { it.durationGapSec?.let(::abs) ?: Int.MAX_VALUE },
+        { if (it.provider == UNCENSORED) 0 else 1 },
     )
 
     private fun rankLevel(entry: Entry): LyricsSyncLevel =
@@ -694,6 +779,7 @@ class LyricsCandidateService : Service() {
             LyricsProviderInfo(MANUAL, "Manual", null, enabled = true, priority = enabled.size),
             LyricsProviderInfo(WHISPERX, "WhisperX", null, enabled = true, priority = enabled.size + 1),
             LyricsProviderInfo(SONG, "Song", null, enabled = true, priority = enabled.size + 2),
+            LyricsProviderInfo(UNCENSORED, "Uncensored", null, enabled = true, priority = enabled.size + 3),
         )
         return (enabled + virtual).associateBy { it.id }
     }
@@ -736,7 +822,10 @@ class LyricsCandidateService : Service() {
         const val SIDECAR = SidecarLyricsProvider.ID
         const val WHISPERX = "whisperx"
         const val SONG = "song"
+        const val UNCENSORED = "uncensored"
         private val VIRTUAL_PROVIDERS = listOf(WHISPERX, SONG)
+        private val NEVER_UNCENSORED = setOf(MANUAL, SIDECAR, UNCENSORED, WHISPERX, SONG)
+        private const val UNCENSOR_CHUNK = 200
         private val RETRY_AFTER = 14.days
         private val ERROR_RETRY_AFTER = 3.days
         private val LOOKUP_TIMEOUT = 12.seconds

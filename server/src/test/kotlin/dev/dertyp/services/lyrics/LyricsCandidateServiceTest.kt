@@ -29,6 +29,7 @@ import kotlinx.serialization.encodeToByteArray
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -703,6 +704,137 @@ class LyricsCandidateServiceTest {
         assertNull(result.candidates.single().songId)
         assertEquals(result.candidates.single().id, result.defaultCandidateId)
         transaction(database) { assertEquals(0L, LyricsCandidateTable.selectAll().count()) }
+    }
+
+    private val maskedWordLrc =
+        "[00:01.00]<00:01.00>Bad <00:01.40>***** <00:01.80>on <00:02.20>all\n[00:03.00]<00:03.00>General <00:03.40>words"
+    private val cleanWordLrc =
+        "[00:01.00]<00:01.00>Bad <00:01.40>girl <00:01.80>on <00:02.20>all\n[00:03.00]<00:03.00>General <00:03.40>words"
+    private val cleanLineLrc = "[00:00.80]Bad bitch on all\n[00:03.00]General words"
+
+    private fun uncensorProviders() = arrayOf(FakeProvider("masked", found(maskedWordLrc)), FakeProvider("clean", found(cleanLineLrc)))
+
+    private fun storedPlain(songId: UUID, provider: String): String? = transaction(database) {
+        LyricsCandidateTable.selectAll()
+            .where { LyricsCandidateTable.songId eq songId and (LyricsCandidateTable.provider eq provider) }
+            .singleOrNull()?.get(LyricsCandidateTable.plain)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a masked word candidate gets an uncensored candidate ranked directly above it as the default`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect, *uncensorProviders())
+        val songId = song()
+
+        val result = service.findLyrics(songId)
+
+        assertEquals(
+            listOf(LyricsCandidateService.UNCENSORED, "masked", "clean"),
+            result.candidates.map { it.provider.id },
+        )
+        val uncensored = result.candidates.first()
+        assertEquals(uncensored.id, result.defaultCandidateId)
+        assertEquals(LyricsSyncLevel.WORD, uncensored.syncLevel)
+        assertEquals("Bad bitch on all\nGeneral words", uncensored.plain)
+        assertEquals("Bad ***** on all\nGeneral words", storedPlain(songId, "masked"))
+        val lyrics = assertNotNull(service.getLyrics(songId)?.lyrics)
+        assertEquals(listOf("Bad ", "bitch ", "on ", "all"), lyrics.lines.first().words.map { it.text })
+        val source = result.candidates.single { it.provider.id == "masked" }
+        transaction(database) {
+            val row = LyricsCandidateTable.selectAll().where { LyricsCandidateTable.id eq uncensored.id }.single()
+            assertEquals(source.id, row[LyricsCandidateTable.sourceCandidate]?.value)
+            assertEquals(1, row[LyricsCandidateTable.rank])
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a pin on the censored source moves to the new uncensored candidate and a later pin on the source stays`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect, *uncensorProviders())
+        val songId = song()
+        val first = service.findLyrics(songId, providers = listOf("masked"))
+        val source = first.candidates.single { it.provider.id == "masked" }
+        service.setPreferredLyrics(songId, source.id)
+
+        val created = service.findLyrics(songId, providers = listOf("clean"))
+
+        val uncensored = created.candidates.single { it.provider.id == LyricsCandidateService.UNCENSORED }
+        assertEquals(uncensored.id, created.defaultCandidateId)
+        assertTrue(uncensored.preferred)
+        assertFalse(created.candidates.single { it.id == source.id }.preferred)
+
+        service.setPreferredLyrics(songId, source.id)
+        val refreshed = service.findLyrics(songId, refresh = true)
+
+        assertEquals(source.id, refreshed.defaultCandidateId)
+        assertFalse(refreshed.candidates.single { it.provider.id == LyricsCandidateService.UNCENSORED }.preferred)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `the uncensored candidate disappears when a refresh removes the masks`(dialect: DbDialect): Unit = runBlocking {
+        val masked = FakeProvider("masked", found(maskedWordLrc))
+        setup(dialect, masked, FakeProvider("clean", found(cleanLineLrc)))
+        val songId = song()
+        val first = service.findLyrics(songId)
+        val uncensored = first.candidates.first { it.provider.id == LyricsCandidateService.UNCENSORED }
+        service.setPreferredLyrics(songId, uncensored.id)
+
+        masked.result = found(cleanWordLrc)
+        val refreshed = service.findLyrics(songId, refresh = true)
+
+        assertEquals(listOf("masked", "clean"), refreshed.candidates.map { it.provider.id })
+        assertEquals(refreshed.candidates.first().id, refreshed.defaultCandidateId)
+        assertNull(storedPlain(songId, LyricsCandidateService.UNCENSORED))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a masked manual candidate gets no uncensored candidate`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect, FakeProvider("clean", found(cleanLineLrc)))
+        val songId = song()
+        service.findLyrics(songId)
+
+        val result = service.setSyncedLyrics(
+            songId,
+            SyncedLyrics(listOf(line(1000, "Bad ***** on all", listOf(word(1000, "Bad "), word(1400, "***** "), word(1800, "on "), word(2200, "all"))))),
+        )
+
+        assertEquals(listOf(LyricsCandidateService.MANUAL, "clean"), result.candidates.map { it.provider.id })
+        assertNull(storedPlain(songId, LyricsCandidateService.UNCENSORED))
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `lyricsInfoFor reports the uncensored candidate as the default`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect, *uncensorProviders())
+        val songId = song()
+        val result = service.findLyrics(songId)
+
+        val info = service.lyricsInfoFor(listOf(songId)).getValue(songId)
+
+        assertEquals(LyricsCandidateService.UNCENSORED, info.defaultProvider)
+        assertEquals(result.defaultCandidateId, info.defaultCandidateId)
+        assertEquals(LyricsSyncLevel.WORD, info.syncLevel)
+        assertEquals(3, info.candidateCount)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `refreshUncensored builds the missing uncensored candidate of stored candidates`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect, *uncensorProviders())
+        val songId = song()
+        service.findLyrics(songId)
+        transaction(database) {
+            LyricsCandidateTable.deleteWhere { LyricsCandidateTable.provider eq LyricsCandidateService.UNCENSORED }
+        }
+
+        service.refreshUncensored(listOf(songId))
+
+        val candidates = service.getLyricsCandidates(songId).candidates
+        assertEquals(listOf(LyricsCandidateService.UNCENSORED, "masked", "clean"), candidates.map { it.provider.id })
+        assertEquals(listOf(1, 2, 3), candidates.map { it.rank })
+        assertEquals("Bad bitch on all\nGeneral words", storedPlain(songId, LyricsCandidateService.UNCENSORED))
     }
 
     @ParameterizedTest
