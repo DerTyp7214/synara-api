@@ -13,7 +13,28 @@ object LyricsUncensor {
     private const val UP: Byte = 0
     private const val LEFT: Byte = 1
     private const val DIAG: Byte = 2
+    private const val EXACT = 4
+    private const val FIT_LENGTH = 3
+    private const val FIT = 2
     private val MAX_TIME_GAP = 5.seconds
+    private val ALIASES = mapOf(
+        "tryna" to "trying to",
+        "gonna" to "going to",
+        "wanna" to "want to",
+        "gotta" to "got to",
+        "outta" to "out of",
+        "kinda" to "kind of",
+        "lemme" to "let me",
+        "gimme" to "give me",
+        "ya" to "you",
+        "cause" to "because",
+        "cuz" to "because",
+        "cos" to "because",
+        "em" to "them",
+        "lil" to "little",
+        "tho" to "though",
+        "thru" to "through",
+    ).mapValues { it.value.split(' ') }
     private val dashMask = Regex("(?<=\\p{L})-{2,}(?=\\p{L})")
     private val tokenPattern = Regex("\\S+")
 
@@ -34,7 +55,14 @@ object LyricsUncensor {
         val time: Duration?,
     )
 
-    private class DonorToken(val core: String, val norm: String, val masked: Boolean, val time: Duration?)
+    private class DonorToken(
+        val core: String,
+        val norm: String,
+        val surface: String,
+        val masked: Boolean,
+        val partial: Boolean,
+        val time: Duration?,
+    )
 
     private class Replacement(val token: TargetToken, val text: String)
 
@@ -180,10 +208,16 @@ object LyricsUncensor {
     private fun score(target: TargetToken, donor: DonorToken): Int {
         if (target.time != null && donor.time != null && (target.time - donor.time).absoluteValue > MAX_TIME_GAP) return 0
         if (donor.masked) return 0
-        val mask = target.mask ?: return if (target.norm == donor.norm) 2 else 0
-        val fits = donor.norm.length > mask.prefix.length + mask.suffix.length &&
-            donor.norm.startsWith(mask.prefix) && donor.norm.endsWith(mask.suffix)
-        return if (fits) 1 else 0
+        val mask = target.mask ?: return if (target.norm == donor.norm) EXACT else 0
+        if (donor.partial) return 0
+        val word = donor.surface
+        val fits = word.length > mask.prefix.length + mask.suffix.length &&
+            word.startsWith(mask.prefix) && word.endsWith(mask.suffix)
+        return when {
+            !fits -> 0
+            word.length == target.core.length -> FIT_LENGTH
+            else -> FIT
+        }
     }
 
     private fun targetTokens(lines: List<Line>): List<TargetToken> {
@@ -202,22 +236,24 @@ object LyricsUncensor {
                 if (from >= to) continue
                 val core = found.value.substring(from, to)
                 val mask = maskOf(core)
-                val norm = normalize(core)
-                if (mask == null && norm.isEmpty()) continue
+                val norms = if (mask != null) listOf(normalize(core)) else canonical(found.value.substring(from))
+                if (norms.isEmpty()) continue
                 val start = found.range.first + from
                 val end = found.range.first + to
                 val segment = segmentAt(offsets, line.parts, start)
                 val sameSegment = segment >= 0 && end <= offsets[segment] + line.parts[segment].length
-                tokens += TargetToken(
-                    line = lineIndex,
-                    segment = if (sameSegment) segment else -1,
-                    start = if (sameSegment) start - offsets[segment] else 0,
-                    end = if (sameSegment) end - offsets[segment] else 0,
-                    core = core,
-                    norm = norm,
-                    mask = mask,
-                    time = line.time,
-                )
+                norms.forEach { norm ->
+                    tokens += TargetToken(
+                        line = lineIndex,
+                        segment = if (sameSegment) segment else -1,
+                        start = if (sameSegment) start - offsets[segment] else 0,
+                        end = if (sameSegment) end - offsets[segment] else 0,
+                        core = core,
+                        norm = norm,
+                        mask = mask,
+                        time = line.time,
+                    )
+                }
             }
         }
         return tokens
@@ -231,13 +267,28 @@ object LyricsUncensor {
             ?.map { line -> (line.text ?: line.words.joinToString(" ") { it.text }) to line.startTime }
             ?: donor.plain.lines().map { it to null }
         return lines.flatMap { (text, time) ->
-            tokenPattern.findAll(text).mapNotNull { found ->
-                val core = coreOf(found.value)
-                val masked = maskOf(core) != null
-                val norm = normalize(core)
-                if (!masked && norm.isEmpty()) null else DonorToken(core, norm, masked, time)
+            tokenPattern.findAll(text).flatMap { found ->
+                val (from, to) = coreRange(found.value)
+                val core = found.value.substring(from, to)
+                val surface = normalize(core)
+                when {
+                    maskOf(core) != null -> listOf(DonorToken(core, surface, surface, masked = true, partial = false, time = time))
+                    else -> {
+                        val norms = canonical(found.value.substring(from))
+                        norms.map { DonorToken(core, it, surface, masked = false, partial = norms.size > 1, time = time) }
+                    }
+                }
             }.toList()
         }
+    }
+
+    private fun canonical(text: String): List<String> {
+        val raw = letters(text)
+        val word = raw.trim('\'')
+        if (word.isEmpty()) return emptyList()
+        val stem = word.removeSuffix("in")
+        val ing = if (stem.isNotEmpty() && stem != word && raw.endsWith("in'")) stem + "ing" else word
+        return ALIASES[ing] ?: listOf(ing)
     }
 
     private fun coreRange(token: String): Pair<Int, Int> {
@@ -264,14 +315,16 @@ object LyricsUncensor {
         return Mask(normalize(core.substring(0, from)), normalize(core.substring(to)))
     }
 
-    private fun normalize(text: String): String = buildString {
+    private fun normalize(text: String): String = letters(text).trim('\'')
+
+    private fun letters(text: String): String = buildString {
         for (char in text.lowercase()) {
             when {
                 char.isLetterOrDigit() || char == '\'' -> append(char)
                 char == '’' -> append('\'')
             }
         }
-    }.trim('\'')
+    }
 
     private fun spreadChars(text: String, start: Duration, end: Duration): List<LyricChar> {
         val chars = text.codePoints().toArray().map { String(Character.toChars(it)) }

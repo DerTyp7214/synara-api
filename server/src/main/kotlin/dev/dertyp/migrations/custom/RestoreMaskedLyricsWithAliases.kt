@@ -11,11 +11,11 @@ import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 
-@Migration("3.34")
-class RestoreMaskedLyrics : CustomMigration() {
+@Migration("3.35")
+class RestoreMaskedLyricsWithAliases : CustomMigration() {
     private val lyricsCandidateService by inject<LyricsCandidateService>()
 
-    override suspend fun migrate() = logTask("Restore Masked Lyrics") {
+    override suspend fun migrate() = logTask("Restore Masked Lyrics With Aliases") {
         val songIds = dbQuery {
             LyricsCandidateTable.select(LyricsCandidateTable.songId)
                 .where { LyricsCandidateTable.status eq LyricsCandidateStatus.FOUND }

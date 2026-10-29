@@ -104,6 +104,80 @@ class LyricsUncensorTest {
     }
 
     @Test
+    fun `neighbours spelled as a common alias anchor a mask`() {
+        val target = synced(
+            wordLine(83_000, "Who ", "else ", "is ", "really ", "trying ", "to ", "**** ", "with ", "Hollywood ", "Cole"),
+            wordLine(90_000, "And ", "I ", "got ", "my ", "B's ", "with ", "me ", "like ", "some ", "honey ", "in ", "this ", "***** ", "you ", "dig"),
+        )
+        val lrclib = donor(
+            textLine(82_600, "Who else really tryna fuck with Hollywood Cole? I'm with Marley G bro"),
+            textLine(89_800, "And I got my B's with me like some honey in this bitch, ya dig?"),
+        )
+
+        val result = assertNotNull(LyricsUncensor.uncensor(target, listOf(lrclib)))
+
+        assertEquals(
+            listOf(
+                "Who else is really trying to fuck with Hollywood Cole",
+                "And I got my B's with me like some honey in this bitch you dig",
+            ),
+            texts(result),
+        )
+    }
+
+    @Test
+    fun `an alias in the target expands to the words of the donor`() {
+        val target = synced(wordLine(1_000, "Who ", "else ", "tryna ", "**** ", "with ", "me"))
+        val result = assertNotNull(LyricsUncensor.uncensor(target, listOf(donor(textLine(1_000, "Who else trying to fuck with me")))))
+        assertEquals(listOf("Who else tryna fuck with me"), texts(result))
+    }
+
+    @Test
+    fun `a dropped g counts as the ing form on both sides`() {
+        val target = synced(
+            wordLine(40_000, "N***a ", "nothing ", "short ", "of ", "that"),
+            wordLine(43_000, "Keep ", "on ", "rollin' ", "***** ", "for ", "real"),
+        )
+        val lrclib = donor(
+            textLine(39_700, "Hip-hop, I'm the heart of that, nigga nothin' short of that"),
+            textLine(43_000, "Keep on rolling bitch for real"),
+        )
+
+        val result = assertNotNull(LyricsUncensor.uncensor(target, listOf(lrclib)))
+
+        assertEquals(listOf("Nigga nothing short of that", "Keep on rollin' bitch for real"), texts(result))
+    }
+
+    @Test
+    fun `a word without an apostrophe keeps its in ending`() {
+        val target = synced(wordLine(1_000, "Let ", "me ", "**** ", "in ", "again"))
+        assertNull(LyricsUncensor.uncensor(target, listOf(donor(textLine(1_000, "Let me damn ing again")))))
+    }
+
+    @Test
+    fun `a trailing ad-lib does not take the mask from a word of the same length`() {
+        val target = synced(wordLine(120_000, "Alright ", "now ", "somebody ", "show ", "some ", "money ", "in ", "this ", "*****"))
+        val lrclib = donor(textLine(120_400, "Now somebody show some money in this bitch (yeah)"))
+
+        val result = assertNotNull(LyricsUncensor.uncensor(target, listOf(lrclib)))
+
+        assertEquals(listOf("Alright now somebody show some money in this bitch"), texts(result))
+    }
+
+    @Test
+    fun `a mask never takes part of a multi word alias`() {
+        val target = synced(wordLine(1_000, "You ", "***** ", "to ", "go"))
+        assertNull(LyricsUncensor.uncensor(target, listOf(donor(textLine(1_000, "You gotta go")))))
+    }
+
+    @Test
+    fun `a mask takes the original spelling of a single word alias`() {
+        val target = synced(wordLine(1_000, "I ", "see ", "**"))
+        val result = assertNotNull(LyricsUncensor.uncensor(target, listOf(donor(textLine(1_000, "I see ya")))))
+        assertEquals(listOf("I see ya"), texts(result))
+    }
+
+    @Test
     fun `consecutive masked words are restored together`() {
         val target = synced(wordLine(1_000, "Oh ", "**** ", "**** ", "man"))
         val result = assertNotNull(LyricsUncensor.uncensor(target, listOf(donor(textLine(1_000, "Oh shit fuck man")))))
