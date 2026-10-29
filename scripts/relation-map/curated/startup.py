@@ -92,7 +92,7 @@ def build(root):
         {"id": "halt-setup-failed", "label": "halt(1)", "sub": "backup schema refused", "group": "exit",
          "desc": "loadBackup threw BackupSchemaException. The message is logged and the process ends with exit code 1. Any other exception is not caught here.", "meta": [], "src": APP + ":144"},
         {"id": "background-maintenance", "label": "Background maintenance", "sub": "one launch, three calls", "group": "background",
-         "desc": "cleanupRunningLogs removes task log rows left in RUNNING. CustomMigrationService.runMigrations runs the custom migrations it finds in the package dev.dertyp.migrations.custom, which holds none in the main sources at present. SqliteForeignKeyCheck runs PRAGMA foreign_key_check on SQLite. The three run in one coroutine on Dispatchers.IO, and the steps after the launch do not wait for it.",
+         "desc": "cleanupRunningLogs removes task log rows left in RUNNING. CustomMigrationService.runMigrations runs the custom migrations it finds in the package dev.dertyp.migrations.custom, which holds UncensorLyricsCandidates at present. SqliteForeignKeyCheck runs PRAGMA foreign_key_check on SQLite. The three run in one coroutine on Dispatchers.IO, and the steps after the launch do not wait for it.",
          "meta": [], "src": APP + ":190"},
         {"id": "link-resolver-refresh", "label": "LinkResolver refresh", "sub": "supported platforms", "group": "background",
          "desc": "LinkResolverService.refreshSupported loads the list of supported platforms. It returns at once when the link resolver credential is not available.", "meta": [], "src": APP + ":209"},

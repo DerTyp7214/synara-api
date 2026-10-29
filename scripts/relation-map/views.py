@@ -144,7 +144,7 @@ def package_band(package):
         return "plugins"
     if package == "core" or package.startswith("core."):
         return "core"
-    if package == "db":
+    if package == "db" or package.startswith("migrations."):
         return "db"
     if package in SUPPORT_PACKAGES:
         return "support"
