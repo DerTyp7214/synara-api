@@ -94,6 +94,16 @@ class LyricsUncensorTest {
     }
 
     @Test
+    fun `neighbours that differ only in leading or trailing apostrophes still anchor a mask`() {
+        val target = synced(wordLine(203_202, "I ", "don't ", "**** ", "with ", "n***as ", "'cause ", "they ", "all ", "told"))
+        val lrclib = donor(textLine(202_340, "I don't fuck with niggas cause they all told"))
+
+        val result = assertNotNull(LyricsUncensor.uncensor(target, listOf(lrclib)))
+
+        assertEquals(listOf("I don't fuck with niggas 'cause they all told"), texts(result))
+    }
+
+    @Test
     fun `consecutive masked words are restored together`() {
         val target = synced(wordLine(1_000, "Oh ", "**** ", "**** ", "man"))
         val result = assertNotNull(LyricsUncensor.uncensor(target, listOf(donor(textLine(1_000, "Oh shit fuck man")))))

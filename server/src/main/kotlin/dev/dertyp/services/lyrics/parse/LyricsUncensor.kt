@@ -271,7 +271,7 @@ object LyricsUncensor {
                 char == '’' -> append('\'')
             }
         }
-    }
+    }.trim('\'')
 
     private fun spreadChars(text: String, start: Duration, end: Duration): List<LyricChar> {
         val chars = text.codePoints().toArray().map { String(Character.toChars(it)) }

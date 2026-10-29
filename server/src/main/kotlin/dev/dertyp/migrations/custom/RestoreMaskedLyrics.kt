@@ -11,11 +11,11 @@ import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
 
-@Migration("3.33")
-class UncensorLyricsCandidates : CustomMigration() {
+@Migration("3.34")
+class RestoreMaskedLyrics : CustomMigration() {
     private val lyricsCandidateService by inject<LyricsCandidateService>()
 
-    override suspend fun migrate() = logTask("Uncensor Lyrics Candidates") {
+    override suspend fun migrate() = logTask("Restore Masked Lyrics") {
         val songIds = dbQuery {
             LyricsCandidateTable.select(LyricsCandidateTable.songId)
                 .where { LyricsCandidateTable.status eq LyricsCandidateStatus.FOUND }
@@ -27,7 +27,7 @@ class UncensorLyricsCandidates : CustomMigration() {
         songIds.chunked(CHUNK).forEachIndexed { index, chunk ->
             lyricsCandidateService.refreshUncensored(chunk)
             val done = minOf((index + 1) * CHUNK, songIds.size)
-            updateProgress(done.toDouble() / songIds.size, "$done / ${songIds.size} songs")
+            updateProgress(done * 100.0 / songIds.size, "$done / ${songIds.size} songs")
         }
         mapOf("songs" to songIds.size)
     }
