@@ -54,17 +54,21 @@ class PluginManager(
         const val CURRENT_API_VERSION = 4
         const val HOOK_GROUPS_API_VERSION = 4
         val HOOK_GROUPS_BEFORE_DECLARATION = setOf(HookGroup.PLAYLISTS, HookGroup.PLAYBACK)
+
+        fun builtInPlugins(): List<ISynaraPlugin> = listOf(
+            TidalPlugin(),
+            YoutubePlugin(),
+            SoundcloudPlugin(),
+            GamdlPlugin(),
+            MusicBrainzPlugin(),
+            RecommendationPlugin(),
+            SubsonicPlugin(),
+            PodcastIndexPlugin(),
+        )
     }
 
     override suspend fun startService() {
-        loadPlugin(TidalPlugin())
-        loadPlugin(YoutubePlugin())
-        loadPlugin(SoundcloudPlugin())
-        loadPlugin(GamdlPlugin())
-        loadPlugin(MusicBrainzPlugin())
-        loadPlugin(RecommendationPlugin())
-        loadPlugin(SubsonicPlugin())
-        loadPlugin(PodcastIndexPlugin())
+        builtInPlugins().forEach(::loadPlugin)
         loadPlugins()
     }
 

@@ -34,7 +34,7 @@ if [ "$NEEDS_REBUILD" = true ]; then
     ./gradlew generateDocs
 
     if [ $? -eq 0 ]; then
-        git add docs/RPC_SERVICES.md docs/MODELS.md docs/REST_API.md docs/PERMISSIONS.md docs/API_CONSTANTS.md docs/ENVIRONMENT_VARIABLES.md example.env
+        git add docs/RPC_SERVICES.md docs/MODELS.md docs/REST_API.md docs/PERMISSIONS.md docs/API_CONSTANTS.md docs/SERVER_UI_CONTRIBUTIONS.md docs/SERVER_UI_CONTRIBUTIONS.json docs/ENVIRONMENT_VARIABLES.md example.env
         echo "Documentation rebuilt and staged."
     else
         echo "Documentation build failed. Please check for errors."

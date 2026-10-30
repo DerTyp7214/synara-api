@@ -175,6 +175,7 @@ These tasks generate checked-in files from source; never hand-edit their output.
 | [RPC_SERVICES.md](RPC_SERVICES.md), [MODELS.md](MODELS.md), [PERMISSIONS.md](PERMISSIONS.md) | `:common-rpc:kspCommonMainKotlinMetadata` (the `doc-compiler` KSP processor) |
 | [REST_API.md](REST_API.md), plus the `register*Rest` functions used by `RestRegistry.kt` | `:server:kspKotlin` (the `rest-compiler` KSP processor) |
 | [API_CONSTANTS.md](API_CONSTANTS.md) | `:server:generateApiConstantsDocs` |
+| [SERVER_UI_CONTRIBUTIONS.md](SERVER_UI_CONTRIBUTIONS.md), [SERVER_UI_CONTRIBUTIONS.json](SERVER_UI_CONTRIBUTIONS.json) | `:server:generateUiContributionDocs` |
 | [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md), `example.env` | root `generateEnvDocs` task |
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for when each one runs and how to regenerate them.

@@ -34,6 +34,12 @@ jobs:
       - name: Generate relation map
         run: python3 scripts/relation-map/generate.py
 
+      - name: Generate server UI catalogue
+        run: python3 scripts/ui-catalogue.py
+
+      - name: Generate migration timeline
+        run: python3 scripts/migration-timeline.py
+
       - name: Checkout SynaraDesktop
         uses: actions/checkout@v7
         with:
@@ -61,7 +67,7 @@ jobs:
           BUILD="$(git rev-parse --short HEAD) on $(TZ=UTC git log -1 --format=%cd --date=format-local:'%Y-%m-%d %H:%M UTC')"
           mkdir -p "$SITE"
           sed "s/__BUILD__/$BUILD/" docs/index.html > "$SITE/index.html"
-          cp docs/RELATION_MAP.html docs/STATS.html "$SITE/"
+          cp docs/RELATION_MAP.html docs/STATS.html docs/UI_CATALOGUE.html docs/MIGRATION_TIMELINE.html "$SITE/"
           touch "$SITE/.nojekyll"
           printf '%s\n' "$PAGES_DOMAIN" > "$SITE/CNAME"
           if grep -q '__BUILD__' "$SITE/index.html"; then

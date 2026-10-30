@@ -1,0 +1,2502 @@
+{
+    "slots": [
+        {
+            "id": "library",
+            "contributions": [
+                "core.importer.entry"
+            ]
+        },
+        {
+            "id": "settings",
+            "contributions": [
+                "core.hue.entry",
+                "core.listenshare.entry",
+                "credentials.entry"
+            ]
+        },
+        {
+            "id": "admin.dashboard",
+            "contributions": [
+                "core.listenshare.admin.entry"
+            ]
+        },
+        {
+            "id": "home",
+            "contributions": []
+        },
+        {
+            "id": "importer",
+            "contributions": [
+                "gamdl.credentials"
+            ]
+        },
+        {
+            "id": "album.detail",
+            "contributions": []
+        },
+        {
+            "id": "artist.detail",
+            "contributions": []
+        },
+        {
+            "id": "song.detail",
+            "contributions": []
+        },
+        {
+            "id": "song.menu",
+            "contributions": []
+        },
+        {
+            "id": "playlist.detail",
+            "contributions": [
+                "core.cover.playlist"
+            ]
+        },
+        {
+            "id": "collection.detail",
+            "contributions": [
+                "core.cover.collection"
+            ]
+        }
+    ],
+    "sources": [
+        {
+            "id": "server",
+            "plugin": false
+        },
+        {
+            "id": "credentialserver",
+            "plugin": false
+        },
+        {
+            "id": "gamdl",
+            "plugin": true
+        }
+    ],
+    "contributions": [
+        {
+            "id": "core.importer",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "server",
+            "title": "Importer",
+            "description": "Import music from streaming services",
+            "titleKey": "importer.title",
+            "descriptionKey": "importer.subtitle",
+            "icon": "IMPORT",
+            "order": 0,
+            "cardSize": null,
+            "hooks": [
+                "SHARE_TEXT",
+                "SHARE_URL"
+            ],
+            "access": {
+                "requiresAdmin": false,
+                "capabilities": [
+                    "IMPORT"
+                ]
+            },
+            "className": "dev.dertyp.services.ui.ImporterPageContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/ImporterPageContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "card",
+                            "children": [],
+                            "title": "Login Required",
+                            "subtitle": "Please log in to use the importer.",
+                            "icon": {
+                                "type": "named",
+                                "name": "LOGIN"
+                            },
+                            "image": null,
+                            "tone": "WARNING",
+                            "actions": [
+                                {
+                                    "type": "button",
+                                    "label": "Login",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "core.importer",
+                                        "actionId": "login",
+                                        "params": {
+                                            "importer": {
+                                                "text": "",
+                                                "number": null,
+                                                "flag": null,
+                                                "items": null
+                                            }
+                                        },
+                                        "formId": null,
+                                        "confirmText": null
+                                    },
+                                    "style": "PRIMARY",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "LOGIN"
+                                    },
+                                    "enabled": true
+                                }
+                            ]
+                        },
+                        {
+                            "type": "column",
+                            "children": [
+                                {
+                                    "type": "text",
+                                    "text": "Import URLs",
+                                    "style": "TITLE",
+                                    "tone": "DEFAULT",
+                                    "emphasis": "MEDIUM"
+                                },
+                                {
+                                    "type": "text",
+                                    "text": "Enter one URL per line to import them.",
+                                    "style": "CAPTION",
+                                    "tone": "MUTED",
+                                    "emphasis": "MEDIUM"
+                                },
+                                {
+                                    "type": "form",
+                                    "id": "import",
+                                    "children": [
+                                        {
+                                            "type": "textField",
+                                            "key": "input",
+                                            "label": "Import URLs",
+                                            "value": null,
+                                            "placeholder": null,
+                                            "secret": false,
+                                            "multiline": true,
+                                            "helper": null,
+                                            "error": null,
+                                            "required": true,
+                                            "enabled": true,
+                                            "kind": "MULTILINE_URLS",
+                                            "toolbar": [
+                                                {
+                                                    "type": "button",
+                                                    "label": "Done",
+                                                    "action": {
+                                                        "type": "dismissKeyboard"
+                                                    },
+                                                    "style": "TEXT",
+                                                    "icon": {
+                                                        "type": "named",
+                                                        "name": "CHECK"
+                                                    },
+                                                    "enabled": true
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                    "submit": {
+                                        "contributionId": "core.importer",
+                                        "actionId": "import",
+                                        "params": {},
+                                        "formId": "import",
+                                        "confirmText": null
+                                    },
+                                    "submitLabel": "Import",
+                                    "cancelLabel": null,
+                                    "actions": [
+                                        {
+                                            "type": "native",
+                                            "name": "barcodeScanner",
+                                            "params": {
+                                                "target": "input"
+                                            },
+                                            "fallback": null
+                                        }
+                                    ]
+                                }
+                            ],
+                            "spacing": "SMALL",
+                            "align": "STRETCH",
+                            "weights": null
+                        },
+                        {
+                            "type": "column",
+                            "children": [
+                                {
+                                    "type": "text",
+                                    "text": "Logs",
+                                    "style": "TITLE",
+                                    "tone": "DEFAULT",
+                                    "emphasis": "MEDIUM"
+                                },
+                                {
+                                    "type": "live",
+                                    "key": "log",
+                                    "child": {
+                                        "type": "log",
+                                        "lines": [],
+                                        "maxLines": 500
+                                    }
+                                }
+                            ],
+                            "spacing": "SMALL",
+                            "align": "STRETCH",
+                            "weights": null
+                        }
+                    ],
+                    "spacing": "LARGE",
+                    "align": "STRETCH",
+                    "weights": null
+                },
+                "toolbar": [
+                    {
+                        "type": "button",
+                        "label": "Queue",
+                        "action": {
+                            "type": "openPage",
+                            "pageId": "core.importer.queue",
+                            "params": {},
+                            "modal": true
+                        },
+                        "style": "TEXT",
+                        "icon": {
+                            "type": "named",
+                            "name": "QUEUE"
+                        },
+                        "enabled": true
+                    }
+                ],
+                "error": null
+            }
+        },
+        {
+            "id": "core.importer.queue",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "server",
+            "title": "Queue",
+            "description": null,
+            "titleKey": "importer.queue.title",
+            "descriptionKey": null,
+            "icon": "QUEUE",
+            "order": 0,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": false,
+                "capabilities": [
+                    "IMPORT"
+                ]
+            },
+            "className": "dev.dertyp.services.ui.ImporterQueuePageContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/ImporterPageContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "emptyState",
+                    "title": "Queue is empty",
+                    "description": "No tasks are currently importing or pending.",
+                    "icon": {
+                        "type": "named",
+                        "name": "QUEUE"
+                    },
+                    "actions": []
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "core.importer.settings",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "server",
+            "title": "Importer settings",
+            "description": null,
+            "titleKey": "importer.settings.title",
+            "descriptionKey": null,
+            "icon": "SETTINGS",
+            "order": 0,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": false,
+                "capabilities": [
+                    "IMPORT"
+                ]
+            },
+            "className": "dev.dertyp.services.ui.ImporterSettingsPageContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/ImporterPageContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "section",
+                            "children": [
+                                {
+                                    "type": "text",
+                                    "text": "No importer is available on this server.",
+                                    "style": "BODY",
+                                    "tone": "WARNING",
+                                    "emphasis": "MEDIUM"
+                                }
+                            ],
+                            "title": "Importers",
+                            "collapsible": false,
+                            "collapsed": false
+                        }
+                    ],
+                    "spacing": "LARGE",
+                    "align": "STRETCH",
+                    "weights": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "core.cover.collection",
+            "kind": "SLOT",
+            "slot": "collection.detail",
+            "source": "server",
+            "title": "Cover",
+            "description": "Generate a cover from the content",
+            "titleKey": "cover.title",
+            "descriptionKey": "cover.description",
+            "icon": "IMAGE",
+            "order": 50,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": false,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.CollectionCoverContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/CoverContributions.kt",
+            "render": {
+                "tree": {
+                    "type": "card",
+                    "children": [
+                        {
+                            "type": "row",
+                            "children": [
+                                {
+                                    "type": "image",
+                                    "imageId": "00000000-0000-0000-0000-000000000004",
+                                    "url": null,
+                                    "rounded": true
+                                },
+                                {
+                                    "type": "badge",
+                                    "text": "Generated cover",
+                                    "tone": "SUCCESS",
+                                    "icon": null
+                                }
+                            ],
+                            "spacing": "MEDIUM",
+                            "align": "CENTER",
+                            "weights": null
+                        },
+                        {
+                            "type": "form",
+                            "id": "cover",
+                            "children": [
+                                {
+                                    "type": "select",
+                                    "key": "style",
+                                    "label": "Style",
+                                    "value": "AUTO",
+                                    "options": [
+                                        {
+                                            "value": "AUTO",
+                                            "label": "Automatic",
+                                            "icon": null,
+                                            "image": null
+                                        },
+                                        {
+                                            "value": "SINGLE",
+                                            "label": "Single image",
+                                            "icon": null,
+                                            "image": null
+                                        },
+                                        {
+                                            "value": "GRID",
+                                            "label": "2x2 grid",
+                                            "icon": null,
+                                            "image": null
+                                        },
+                                        {
+                                            "value": "MOSAIC",
+                                            "label": "3x3 mosaic",
+                                            "icon": null,
+                                            "image": null
+                                        },
+                                        {
+                                            "value": "STACKED",
+                                            "label": "Stacked cards",
+                                            "icon": null,
+                                            "image": null
+                                        },
+                                        {
+                                            "value": "GRADIENT",
+                                            "label": "Gradient",
+                                            "icon": null,
+                                            "image": null
+                                        }
+                                    ],
+                                    "helper": null,
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true
+                                },
+                                {
+                                    "type": "select",
+                                    "key": "pack",
+                                    "label": "Asset pack",
+                                    "value": "",
+                                    "options": [
+                                        {
+                                            "value": "",
+                                            "label": "Best match",
+                                            "icon": null,
+                                            "image": null
+                                        }
+                                    ],
+                                    "helper": null,
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true
+                                },
+                                {
+                                    "type": "switch",
+                                    "key": "includeTitle",
+                                    "label": "Show title",
+                                    "value": true,
+                                    "helper": null,
+                                    "enabled": true
+                                }
+                            ],
+                            "submit": {
+                                "contributionId": "core.cover.collection",
+                                "actionId": "apply",
+                                "params": {},
+                                "formId": "cover",
+                                "confirmText": null
+                            },
+                            "submitLabel": "Generate",
+                            "cancelLabel": null,
+                            "actions": [
+                                {
+                                    "type": "button",
+                                    "label": "Shuffle",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "core.cover.collection",
+                                        "actionId": "shuffle",
+                                        "params": {},
+                                        "formId": "cover",
+                                        "confirmText": null
+                                    },
+                                    "style": "TEXT",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "SYNC"
+                                    },
+                                    "enabled": true
+                                }
+                            ]
+                        }
+                    ],
+                    "title": "Cover",
+                    "subtitle": null,
+                    "icon": {
+                        "type": "named",
+                        "name": "IMAGE"
+                    },
+                    "image": null,
+                    "tone": "DEFAULT",
+                    "actions": []
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "core.cover.playlist",
+            "kind": "SLOT",
+            "slot": "playlist.detail",
+            "source": "server",
+            "title": "Cover",
+            "description": "Generate a cover from the content",
+            "titleKey": "cover.title",
+            "descriptionKey": "cover.description",
+            "icon": "IMAGE",
+            "order": 50,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": false,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.PlaylistCoverContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/CoverContributions.kt",
+            "render": {
+                "tree": {
+                    "type": "card",
+                    "children": [
+                        {
+                            "type": "row",
+                            "children": [
+                                {
+                                    "type": "image",
+                                    "imageId": "00000000-0000-0000-0000-000000000004",
+                                    "url": null,
+                                    "rounded": true
+                                },
+                                {
+                                    "type": "badge",
+                                    "text": "Generated cover",
+                                    "tone": "SUCCESS",
+                                    "icon": null
+                                }
+                            ],
+                            "spacing": "MEDIUM",
+                            "align": "CENTER",
+                            "weights": null
+                        },
+                        {
+                            "type": "form",
+                            "id": "cover",
+                            "children": [
+                                {
+                                    "type": "select",
+                                    "key": "style",
+                                    "label": "Style",
+                                    "value": "AUTO",
+                                    "options": [
+                                        {
+                                            "value": "AUTO",
+                                            "label": "Automatic",
+                                            "icon": null,
+                                            "image": null
+                                        },
+                                        {
+                                            "value": "SINGLE",
+                                            "label": "Single image",
+                                            "icon": null,
+                                            "image": null
+                                        },
+                                        {
+                                            "value": "GRID",
+                                            "label": "2x2 grid",
+                                            "icon": null,
+                                            "image": null
+                                        },
+                                        {
+                                            "value": "MOSAIC",
+                                            "label": "3x3 mosaic",
+                                            "icon": null,
+                                            "image": null
+                                        },
+                                        {
+                                            "value": "STACKED",
+                                            "label": "Stacked cards",
+                                            "icon": null,
+                                            "image": null
+                                        },
+                                        {
+                                            "value": "GRADIENT",
+                                            "label": "Gradient",
+                                            "icon": null,
+                                            "image": null
+                                        }
+                                    ],
+                                    "helper": null,
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true
+                                },
+                                {
+                                    "type": "select",
+                                    "key": "pack",
+                                    "label": "Asset pack",
+                                    "value": "",
+                                    "options": [
+                                        {
+                                            "value": "",
+                                            "label": "Best match",
+                                            "icon": null,
+                                            "image": null
+                                        }
+                                    ],
+                                    "helper": null,
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true
+                                },
+                                {
+                                    "type": "switch",
+                                    "key": "includeTitle",
+                                    "label": "Show title",
+                                    "value": true,
+                                    "helper": null,
+                                    "enabled": true
+                                }
+                            ],
+                            "submit": {
+                                "contributionId": "core.cover.playlist",
+                                "actionId": "apply",
+                                "params": {},
+                                "formId": "cover",
+                                "confirmText": null
+                            },
+                            "submitLabel": "Generate",
+                            "cancelLabel": null,
+                            "actions": [
+                                {
+                                    "type": "button",
+                                    "label": "Shuffle",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "core.cover.playlist",
+                                        "actionId": "shuffle",
+                                        "params": {},
+                                        "formId": "cover",
+                                        "confirmText": null
+                                    },
+                                    "style": "TEXT",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "SYNC"
+                                    },
+                                    "enabled": true
+                                }
+                            ]
+                        }
+                    ],
+                    "title": "Cover",
+                    "subtitle": null,
+                    "icon": {
+                        "type": "named",
+                        "name": "IMAGE"
+                    },
+                    "image": null,
+                    "tone": "DEFAULT",
+                    "actions": []
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "core.importer.card",
+            "kind": "HOME_CARD",
+            "slot": null,
+            "source": "server",
+            "title": "Importer",
+            "description": "Import music from streaming services",
+            "titleKey": "importer.title",
+            "descriptionKey": "importer.subtitle",
+            "icon": "IMPORT",
+            "order": 50,
+            "cardSize": "MEDIUM",
+            "hooks": [],
+            "access": {
+                "requiresAdmin": false,
+                "capabilities": [
+                    "IMPORT"
+                ]
+            },
+            "className": "dev.dertyp.services.ui.ImporterHomeCardContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/ImporterPageContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "card",
+                    "children": [
+                        {
+                            "type": "row",
+                            "children": [
+                                {
+                                    "type": "stat",
+                                    "label": "Pending",
+                                    "value": "0",
+                                    "unit": null,
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "QUEUE"
+                                    },
+                                    "tone": "DEFAULT"
+                                },
+                                {
+                                    "type": "stat",
+                                    "label": "Importing",
+                                    "value": "1",
+                                    "unit": null,
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "IMPORT"
+                                    },
+                                    "tone": "DEFAULT"
+                                }
+                            ],
+                            "spacing": "MEDIUM",
+                            "align": "CENTER",
+                            "weights": null
+                        },
+                        {
+                            "type": "listItem",
+                            "title": "Favorites",
+                            "subtitle": "Currently Importing",
+                            "icon": {
+                                "type": "named",
+                                "name": "DOWNLOAD"
+                            },
+                            "trailing": null,
+                            "action": null,
+                            "image": null
+                        },
+                        {
+                            "type": "progress",
+                            "value": null,
+                            "label": null
+                        }
+                    ],
+                    "title": "Importer",
+                    "subtitle": null,
+                    "icon": {
+                        "type": "named",
+                        "name": "IMPORT"
+                    },
+                    "image": null,
+                    "tone": "DEFAULT",
+                    "actions": [
+                        {
+                            "type": "button",
+                            "label": "Open importer",
+                            "action": {
+                                "type": "openPage",
+                                "pageId": "core.importer",
+                                "params": {},
+                                "modal": false
+                            },
+                            "style": "TEXT",
+                            "icon": {
+                                "type": "named",
+                                "name": "IMPORT"
+                            },
+                            "enabled": true
+                        },
+                        {
+                            "type": "button",
+                            "label": "Queue",
+                            "action": {
+                                "type": "openPage",
+                                "pageId": "core.importer.queue",
+                                "params": {},
+                                "modal": true
+                            },
+                            "style": "TEXT",
+                            "icon": {
+                                "type": "named",
+                                "name": "QUEUE"
+                            },
+                            "enabled": true
+                        }
+                    ]
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "gamdl.credentials",
+            "kind": "SLOT",
+            "slot": "importer",
+            "source": "gamdl",
+            "title": "Apple Music credentials",
+            "description": "Cookies and Widevine device for the gamdl importer",
+            "titleKey": "gamdl.credentials.title",
+            "descriptionKey": "gamdl.credentials.description",
+            "icon": "KEY",
+            "order": 50,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": true,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.gamdl.GamdlCredentialsContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/gamdl/GamdlCredentialsContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "card",
+                    "children": [
+                        {
+                            "type": "badge",
+                            "text": "Not configured",
+                            "tone": "WARNING",
+                            "icon": null
+                        },
+                        {
+                            "type": "form",
+                            "id": "gamdl",
+                            "children": [
+                                {
+                                    "type": "textField",
+                                    "key": "cookiesTxt",
+                                    "label": "cookies.txt",
+                                    "value": null,
+                                    "placeholder": null,
+                                    "secret": true,
+                                    "multiline": true,
+                                    "helper": "Netscape cookie export of an Apple Music session. Leave empty to keep the current file.",
+                                    "error": null,
+                                    "required": true,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                },
+                                {
+                                    "type": "textField",
+                                    "key": "wvdBase64",
+                                    "label": "Widevine device (.wvd, base64)",
+                                    "value": null,
+                                    "placeholder": null,
+                                    "secret": true,
+                                    "multiline": false,
+                                    "helper": "Optional; needed for some codecs.",
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                }
+                            ],
+                            "submit": {
+                                "contributionId": "gamdl.credentials",
+                                "actionId": "save",
+                                "params": {},
+                                "formId": "gamdl",
+                                "confirmText": null
+                            },
+                            "submitLabel": "Save credentials",
+                            "cancelLabel": null,
+                            "actions": []
+                        }
+                    ],
+                    "title": "Apple Music credentials",
+                    "subtitle": "Cookies and Widevine device for the gamdl importer",
+                    "icon": {
+                        "type": "named",
+                        "name": "KEY"
+                    },
+                    "image": null,
+                    "tone": "DEFAULT",
+                    "actions": []
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "core.hue",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "server",
+            "title": "Philips Hue",
+            "description": "Let your lights follow what you play",
+            "titleKey": "hue.title",
+            "descriptionKey": "hue.description",
+            "icon": "PLUG",
+            "order": 60,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": false,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.HueSettingsContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/HueSettingsContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "text",
+                            "text": "You have not paired a Hue bridge yet.",
+                            "style": "BODY",
+                            "tone": "MUTED",
+                            "emphasis": "MEDIUM"
+                        },
+                        {
+                            "type": "form",
+                            "id": "huePair",
+                            "children": [
+                                {
+                                    "type": "textField",
+                                    "key": "ip",
+                                    "label": "Bridge IP address",
+                                    "value": null,
+                                    "placeholder": "192.168.1.2",
+                                    "secret": false,
+                                    "multiline": false,
+                                    "helper": null,
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                }
+                            ],
+                            "submit": {
+                                "contributionId": "core.hue",
+                                "actionId": "pair",
+                                "params": {},
+                                "formId": "huePair",
+                                "confirmText": null
+                            },
+                            "submitLabel": "Pair",
+                            "cancelLabel": null,
+                            "actions": [
+                                {
+                                    "type": "button",
+                                    "label": "Search for bridges",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "core.hue",
+                                        "actionId": "discover",
+                                        "params": {},
+                                        "formId": null,
+                                        "confirmText": null
+                                    },
+                                    "style": "TEXT",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "SEARCH"
+                                    },
+                                    "enabled": true
+                                }
+                            ]
+                        }
+                    ],
+                    "spacing": "MEDIUM",
+                    "align": "STRETCH",
+                    "weights": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "core.hue.entry",
+            "kind": "SLOT",
+            "slot": "settings",
+            "source": "server",
+            "title": "Philips Hue",
+            "description": "Let your lights follow what you play",
+            "titleKey": "hue.title",
+            "descriptionKey": "hue.description",
+            "icon": "PLUG",
+            "order": 60,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": false,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.HueSettingsEntryContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/HueSettingsContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "listItem",
+                    "title": "Philips Hue",
+                    "subtitle": "Let your lights follow what you play",
+                    "icon": {
+                        "type": "named",
+                        "name": "PLUG"
+                    },
+                    "trailing": null,
+                    "action": {
+                        "type": "openPage",
+                        "pageId": "core.hue",
+                        "params": {},
+                        "modal": false
+                    },
+                    "image": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "core.listenshare.admin",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "server",
+            "title": "Shared listens (admin)",
+            "description": "Link accounts so they share their listens",
+            "titleKey": "listenShare.admin.title",
+            "descriptionKey": "listenShare.admin.description",
+            "icon": "LINK",
+            "order": 65,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": true,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.ListenShareAdminContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/ListenShareContributions.kt",
+            "render": {
+                "tree": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "text",
+                            "text": "No accounts are linked yet.",
+                            "style": "BODY",
+                            "tone": "MUTED",
+                            "emphasis": "MEDIUM"
+                        },
+                        {
+                            "type": "form",
+                            "id": "link",
+                            "children": [
+                                {
+                                    "type": "searchField",
+                                    "key": "userA",
+                                    "label": "First user",
+                                    "value": null,
+                                    "placeholder": "Search for a user",
+                                    "helper": null,
+                                    "error": null,
+                                    "required": true,
+                                    "enabled": true,
+                                    "minChars": 2,
+                                    "toolbar": []
+                                },
+                                {
+                                    "type": "searchField",
+                                    "key": "userB",
+                                    "label": "Second user",
+                                    "value": null,
+                                    "placeholder": "Search for a user",
+                                    "helper": null,
+                                    "error": null,
+                                    "required": true,
+                                    "enabled": true,
+                                    "minChars": 2,
+                                    "toolbar": []
+                                },
+                                {
+                                    "type": "switch",
+                                    "key": "useForRecommendations",
+                                    "label": "Use for recommendations",
+                                    "value": false,
+                                    "helper": "Also use the listens of this account when creating recommendations.",
+                                    "enabled": true
+                                }
+                            ],
+                            "submit": {
+                                "contributionId": "core.listenshare.admin",
+                                "actionId": "link",
+                                "params": {},
+                                "formId": "link",
+                                "confirmText": null
+                            },
+                            "submitLabel": "Link",
+                            "cancelLabel": null,
+                            "actions": []
+                        }
+                    ],
+                    "spacing": "MEDIUM",
+                    "align": "STRETCH",
+                    "weights": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "core.listenshare.admin.entry",
+            "kind": "SLOT",
+            "slot": "admin.dashboard",
+            "source": "server",
+            "title": "Shared listens (admin)",
+            "description": "Link accounts so they share their listens",
+            "titleKey": "listenShare.admin.title",
+            "descriptionKey": "listenShare.admin.description",
+            "icon": "LINK",
+            "order": 65,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": true,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.ListenShareAdminEntryContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/ListenShareContributions.kt",
+            "render": {
+                "tree": {
+                    "type": "listItem",
+                    "title": "Shared listens (admin)",
+                    "subtitle": "Link accounts so they share their listens",
+                    "icon": {
+                        "type": "named",
+                        "name": "LINK"
+                    },
+                    "trailing": null,
+                    "action": {
+                        "type": "openPage",
+                        "pageId": "core.listenshare.admin",
+                        "params": {},
+                        "modal": false
+                    },
+                    "image": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "core.listenshare.entry",
+            "kind": "SLOT",
+            "slot": "settings",
+            "source": "server",
+            "title": "Shared listens",
+            "description": "Count listens of other accounts that share your ListenBrainz account",
+            "titleKey": "listenShare.title",
+            "descriptionKey": "listenShare.description",
+            "icon": "LINK",
+            "order": 65,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": false,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.ListenShareEntryContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/ListenShareContributions.kt",
+            "render": {
+                "tree": {
+                    "type": "listItem",
+                    "title": "Shared listens",
+                    "subtitle": "Count listens of other accounts that share your ListenBrainz account",
+                    "icon": {
+                        "type": "named",
+                        "name": "LINK"
+                    },
+                    "trailing": null,
+                    "action": {
+                        "type": "openPage",
+                        "pageId": "core.listenshare.settings",
+                        "params": {},
+                        "modal": false
+                    },
+                    "image": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "core.listenshare.settings",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "server",
+            "title": "Shared listens",
+            "description": "Count listens of other accounts that share your ListenBrainz account",
+            "titleKey": "listenShare.title",
+            "descriptionKey": "listenShare.description",
+            "icon": "LINK",
+            "order": 65,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": false,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.ListenShareSettingsContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/ListenShareContributions.kt",
+            "render": {
+                "tree": {
+                    "type": "emptyState",
+                    "title": "No accounts to share listens with",
+                    "description": "Accounts that use the same ListenBrainz account as you show up here and can be connected.",
+                    "icon": {
+                        "type": "named",
+                        "name": "LINK"
+                    },
+                    "actions": []
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "credentials.entry",
+            "kind": "SLOT",
+            "slot": "settings",
+            "source": "credentialserver",
+            "title": "Credentials",
+            "description": "API keys and logins this server uses",
+            "titleKey": "credentials.title",
+            "descriptionKey": "credentials.description",
+            "icon": "KEY",
+            "order": 70,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": true,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.credentialserver.CredentialsEntryContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/credentialserver/CredentialsEntryContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "listItem",
+                    "title": "Credentials",
+                    "subtitle": "API keys and logins this server uses",
+                    "icon": {
+                        "type": "named",
+                        "name": "KEY"
+                    },
+                    "trailing": "0 of 0 configured",
+                    "action": {
+                        "type": "openPage",
+                        "pageId": "credentials.overview",
+                        "params": {},
+                        "modal": false
+                    },
+                    "image": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "credentials.local",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "credentialserver",
+            "title": "Credential",
+            "description": null,
+            "titleKey": "credentials.localPage.title",
+            "descriptionKey": null,
+            "icon": "KEY",
+            "order": 70,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": true,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.credentialserver.LocalCredentialContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/credentialserver/LocalCredentialContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "text",
+                            "text": "Tidal",
+                            "style": "TITLE",
+                            "tone": "DEFAULT",
+                            "emphasis": "MEDIUM"
+                        },
+                        {
+                            "type": "text",
+                            "text": "Client id and secret for the Tidal API",
+                            "style": "CAPTION",
+                            "tone": "MUTED",
+                            "emphasis": "MEDIUM"
+                        },
+                        {
+                            "type": "badge",
+                            "text": "Not configured",
+                            "tone": "MUTED",
+                            "icon": {
+                                "type": "named",
+                                "name": "KEY"
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": "Nothing is configured. Store the values here or set them in the server environment.",
+                            "style": "CAPTION",
+                            "tone": "MUTED",
+                            "emphasis": "MEDIUM"
+                        },
+                        {
+                            "type": "form",
+                            "id": "localCredential",
+                            "children": [
+                                {
+                                    "type": "textField",
+                                    "key": "clientId",
+                                    "label": "Client id",
+                                    "value": null,
+                                    "placeholder": null,
+                                    "secret": false,
+                                    "multiline": false,
+                                    "helper": null,
+                                    "error": null,
+                                    "required": true,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                },
+                                {
+                                    "type": "textField",
+                                    "key": "clientSecret",
+                                    "label": "Client secret",
+                                    "value": null,
+                                    "placeholder": null,
+                                    "secret": true,
+                                    "multiline": false,
+                                    "helper": null,
+                                    "error": null,
+                                    "required": true,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                }
+                            ],
+                            "submit": {
+                                "contributionId": "credentials.local",
+                                "actionId": "save",
+                                "params": {
+                                    "name": {
+                                        "text": "tidal.api",
+                                        "number": null,
+                                        "flag": null,
+                                        "items": null
+                                    }
+                                },
+                                "formId": "localCredential",
+                                "confirmText": null
+                            },
+                            "submitLabel": "Save",
+                            "cancelLabel": null,
+                            "actions": []
+                        },
+                        {
+                            "type": "divider"
+                        },
+                        {
+                            "type": "column",
+                            "children": [
+                                {
+                                    "type": "button",
+                                    "label": "Test",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "credentials.local",
+                                        "actionId": "test",
+                                        "params": {
+                                            "name": {
+                                                "text": "tidal.api",
+                                                "number": null,
+                                                "flag": null,
+                                                "items": null
+                                            }
+                                        },
+                                        "formId": null,
+                                        "confirmText": null
+                                    },
+                                    "style": "SECONDARY",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "CHECK"
+                                    },
+                                    "enabled": true
+                                }
+                            ],
+                            "spacing": "SMALL",
+                            "align": "START",
+                            "weights": null
+                        }
+                    ],
+                    "spacing": "MEDIUM",
+                    "align": "STRETCH",
+                    "weights": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "credentials.overview",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "credentialserver",
+            "title": "Credentials",
+            "description": "API keys and logins this server uses",
+            "titleKey": "credentials.title",
+            "descriptionKey": "credentials.description",
+            "icon": "KEY",
+            "order": 70,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": true,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.credentialserver.CredentialsOverviewContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/credentialserver/CredentialsOverviewContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "listItem",
+                            "title": "Credential server",
+                            "subtitle": null,
+                            "icon": {
+                                "type": "named",
+                                "name": "PLUG"
+                            },
+                            "trailing": "Connected",
+                            "action": {
+                                "type": "openPage",
+                                "pageId": "credentialserver.server",
+                                "params": {},
+                                "modal": false
+                            },
+                            "image": null
+                        },
+                        {
+                            "type": "listItem",
+                            "title": "Clients",
+                            "subtitle": null,
+                            "icon": {
+                                "type": "named",
+                                "name": "USER"
+                            },
+                            "trailing": "1",
+                            "action": {
+                                "type": "openPage",
+                                "pageId": "credentialserver.clients",
+                                "params": {},
+                                "modal": false
+                            },
+                            "image": null
+                        },
+                        {
+                            "type": "section",
+                            "children": [
+                                {
+                                    "type": "text",
+                                    "text": "Values stored here are encrypted and take precedence over the server environment.",
+                                    "style": "CAPTION",
+                                    "tone": "MUTED",
+                                    "emphasis": "MEDIUM"
+                                }
+                            ],
+                            "title": "On this server",
+                            "collapsible": false,
+                            "collapsed": false
+                        }
+                    ],
+                    "spacing": "MEDIUM",
+                    "align": "STRETCH",
+                    "weights": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "credentialserver.clients",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "credentialserver",
+            "title": "Credential server clients",
+            "description": null,
+            "titleKey": "credentialserver.clients.title",
+            "descriptionKey": null,
+            "icon": "USER",
+            "order": 71,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": true,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.credentialserver.CredentialServerClientsContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/credentialserver/CredentialServerClientsContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "listItem",
+                            "title": "Synara",
+                            "subtitle": "synara-example · This server",
+                            "icon": {
+                                "type": "named",
+                                "name": "USER"
+                            },
+                            "trailing": "Enabled · 1 grants",
+                            "action": {
+                                "type": "openPage",
+                                "pageId": "credentialserver.client",
+                                "params": {
+                                    "id": "00000000-0000-0000-0000-000000000003"
+                                },
+                                "modal": false
+                            },
+                            "image": null
+                        },
+                        {
+                            "type": "form",
+                            "id": "credentialServerCreateClient",
+                            "children": [
+                                {
+                                    "type": "textField",
+                                    "key": "clientName",
+                                    "label": "Client name",
+                                    "value": null,
+                                    "placeholder": null,
+                                    "secret": false,
+                                    "multiline": false,
+                                    "helper": null,
+                                    "error": null,
+                                    "required": true,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                }
+                            ],
+                            "submit": {
+                                "contributionId": "credentialserver.clients",
+                                "actionId": "createClient",
+                                "params": {},
+                                "formId": "credentialServerCreateClient",
+                                "confirmText": null
+                            },
+                            "submitLabel": "Create client",
+                            "cancelLabel": null,
+                            "actions": []
+                        }
+                    ],
+                    "spacing": "MEDIUM",
+                    "align": "STRETCH",
+                    "weights": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "credentialserver.server",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "credentialserver",
+            "title": "Credential server",
+            "description": null,
+            "titleKey": "credentialserver.server.title",
+            "descriptionKey": null,
+            "icon": "PLUG",
+            "order": 71,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": true,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.credentialserver.CredentialServerServerContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/credentialserver/CredentialServerServerContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "row",
+                            "children": [
+                                {
+                                    "type": "badge",
+                                    "text": "Connected",
+                                    "tone": "SUCCESS",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "PLUG"
+                                    }
+                                },
+                                {
+                                    "type": "badge",
+                                    "text": "Version 1.0.0",
+                                    "tone": "DEFAULT",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "INFO"
+                                    }
+                                },
+                                {
+                                    "type": "badge",
+                                    "text": "1 granted to this server",
+                                    "tone": "PRIMARY",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "KEY"
+                                    }
+                                }
+                            ],
+                            "spacing": "SMALL",
+                            "align": "CENTER",
+                            "weights": null
+                        },
+                        {
+                            "type": "text",
+                            "text": "The client id and secret let this server fetch the credentials granted to it. The admin key lets you manage the credential server from here.",
+                            "style": "CAPTION",
+                            "tone": "MUTED",
+                            "emphasis": "MEDIUM"
+                        },
+                        {
+                            "type": "form",
+                            "id": "credentialServerConnection",
+                            "children": [
+                                {
+                                    "type": "textField",
+                                    "key": "url",
+                                    "label": "Server URL",
+                                    "value": "https://credentials.example.com",
+                                    "placeholder": "https://credentials.example.com",
+                                    "secret": false,
+                                    "multiline": false,
+                                    "helper": null,
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true,
+                                    "kind": "URL",
+                                    "toolbar": []
+                                },
+                                {
+                                    "type": "textField",
+                                    "key": "adminKey",
+                                    "label": "Admin key",
+                                    "value": null,
+                                    "placeholder": null,
+                                    "secret": true,
+                                    "multiline": false,
+                                    "helper": "A value is stored. Leave this blank to keep it.",
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                },
+                                {
+                                    "type": "textField",
+                                    "key": "clientId",
+                                    "label": "Client id",
+                                    "value": "synara-example",
+                                    "placeholder": null,
+                                    "secret": false,
+                                    "multiline": false,
+                                    "helper": null,
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                },
+                                {
+                                    "type": "textField",
+                                    "key": "clientSecret",
+                                    "label": "Client secret",
+                                    "value": null,
+                                    "placeholder": null,
+                                    "secret": true,
+                                    "multiline": false,
+                                    "helper": "A value is stored. Leave this blank to keep it.",
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                }
+                            ],
+                            "submit": {
+                                "contributionId": "credentialserver.server",
+                                "actionId": "save",
+                                "params": {},
+                                "formId": "credentialServerConnection",
+                                "confirmText": null
+                            },
+                            "submitLabel": "Save",
+                            "cancelLabel": null,
+                            "actions": []
+                        },
+                        {
+                            "type": "divider"
+                        },
+                        {
+                            "type": "column",
+                            "children": [
+                                {
+                                    "type": "button",
+                                    "label": "Test connection",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "credentialserver.server",
+                                        "actionId": "test",
+                                        "params": {},
+                                        "formId": null,
+                                        "confirmText": null
+                                    },
+                                    "style": "SECONDARY",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "SYNC"
+                                    },
+                                    "enabled": true
+                                },
+                                {
+                                    "type": "button",
+                                    "label": "Disconnect",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "credentialserver.server",
+                                        "actionId": "disconnect",
+                                        "params": {},
+                                        "formId": null,
+                                        "confirmText": "Remove the stored connection? This server goes back to its local credentials."
+                                    },
+                                    "style": "DESTRUCTIVE",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "CLOSE"
+                                    },
+                                    "enabled": true
+                                }
+                            ],
+                            "spacing": "SMALL",
+                            "align": "START",
+                            "weights": null
+                        },
+                        {
+                            "type": "section",
+                            "children": [
+                                {
+                                    "type": "text",
+                                    "text": "This server already has a client id and secret. Registering again creates a new client and replaces them.",
+                                    "style": "CAPTION",
+                                    "tone": "MUTED",
+                                    "emphasis": "MEDIUM"
+                                },
+                                {
+                                    "type": "form",
+                                    "id": "credentialServerRegister",
+                                    "children": [
+                                        {
+                                            "type": "textField",
+                                            "key": "serverName",
+                                            "label": "Client name",
+                                            "value": "Synara",
+                                            "placeholder": null,
+                                            "secret": false,
+                                            "multiline": false,
+                                            "helper": null,
+                                            "error": null,
+                                            "required": true,
+                                            "enabled": true,
+                                            "kind": "TEXT",
+                                            "toolbar": []
+                                        }
+                                    ],
+                                    "submit": {
+                                        "contributionId": "credentialserver.server",
+                                        "actionId": "register",
+                                        "params": {},
+                                        "formId": "credentialServerRegister",
+                                        "confirmText": "Create a new client and replace the stored client id and secret?"
+                                    },
+                                    "submitLabel": "Register",
+                                    "cancelLabel": null,
+                                    "actions": []
+                                }
+                            ],
+                            "title": "Register this server",
+                            "collapsible": false,
+                            "collapsed": false
+                        },
+                        {
+                            "type": "section",
+                            "children": [
+                                {
+                                    "type": "listItem",
+                                    "title": "Spotify",
+                                    "subtitle": "spotify.api · OAuth client credentials · Spotify Web API client credentials for metadata lookups",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "KEY"
+                                    },
+                                    "trailing": "OK",
+                                    "action": {
+                                        "type": "openPage",
+                                        "pageId": "credentialserver.credential",
+                                        "params": {
+                                            "name": "spotify.api"
+                                        },
+                                        "modal": false
+                                    },
+                                    "image": null
+                                },
+                                {
+                                    "type": "form",
+                                    "id": "credentialServerCreateCredential",
+                                    "children": [
+                                        {
+                                            "type": "select",
+                                            "key": "preset",
+                                            "label": "Preset",
+                                            "value": "custom",
+                                            "options": [
+                                                {
+                                                    "value": "custom",
+                                                    "label": "Custom name",
+                                                    "icon": null,
+                                                    "image": null
+                                                }
+                                            ],
+                                            "helper": null,
+                                            "error": null,
+                                            "required": false,
+                                            "enabled": true
+                                        },
+                                        {
+                                            "type": "textField",
+                                            "key": "customName",
+                                            "label": "Custom name",
+                                            "value": null,
+                                            "placeholder": null,
+                                            "secret": false,
+                                            "multiline": false,
+                                            "helper": "Only used with the custom preset, for example plugin:myplugin:apikey",
+                                            "error": null,
+                                            "required": false,
+                                            "enabled": true,
+                                            "kind": "TEXT",
+                                            "toolbar": []
+                                        },
+                                        {
+                                            "type": "select",
+                                            "key": "customKind",
+                                            "label": "Custom kind",
+                                            "value": "API_KEY",
+                                            "options": [
+                                                {
+                                                    "value": "OAUTH_CLIENT_CREDENTIALS",
+                                                    "label": "OAuth client credentials",
+                                                    "icon": null,
+                                                    "image": null
+                                                },
+                                                {
+                                                    "value": "APPLE_DEVELOPER_KEY",
+                                                    "label": "Apple developer key",
+                                                    "icon": null,
+                                                    "image": null
+                                                },
+                                                {
+                                                    "value": "API_KEY",
+                                                    "label": "API key",
+                                                    "icon": null,
+                                                    "image": null
+                                                },
+                                                {
+                                                    "value": "API_KEY_PAIR",
+                                                    "label": "API key and secret",
+                                                    "icon": null,
+                                                    "image": null
+                                                },
+                                                {
+                                                    "value": "TIDAL_DEVICE_SESSION",
+                                                    "label": "Tidal session",
+                                                    "icon": null,
+                                                    "image": null
+                                                },
+                                                {
+                                                    "value": "FILE",
+                                                    "label": "Files",
+                                                    "icon": null,
+                                                    "image": null
+                                                }
+                                            ],
+                                            "helper": null,
+                                            "error": null,
+                                            "required": false,
+                                            "enabled": true
+                                        }
+                                    ],
+                                    "submit": {
+                                        "contributionId": "credentialserver.server",
+                                        "actionId": "createCredential",
+                                        "params": {},
+                                        "formId": "credentialServerCreateCredential",
+                                        "confirmText": null
+                                    },
+                                    "submitLabel": "Add credential",
+                                    "cancelLabel": null,
+                                    "actions": []
+                                }
+                            ],
+                            "title": "Credentials",
+                            "collapsible": false,
+                            "collapsed": false
+                        }
+                    ],
+                    "spacing": "MEDIUM",
+                    "align": "STRETCH",
+                    "weights": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "credentialserver.client",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "credentialserver",
+            "title": "Credential server client",
+            "description": null,
+            "titleKey": "credentialserver.client.title",
+            "descriptionKey": null,
+            "icon": "USER",
+            "order": 72,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": true,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.credentialserver.CredentialServerClientContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/credentialserver/CredentialServerClientContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "column",
+                            "children": [
+                                {
+                                    "type": "text",
+                                    "text": "Synara",
+                                    "style": "TITLE",
+                                    "tone": "DEFAULT",
+                                    "emphasis": "MEDIUM"
+                                },
+                                {
+                                    "type": "row",
+                                    "children": [
+                                        {
+                                            "type": "badge",
+                                            "text": "Enabled",
+                                            "tone": "SUCCESS",
+                                            "icon": null
+                                        },
+                                        {
+                                            "type": "badge",
+                                            "text": "This server",
+                                            "tone": "PRIMARY",
+                                            "icon": null
+                                        }
+                                    ],
+                                    "spacing": "SMALL",
+                                    "align": "CENTER",
+                                    "weights": null
+                                },
+                                {
+                                    "type": "text",
+                                    "text": "Client id: synara-example",
+                                    "style": "CAPTION",
+                                    "tone": "MUTED",
+                                    "emphasis": "MEDIUM"
+                                },
+                                {
+                                    "type": "text",
+                                    "text": "Last token issued Jan 1, 2026, 12:00 AM UTC",
+                                    "style": "CAPTION",
+                                    "tone": "MUTED",
+                                    "emphasis": "MEDIUM"
+                                }
+                            ],
+                            "spacing": "SMALL",
+                            "align": "STRETCH",
+                            "weights": null
+                        },
+                        {
+                            "type": "form",
+                            "id": "credentialServerClient",
+                            "children": [
+                                {
+                                    "type": "switch",
+                                    "key": "enabled",
+                                    "label": "Enabled",
+                                    "value": true,
+                                    "helper": null,
+                                    "enabled": true
+                                },
+                                {
+                                    "type": "section",
+                                    "children": [
+                                        {
+                                            "type": "switch",
+                                            "key": "grant:spotify.api",
+                                            "label": "Spotify",
+                                            "value": true,
+                                            "helper": "spotify.api · OAuth client credentials",
+                                            "enabled": true
+                                        }
+                                    ],
+                                    "title": "Granted credentials",
+                                    "collapsible": false,
+                                    "collapsed": false
+                                }
+                            ],
+                            "submit": {
+                                "contributionId": "credentialserver.client",
+                                "actionId": "save",
+                                "params": {
+                                    "id": {
+                                        "text": "00000000-0000-0000-0000-000000000003",
+                                        "number": null,
+                                        "flag": null,
+                                        "items": null
+                                    }
+                                },
+                                "formId": "credentialServerClient",
+                                "confirmText": null
+                            },
+                            "submitLabel": "Save",
+                            "cancelLabel": null,
+                            "actions": []
+                        },
+                        {
+                            "type": "divider"
+                        },
+                        {
+                            "type": "column",
+                            "children": [
+                                {
+                                    "type": "button",
+                                    "label": "Rotate secret",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "credentialserver.client",
+                                        "actionId": "rotate",
+                                        "params": {
+                                            "id": {
+                                                "text": "00000000-0000-0000-0000-000000000003",
+                                                "number": null,
+                                                "flag": null,
+                                                "items": null
+                                            }
+                                        },
+                                        "formId": null,
+                                        "confirmText": "Create a new secret? The old one stops working right away."
+                                    },
+                                    "style": "SECONDARY",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "SYNC"
+                                    },
+                                    "enabled": true
+                                },
+                                {
+                                    "type": "button",
+                                    "label": "Revoke tokens",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "credentialserver.client",
+                                        "actionId": "revoke",
+                                        "params": {
+                                            "id": {
+                                                "text": "00000000-0000-0000-0000-000000000003",
+                                                "number": null,
+                                                "flag": null,
+                                                "items": null
+                                            }
+                                        },
+                                        "formId": null,
+                                        "confirmText": "Revoke all tokens of this client? It has to log in again."
+                                    },
+                                    "style": "SECONDARY",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "CLOSE"
+                                    },
+                                    "enabled": true
+                                },
+                                {
+                                    "type": "button",
+                                    "label": "Delete client",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "credentialserver.client",
+                                        "actionId": "delete",
+                                        "params": {
+                                            "id": {
+                                                "text": "00000000-0000-0000-0000-000000000003",
+                                                "number": null,
+                                                "flag": null,
+                                                "items": null
+                                            }
+                                        },
+                                        "formId": null,
+                                        "confirmText": "Delete this client? Servers using it lose access right away."
+                                    },
+                                    "style": "DESTRUCTIVE",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "CLOSE"
+                                    },
+                                    "enabled": true
+                                }
+                            ],
+                            "spacing": "SMALL",
+                            "align": "START",
+                            "weights": null
+                        }
+                    ],
+                    "spacing": "MEDIUM",
+                    "align": "STRETCH",
+                    "weights": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "credentialserver.credential",
+            "kind": "PAGE",
+            "slot": null,
+            "source": "credentialserver",
+            "title": "Credential",
+            "description": null,
+            "titleKey": "credentialserver.credential.title",
+            "descriptionKey": null,
+            "icon": "KEY",
+            "order": 72,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": true,
+                "capabilities": []
+            },
+            "className": "dev.dertyp.services.ui.credentialserver.CredentialServerCredentialContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/credentialserver/CredentialServerCredentialContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "column",
+                    "children": [
+                        {
+                            "type": "column",
+                            "children": [
+                                {
+                                    "type": "text",
+                                    "text": "Spotify",
+                                    "style": "TITLE",
+                                    "tone": "DEFAULT",
+                                    "emphasis": "MEDIUM"
+                                },
+                                {
+                                    "type": "text",
+                                    "text": "spotify.api",
+                                    "style": "CAPTION",
+                                    "tone": "MUTED",
+                                    "emphasis": "MEDIUM"
+                                },
+                                {
+                                    "type": "text",
+                                    "text": "Client id and secret for the Spotify API",
+                                    "style": "CAPTION",
+                                    "tone": "MUTED",
+                                    "emphasis": "MEDIUM"
+                                },
+                                {
+                                    "type": "row",
+                                    "children": [
+                                        {
+                                            "type": "badge",
+                                            "text": "OAuth client credentials",
+                                            "tone": "DEFAULT",
+                                            "icon": null
+                                        },
+                                        {
+                                            "type": "badge",
+                                            "text": "OK",
+                                            "tone": "SUCCESS",
+                                            "icon": null
+                                        }
+                                    ],
+                                    "spacing": "SMALL",
+                                    "align": "CENTER",
+                                    "weights": null
+                                },
+                                {
+                                    "type": "text",
+                                    "text": "Granted to Synara",
+                                    "style": "CAPTION",
+                                    "tone": "MUTED",
+                                    "emphasis": "MEDIUM"
+                                }
+                            ],
+                            "spacing": "SMALL",
+                            "align": "STRETCH",
+                            "weights": null
+                        },
+                        {
+                            "type": "form",
+                            "id": "credentialServerCredential",
+                            "children": [
+                                {
+                                    "type": "textField",
+                                    "key": "description",
+                                    "label": "Description",
+                                    "value": "Spotify Web API client credentials for metadata lookups",
+                                    "placeholder": null,
+                                    "secret": false,
+                                    "multiline": false,
+                                    "helper": null,
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                },
+                                {
+                                    "type": "textField",
+                                    "key": "clientId",
+                                    "label": "Client id",
+                                    "value": null,
+                                    "placeholder": null,
+                                    "secret": false,
+                                    "multiline": false,
+                                    "helper": "A value is stored. Leave this blank to keep it.",
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                },
+                                {
+                                    "type": "textField",
+                                    "key": "clientSecret",
+                                    "label": "Client secret",
+                                    "value": null,
+                                    "placeholder": null,
+                                    "secret": true,
+                                    "multiline": false,
+                                    "helper": "A value is stored. Leave this blank to keep it.",
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                },
+                                {
+                                    "type": "textField",
+                                    "key": "tokenUrl",
+                                    "label": "Token URL",
+                                    "value": null,
+                                    "placeholder": null,
+                                    "secret": false,
+                                    "multiline": false,
+                                    "helper": "A value is stored. Leave this blank to keep it.",
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                },
+                                {
+                                    "type": "select",
+                                    "key": "authStyle",
+                                    "label": "Client authentication",
+                                    "value": "BASIC",
+                                    "options": [
+                                        {
+                                            "value": "BASIC",
+                                            "label": "Basic authentication",
+                                            "icon": null,
+                                            "image": null
+                                        },
+                                        {
+                                            "value": "FORM",
+                                            "label": "Form parameters",
+                                            "icon": null,
+                                            "image": null
+                                        }
+                                    ],
+                                    "helper": null,
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true
+                                },
+                                {
+                                    "type": "textField",
+                                    "key": "scope",
+                                    "label": "Scope",
+                                    "value": null,
+                                    "placeholder": null,
+                                    "secret": false,
+                                    "multiline": false,
+                                    "helper": null,
+                                    "error": null,
+                                    "required": false,
+                                    "enabled": true,
+                                    "kind": "TEXT",
+                                    "toolbar": []
+                                }
+                            ],
+                            "submit": {
+                                "contributionId": "credentialserver.credential",
+                                "actionId": "save",
+                                "params": {
+                                    "name": {
+                                        "text": "spotify.api",
+                                        "number": null,
+                                        "flag": null,
+                                        "items": null
+                                    },
+                                    "kind": {
+                                        "text": "OAUTH_CLIENT_CREDENTIALS",
+                                        "number": null,
+                                        "flag": null,
+                                        "items": null
+                                    }
+                                },
+                                "formId": "credentialServerCredential",
+                                "confirmText": null
+                            },
+                            "submitLabel": "Save",
+                            "cancelLabel": null,
+                            "actions": []
+                        },
+                        {
+                            "type": "divider"
+                        },
+                        {
+                            "type": "column",
+                            "children": [
+                                {
+                                    "type": "button",
+                                    "label": "Test",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "credentialserver.credential",
+                                        "actionId": "test",
+                                        "params": {
+                                            "name": {
+                                                "text": "spotify.api",
+                                                "number": null,
+                                                "flag": null,
+                                                "items": null
+                                            },
+                                            "kind": {
+                                                "text": "OAUTH_CLIENT_CREDENTIALS",
+                                                "number": null,
+                                                "flag": null,
+                                                "items": null
+                                            }
+                                        },
+                                        "formId": null,
+                                        "confirmText": null
+                                    },
+                                    "style": "SECONDARY",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "CHECK"
+                                    },
+                                    "enabled": true
+                                },
+                                {
+                                    "type": "button",
+                                    "label": "Delete credential",
+                                    "action": {
+                                        "type": "invoke",
+                                        "contributionId": "credentialserver.credential",
+                                        "actionId": "delete",
+                                        "params": {
+                                            "name": {
+                                                "text": "spotify.api",
+                                                "number": null,
+                                                "flag": null,
+                                                "items": null
+                                            },
+                                            "kind": {
+                                                "text": "OAUTH_CLIENT_CREDENTIALS",
+                                                "number": null,
+                                                "flag": null,
+                                                "items": null
+                                            }
+                                        },
+                                        "formId": null,
+                                        "confirmText": "Delete this credential? Clients granted it lose access right away."
+                                    },
+                                    "style": "DESTRUCTIVE",
+                                    "icon": {
+                                        "type": "named",
+                                        "name": "CLOSE"
+                                    },
+                                    "enabled": true
+                                }
+                            ],
+                            "spacing": "SMALL",
+                            "align": "START",
+                            "weights": null
+                        }
+                    ],
+                    "spacing": "MEDIUM",
+                    "align": "STRETCH",
+                    "weights": null
+                },
+                "toolbar": [],
+                "error": null
+            }
+        },
+        {
+            "id": "core.importer.entry",
+            "kind": "SLOT",
+            "slot": "library",
+            "source": "server",
+            "title": "Importer",
+            "description": "Import music from streaming services",
+            "titleKey": "importer.title",
+            "descriptionKey": "importer.subtitle",
+            "icon": "IMPORT",
+            "order": 100,
+            "cardSize": null,
+            "hooks": [],
+            "access": {
+                "requiresAdmin": false,
+                "capabilities": [
+                    "IMPORT"
+                ]
+            },
+            "className": "dev.dertyp.services.ui.ImporterLibraryEntryContribution",
+            "file": "server/src/main/kotlin/dev/dertyp/services/ui/ImporterPageContribution.kt",
+            "render": {
+                "tree": {
+                    "type": "tile",
+                    "title": "Importer",
+                    "subtitle": "Import music from streaming services",
+                    "icon": {
+                        "type": "named",
+                        "name": "IMPORT"
+                    },
+                    "action": {
+                        "type": "openPage",
+                        "pageId": "core.importer",
+                        "params": {},
+                        "modal": false
+                    },
+                    "tone": "DEFAULT"
+                },
+                "toolbar": [],
+                "error": null
+            }
+        }
+    ]
+}

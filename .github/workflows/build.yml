@@ -134,7 +134,7 @@ jobs:
         run: ./gradlew :server:shadowJar :proxy:shadowJar :mock-server:shadowJar :listen-backup:shadowJar :credential-server:shadowJar generateDocs
 
       - name: Verify generated docs are current
-        run: git diff --exit-code -- docs/RPC_SERVICES.md docs/MODELS.md docs/REST_API.md docs/PERMISSIONS.md docs/API_CONSTANTS.md docs/ENVIRONMENT_VARIABLES.md example.env
+        run: git diff --exit-code -- docs/RPC_SERVICES.md docs/MODELS.md docs/REST_API.md docs/PERMISSIONS.md docs/API_CONSTANTS.md docs/SERVER_UI_CONTRIBUTIONS.md docs/SERVER_UI_CONTRIBUTIONS.json docs/ENVIRONMENT_VARIABLES.md example.env
 
       - name: Extract Application Version
         id: version_info

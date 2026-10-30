@@ -44,6 +44,7 @@ tasks.register("generateDocs") {
         ":common-rpc:kspCommonMainKotlinMetadata",
         ":server:kspKotlin",
         ":server:generateApiConstantsDocs",
+        ":server:generateUiContributionDocs",
         "generateEnvDocs",
     )
 }

@@ -211,7 +211,7 @@ class MySettings : UiContribution(
 - `access` restricts who sees and may invoke the contribution (`requiresAdmin`, required `UserCapability`s). Authorization is enforced by the server.
 - Use `context.ui.invalidate(id)` to push a re-render from outside the flow.
 
-Slots available today: `library`, `settings`, `admin.dashboard`, `home` (home cards), `importer` (sections on the importer page), `album.detail`, `artist.detail`, `song.detail`, `song.menu`, `playlist.detail`, `collection.detail`.
+The slots available today and the built-in contributions in each are listed in [SERVER_UI_CONTRIBUTIONS.md](SERVER_UI_CONTRIBUTIONS.md).
 
 Secret fields (`TextField(secret = true)`) must never echo the stored value; treat an empty submitted value as "unchanged".
 

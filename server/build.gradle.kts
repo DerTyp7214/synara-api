@@ -48,6 +48,17 @@ tasks.register<JavaExec>("generateApiConstantsDocs") {
     args("docs/API_CONSTANTS.md", "docs/MODELS.md", "docs/RPC_SERVICES.md")
 }
 
+tasks.register<JavaExec>("generateUiContributionDocs") {
+    group = "documentation"
+    description =
+        "Generates docs/SERVER_UI_CONTRIBUTIONS.md and docs/SERVER_UI_CONTRIBUTIONS.json from the server UI contributions and built-in UI plugins."
+    mainClass.set("dev.dertyp.docs.UiContributionDocsKt")
+    classpath = sourceSets["test"].runtimeClasspath
+    workingDir = rootProject.projectDir
+    mustRunAfter(":common-rpc:kspCommonMainKotlinMetadata")
+    args("docs/SERVER_UI_CONTRIBUTIONS.md", "docs/SERVER_UI_CONTRIBUTIONS.json", "docs/MODELS.md", "docs/RPC_SERVICES.md")
+}
+
 tasks.register<JavaExec>("generateMigration") {
     group = "build setup"
     description =
