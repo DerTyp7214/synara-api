@@ -77,7 +77,7 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
     }
     registerIArtistServiceRest(authenticated = true) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
-        ArtistRpcService(user, koin.get()).withAuthorization<IArtistService>(user)
+        ArtistRpcService(user, koin.get(), koin.get()).withAuthorization<IArtistService>(user)
     }
     registerIAudioAnalysisServiceRest(authenticated = true) {
         val user = call.getUser()

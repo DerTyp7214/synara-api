@@ -22,7 +22,13 @@ import java.util.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
-class ArtistRpcService(private val user: User, private val artistService: ArtistService) : IArtistService {
+private const val MAX_ARTIST_TOP_SONGS = 100
+
+class ArtistRpcService(
+    private val user: User,
+    private val artistService: ArtistService,
+    private val artistTopSongsService: ArtistTopSongsService,
+) : IArtistService {
     override suspend fun byId(id: UUID): Artist? = artistService.byId(id, user.id)
     override suspend fun byMusicBrainzId(mbId: UUID): List<Artist> = artistService.byMusicBrainzId(mbId, user.id)
     override suspend fun byIds(@LogParam("size") ids: List<UUID>): List<Artist> = artistService.byIds(ids, user.id)
@@ -84,6 +90,9 @@ class ArtistRpcService(private val user: User, private val artistService: Artist
         artistService.artistsWithoutMusicBrainzIdFlow(user.id)
 
     override fun artistIdsWithoutMusicBrainzId(): Flow<UUID> = artistService.artistIdsWithoutMusicBrainzId()
+
+    override suspend fun topSongs(artistId: UUID, limit: Int, order: ArtistTopSongOrder): List<ArtistTopSong> =
+        artistTopSongsService.topSongs(user.id, artistId, limit.coerceIn(1, MAX_ARTIST_TOP_SONGS), order)
 
     override suspend fun aliases(id: UUID): List<ArtistAlias> = artistService.aliases(id)
     override suspend fun addAlias(artistId: UUID, name: String): Boolean = artistService.addAlias(artistId, name)

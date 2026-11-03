@@ -15,6 +15,8 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [ArtistCredit](#devdertypdataartistcredit)
 - [ArtistPlaylistSortStrategy](#devdertypdataartistplaylistsortstrategy)
 - [ArtistSplitAlias](#devdertypdataartistsplitalias)
+- [ArtistTopSong](#devdertypdataartisttopsong)
+- [ArtistTopSongOrder](#devdertypdataartisttopsongorder)
 - [ArtistType](#devdertypdataartisttype)
 - [AudioBand](#devdertypdataaudioband)
 - [AudioFormat](#devdertypdataaudioformat)
@@ -486,6 +488,24 @@ Represents a split mapping for a combined artist name.
 | :--- | :--- | :--- |
 | `artistId` | `PlatformUUID` | The artist unique identifier. |
 | `name` | `String` | The name to be split. |
+
+### ArtistTopSong <a name="devdertypdataartisttopsong"></a>
+A library song of an artist with its popularity across all listeners and the current user's own listen count.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `song` | [UserSong](#devdertypdatausersong) | The library song. |
+| `globalListenCount` | `Long`? | Total listen count of the song across all listeners, or null if unknown. |
+| `globalUserCount` | `Long`? | Number of distinct listeners of the song, or null if unknown. |
+| `ownListenCount` | `Long` | Deduplicated listen count of the current user, including the listens of accounts linked for listen sharing. |
+
+### ArtistTopSongOrder <a name="devdertypdataartisttopsongorder"></a>
+How the top songs of an artist are ranked. GLOBAL_LISTENS ranks by the listen count across all listeners, songs without one come last. OWN_LISTENS ranks by the current user's own listen count.
+
+| Value | Description |
+| :--- | :--- |
+| `GLOBAL_LISTENS` |  |
+| `OWN_LISTENS` |  |
 
 ### ArtistType <a name="devdertypdataartisttype"></a>
 The category of a MusicBrainz artist.

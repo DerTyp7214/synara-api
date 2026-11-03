@@ -47,6 +47,7 @@ POST /artist/musicBrainzId/{id} IArtistService.fetchMusicBrainzId | Fetch and li
 PUT /artist/musicBrainzId/{id} IArtistService.setMusicBrainzId | Link an artist record to a MusicBrainz ID. | artist | UserAuth | id:path,musicBrainzId:query | body:no
 GET /artist/search IArtistService.rankedSearch | Ranked artist search. | artist | UserAuth | page:query,pageSize:query,query:query | body:no
 POST /artist/splitArtist IArtistService.splitArtist | Split an artist record into multiple artists. | artist | UserAuth | - | body:yes
+GET /artist/topSongs/{artistId} IArtistService.topSongs | List the artist's library songs ranked by popularity. The list holds the artist's most listened songs across all listeners and the artist's songs the current user has listened to. | artist | UserAuth | artistId:path,limit:query,order:query | body:no
 GET /artist/{type}/artistImages IArtistService.searchArtistImages | Search for artist images using a metadata provider. | artist | UserAuth | type:path,query:query,limit:query | body:no
 POST /audioAnalysis/analyzeSong/{songId} IAudioAnalysisService.analyzeSong | Trigger analysis for a song. | audioAnalysis | UserAuth | songId:path | body:no
 GET /audioAnalysis/audioData/{songId} IAudioAnalysisService.getAudioData | Get audio analysis data for a song. | audioAnalysis | UserAuth | songId:path | body:no

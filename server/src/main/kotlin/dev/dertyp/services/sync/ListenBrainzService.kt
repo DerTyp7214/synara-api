@@ -263,7 +263,7 @@ class ListenBrainzService : Service() {
 
         val mbids = listens.mapNotNull { it.recordingMbid()?.toPlatformUuidOrNull() }.distinct()
         val directIsrcs = listens.mapNotNull { it.isrc()?.uppercase() }
-        val match = dbQuery { resolveMatches(mbids, directIsrcs) }
+        val match = dbQuery { resolveRecordingMatches(mbids, directIsrcs) }
         val overrides = dbQuery { loadLinkOverrides(lbUserId) }
 
         return listens.map { listen ->
@@ -292,6 +292,11 @@ class ListenBrainzService : Service() {
             )
         }
     }
+
+    suspend fun topRecordingsForArtist(artistMbid: PlatformUUID): List<ListenBrainzTopRecording>? =
+        ApiClient.queueInstance.safeQueuedGet<List<ListenBrainzTopRecording>>(
+            "$API_BASE/popularity/top-recordings-for-artist/$artistMbid"
+        )
 
     suspend fun submitManualMapping(
         userId: PlatformUUID,
@@ -404,11 +409,9 @@ class ListenBrainzService : Service() {
         }
         if (unmatchedMbids.isEmpty()) return overrideUpdated
 
-        val match = dbQuery { resolveMatches(unmatchedMbids, emptyList()) }
+        val match = dbQuery { resolveRecordingMatches(unmatchedMbids, emptyList()) }
         val resolved = unmatchedMbids.mapNotNull { mbid ->
-            val songId = match.mbidToSong[mbid]
-                ?: match.mbidToIsrcs[mbid]?.firstNotNullOfOrNull { match.isrcToSong[it] }
-            if (songId != null) mbid to songId else null
+            match.songForRecording(mbid)?.let { mbid to it }
         }
         if (resolved.isEmpty()) return overrideUpdated
 
@@ -430,39 +433,6 @@ class ListenBrainzService : Service() {
         return overrideUpdated + updated
     }
 
-    private fun resolveMatches(mbids: List<PlatformUUID>, directIsrcs: List<String>): Match {
-        val mbidToIsrcs = mbids.chunked(QUERY_CHUNK).flatMap { chunk ->
-            MBRecordingIsrcTable
-                .select(MBRecordingIsrcTable.recordingId, MBRecordingIsrcTable.isrc)
-                .where { MBRecordingIsrcTable.recordingId inList chunk }
-                .map { it[MBRecordingIsrcTable.recordingId].value to it[MBRecordingIsrcTable.isrc].uppercase() }
-        }.groupBy({ it.first }, { it.second })
-
-        val candidateIsrcs = (directIsrcs + mbidToIsrcs.values.flatten()).distinct()
-
-        val isrcToSong = candidateIsrcs.chunked(QUERY_CHUNK).flatMap { chunk ->
-            SongTable
-                .select(SongTable.id, SongTable.isrc)
-                .where { SongTable.isrc inList chunk }
-                .mapNotNull { row -> row[SongTable.isrc]?.uppercase()?.let { it to row[SongTable.id].value } }
-        }.toMap()
-
-        val mbidToSong = mbids.chunked(QUERY_CHUNK).flatMap { chunk ->
-            SongMusicBrainzTable
-                .select(SongMusicBrainzTable.songId, SongMusicBrainzTable.musicBrainzId)
-                .where { SongMusicBrainzTable.musicBrainzId inList chunk }
-                .map { it[SongMusicBrainzTable.musicBrainzId]!!.value to it[SongMusicBrainzTable.songId].value }
-        }.toMap()
-
-        return Match(mbidToIsrcs, isrcToSong, mbidToSong)
-    }
-
-    private data class Match(
-        val mbidToIsrcs: Map<PlatformUUID, List<String>>,
-        val isrcToSong: Map<String, PlatformUUID>,
-        val mbidToSong: Map<PlatformUUID, PlatformUUID>,
-    )
-
     private fun String.toPlatformUuidOrNull(): PlatformUUID? =
         try {
             platformUUIDFromString(this)
@@ -473,7 +443,6 @@ class ListenBrainzService : Service() {
     companion object {
         private const val API_BASE = "https://api.listenbrainz.org/1"
         private const val PAGE_COUNT = 1000
-        private const val QUERY_CHUNK = 1000
         private const val FETCH_ATTEMPTS = 4
     }
 }
@@ -494,6 +463,13 @@ class RpcListenBrainzService(
     override suspend fun recentListens(limit: Int): List<ListenedSong> =
         service.recentListens(user.id, limit)
 }
+
+@Serializable
+data class ListenBrainzTopRecording(
+    @SerialName("recording_mbid") val recordingMbid: String? = null,
+    @SerialName("total_listen_count") val totalListenCount: Long = 0,
+    @SerialName("total_user_count") val totalUserCount: Long = 0,
+)
 
 @Serializable
 private data class LbListensResponse(val payload: LbPayload = LbPayload())

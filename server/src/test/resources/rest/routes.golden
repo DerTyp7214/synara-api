@@ -39,6 +39,7 @@ GET /artist/byId/{id} IArtistService.byId [p:id] JSON
 GET /artist/byIds IArtistService.byIds [q:ids] JSON
 GET /artist/byMusicBrainzId/{mbId} IArtistService.byMusicBrainzId [p:mbId] JSON
 GET /artist/search IArtistService.rankedSearch [q:page? q:pageSize? q:query] JSON
+GET /artist/topSongs/{artistId} IArtistService.topSongs [p:artistId q:limit? q:order?] JSON
 GET /artist/{type}/artistImages IArtistService.searchArtistImages [p:type q:query q:limit?] JSON
 POST /artist/alias/{artistId} IArtistService.addAlias [p:artistId q:name] JSON
 POST /artist/artist IArtistService.createArtist [q:name q:isGroup? q:about? q:musicBrainzId?] JSON

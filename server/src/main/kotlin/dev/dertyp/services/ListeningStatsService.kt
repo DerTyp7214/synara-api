@@ -7,6 +7,7 @@ import dev.dertyp.core.db.dbQuery
 import dev.dertyp.services.sync.ListenBrainzService
 import org.koin.core.component.inject
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import java.time.DayOfWeek
 import java.time.Instant
@@ -88,6 +89,13 @@ class ListeningStatsService : Service() {
             songs += songService.byIds(chunk, userId)
         }
         return songs.take(limit)
+    }
+
+    suspend fun songListenCounts(userId: PlatformUUID, songFilter: Op<Boolean>): Map<PlatformUUID, Long> {
+        val pass = dbQuery { runPass(userId, 0L, System.currentTimeMillis(), null, ZoneOffset.UTC, songFilter) }
+        return pass.songCounts.entries.mapNotNull { (key, count) ->
+            (key as? SongKey.Matched)?.let { it.songId to count }
+        }.toMap()
     }
 
     suspend fun stats(
@@ -294,6 +302,7 @@ class ListeningStatsService : Service() {
         rangeEnd: Long,
         previousStart: Long?,
         zone: ZoneId,
+        songFilter: Op<Boolean>? = null,
     ): PassResult {
         val owner = listenOwnerPredicate(userId, ListenScope.SHARED)
 
@@ -387,6 +396,7 @@ class ListeningStatsService : Service() {
                 SongTable.duration,
             )
             .where { owner }
+            .apply { if (songFilter != null) andWhere { songFilter } }
             .orderBy(ListenTable.listenedAt to SortOrder.ASC)
             .forEach { row ->
                 val ts = row[ListenTable.listenedAt]

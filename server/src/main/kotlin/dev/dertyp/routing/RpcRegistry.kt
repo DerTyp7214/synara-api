@@ -144,6 +144,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val lyricsService = koin.get<LyricsService>()
     val lyricsCandidateService = koin.get<LyricsCandidateService>()
     val artistService = koin.get<ArtistService>()
+    val artistTopSongsService = koin.get<ArtistTopSongsService>()
     val importService = koin.get<ImportService>()
     val favSyncService = koin.get<FavSyncService>()
     val playlistService = koin.get<PlaylistService>()
@@ -251,7 +252,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
             .withAuthorization<ILyricsCandidateService>(user).withLogging<ILyricsCandidateService>(call)
     }
     registrar.register(IArtistService::class) {
-        ArtistRpcService(user, artistService).withAuthorization<IArtistService>(
+        ArtistRpcService(user, artistService, artistTopSongsService).withAuthorization<IArtistService>(
             user
         ).withLogging<IArtistService>(call)
     }

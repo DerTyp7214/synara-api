@@ -168,6 +168,8 @@ class FlywayMigrationTest {
             "listen_song_redirect",
             "listen_share",
             "lyrics_candidate",
+            "mb_artist_top_recording",
+            "mb_artist_top_recording_fetch",
         )
         assertEquals(createdByLaterMigrations, after.tables - before.tables)
         assertEquals(before.copy(tables = before.tables + createdByLaterMigrations, history = history), after)
