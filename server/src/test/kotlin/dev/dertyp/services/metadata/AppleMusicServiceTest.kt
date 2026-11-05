@@ -587,6 +587,43 @@ class AppleMusicServiceTest : KoinTest {
     }
 
     @Test
+    fun `getCatalogSongsByIds returns the isrc of the attributes and null when it is missing`(): Unit = runBlocking {
+        enableCatalog()
+        useEngine {
+            respondJson(
+                """
+                    {
+                      "data": [
+                        {"id": "555", "type": "songs", "attributes": {"isrc": "USUM71900764"}},
+                        {"id": "556", "type": "songs", "attributes": {"name": "No isrc"}},
+                        {"id": "557", "type": "songs"}
+                      ]
+                    }
+                """.trimIndent()
+            )
+        }
+
+        val songs = appleMusicService.getCatalogSongsByIds(listOf("555", "556", "557"))
+
+        assertEquals(listOf("555", "556", "557"), songs.map { it.id })
+        assertEquals(listOf<String?>("USUM71900764", null, null), songs.map { it.isrc })
+    }
+
+    @Test
+    fun `getCatalogSongsByIds uses the given storefront instead of the configured one`(): Unit = runBlocking {
+        enableCatalog(storefront = "de")
+        val paths = mutableListOf<String>()
+        useEngine { request ->
+            paths += request.url.encodedPath
+            respondJson("""{"data": []}""")
+        }
+
+        appleMusicService.getCatalogSongsByIds(listOf("1"), storefront = "fr")
+
+        assertEquals(listOf("/v1/catalog/fr/songs"), paths)
+    }
+
+    @Test
     fun `getCatalogSongsByIds chunks the ids at one hundred per request`() = runBlocking {
         enableCatalog()
         val chunkSizes = mutableListOf<Int>()

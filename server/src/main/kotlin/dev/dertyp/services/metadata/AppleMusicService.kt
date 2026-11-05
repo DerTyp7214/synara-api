@@ -425,7 +425,8 @@ class AppleMusicService(
             CatalogSongRef(
                 id = id,
                 artistIds = relationshipIds(relationships, "artists"),
-                albumIds = relationshipIds(relationships, "albums")
+                albumIds = relationshipIds(relationships, "albums"),
+                isrc = obj["attributes"]?.jsonObject?.get("isrc")?.jsonPrimitive?.contentOrNull
             )
         } ?: emptyList()
 
@@ -484,14 +485,15 @@ class AppleMusicService(
 
     suspend fun getCatalogAlbumsByIds(
         ids: List<String>,
-        priority: HttpClientPriority = HttpClientPriority.LOW
+        priority: HttpClientPriority = HttpClientPriority.LOW,
+        storefront: String? = null
     ): List<CatalogAlbum> {
         if (!catalogEnabled) return emptyList()
         val cleaned = ids.map { it.removePrefix("appleMusic:") }.filter { it.isNotBlank() }.distinct()
         if (cleaned.isEmpty()) return emptyList()
         val albums = mutableListOf<CatalogAlbum>()
         cleaned.chunked(CATALOG_ID_CHUNK).forEach { chunk ->
-            val json = catalogGet("/v1/catalog/$storefront/albums", priority) {
+            val json = catalogGet("/v1/catalog/${storefront ?: this.storefront}/albums", priority) {
                 parameter("ids", chunk.joinToString(","))
             } ?: return@forEach
             albums.addAll(catalogAlbumsFrom(json))
@@ -512,14 +514,15 @@ class AppleMusicService(
 
     suspend fun getCatalogSongsByIds(
         ids: List<String>,
-        priority: HttpClientPriority = HttpClientPriority.LOW
+        priority: HttpClientPriority = HttpClientPriority.LOW,
+        storefront: String? = null
     ): List<CatalogSongRef> {
         if (!catalogEnabled) return emptyList()
         val cleaned = ids.map { it.removePrefix("appleMusic:") }.filter { it.isNotBlank() }.distinct()
         if (cleaned.isEmpty()) return emptyList()
         val songs = mutableListOf<CatalogSongRef>()
         cleaned.chunked(CATALOG_ID_CHUNK).forEach { chunk ->
-            val json = catalogGet("/v1/catalog/$storefront/songs", priority) {
+            val json = catalogGet("/v1/catalog/${storefront ?: this.storefront}/songs", priority) {
                 parameter("ids", chunk.joinToString(","))
             } ?: return@forEach
             songs.addAll(catalogSongRefsFrom(json))
@@ -618,7 +621,8 @@ class AppleMusicService(
     data class CatalogSongRef(
         val id: String,
         val artistIds: List<String>,
-        val albumIds: List<String>
+        val albumIds: List<String>,
+        val isrc: String? = null
     )
 
     @Serializable

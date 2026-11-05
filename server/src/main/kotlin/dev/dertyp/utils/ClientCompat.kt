@@ -2,6 +2,9 @@ package dev.dertyp.utils
 
 import dev.dertyp.core.ClientInfo
 import dev.dertyp.data.Album
+import dev.dertyp.data.AppleChart
+import dev.dertyp.data.AppleChartEntry
+import dev.dertyp.data.ArtistTopSong
 import dev.dertyp.data.CollectionSearchResults
 import dev.dertyp.data.CollectionSongMatch
 import dev.dertyp.data.ListenedAlbum
@@ -116,6 +119,9 @@ open class ResponseShaper(
             is PlaybackState -> value.copy(queue = value.queue.map { shape(it) as PlaybackState.QueueEntry })
             is PlaybackState.QueueEntry.WithSong -> value.copy(song = userSong(value.song))
             is QueueItem -> value.copy(song = value.song?.let(::userSong))
+            is ArtistTopSong -> value.copy(song = userSong(value.song))
+            is AppleChart -> value.copy(entries = value.entries.map { shape(it) as AppleChartEntry })
+            is AppleChartEntry -> value.copy(song = value.song?.let(::userSong), album = value.album?.let(::shapeAlbum))
             else -> value
         }
 

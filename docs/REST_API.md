@@ -81,6 +81,7 @@ Nothing on this page is written by hand: every route below is derived from one f
 - [/auth (IAuthService)](#devdertypservicesiauthservice)
 - [/backup (IBackupService)](#devdertypservicesibackupservice)
 - [/change (IChangeService)](#devdertypservicesichangeservice)
+- [/chart (IChartService)](#devdertypservicesichartservice)
 - [/clientRequest (IClientRequestService)](#devdertypservicesiclientrequestservice)
 - [/clientSettings (IClientSettingsService)](#devdertypservicesiclientsettingsservice)
 - [/collection (ICollectionService)](#devdertypservicesicollectionservice)
@@ -272,6 +273,16 @@ RPC reference: [IChangeService](RPC_SERVICES.md#devdertypservicesichangeservice)
 | Method | Path | Parameters | Response | Auth | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | GET | `/change/observeChanges` <a name="devdertypservicesichangeservice-observechanges"></a> | - | SSE [Change](MODELS.md#devdertypdatachange) | JWT | Watch the state of the user for changes. The stream stays silent until something changes and then emits the [ChangeTopic](MODELS.md#devdertypdatachangetopic) that changed, which names the getter to call again. Bursts of changes to the same topic within a short window arrive as a single change. Nothing is replayed, so a client reads the current state after every (re)subscribe. ([observeChanges](RPC_SERVICES.md#devdertypservicesichangeservice)) |
+
+### /chart — IChartService <a name="devdertypservicesichartservice"></a>
+
+Charts of popular music.
+
+RPC reference: [IChartService](RPC_SERVICES.md#devdertypservicesichartservice)
+
+| Method | Path | Parameters | Response | Auth | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| GET | `/chart/appleChart` <a name="devdertypservicesichartservice-applechart"></a> | `country` (query, `String`): Two-letter country code, for example us or de.<br>`kind` (query, [AppleChartKind](MODELS.md#devdertypdataapplechartkind)): Whether to get the song chart or the album chart.<br>`limit` (query, `Int`, optional): Maximum number of entries. Clamped to 1..100. | JSON [AppleChart](MODELS.md#devdertypdataapplechart) | JWT | Get the current Apple Music chart of the most played songs or albums in a country. Every chart entry is returned, entries that are in the library carry the library song or album. ([appleChart](RPC_SERVICES.md#devdertypservicesichartservice)) |
 
 ### /clientRequest — IClientRequestService <a name="devdertypservicesiclientrequestservice"></a>
 

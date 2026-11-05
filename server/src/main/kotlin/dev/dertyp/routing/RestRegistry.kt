@@ -79,6 +79,10 @@ fun Route.registerAuthenticatedRestServices(koin: Koin) {
         val user = call.getUser() ?: throw IllegalArgumentException("No user found")
         ArtistRpcService(user, koin.get(), koin.get()).withAuthorization<IArtistService>(user)
     }
+    registerIChartServiceRest(authenticated = true) {
+        val user = call.getUser() ?: throw IllegalArgumentException("No user found")
+        RpcAppleChartService(user, koin.get()).withAuthorization<IChartService>(user)
+    }
     registerIAudioAnalysisServiceRest(authenticated = true) {
         val user = call.getUser()
         koin.get<AudioAnalysisService>().withAuthorization<IAudioAnalysisService>(user)

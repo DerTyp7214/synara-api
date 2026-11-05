@@ -14,6 +14,7 @@ Models: [MODELS.md](MODELS.md) · REST routes: [REST_API.md](REST_API.md) · Per
 - [IAuthService](#devdertypservicesiauthservice)
 - [IBackupService](#devdertypservicesibackupservice)
 - [IChangeService](#devdertypservicesichangeservice)
+- [IChartService](#devdertypservicesichartservice)
 - [IClientRequestService](#devdertypservicesiclientrequestservice)
 - [IClientSettingsService](#devdertypservicesiclientsettingsservice)
 - [ICollectionService](#devdertypservicesicollectionservice)
@@ -180,6 +181,13 @@ Tells a client which parts of the user's state changed, so it reads them again w
 | Function | Parameters | Returns | Permissions | Errors | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `observeChanges` <a name="devdertypservicesichangeservice-observechanges"></a> | - | `Flow`<[Change](MODELS.md#devdertypdatachange)> | - |  | Watch the state of the user for changes. The stream stays silent until something changes and then emits the [ChangeTopic](MODELS.md#devdertypdatachangetopic) that changed, which names the getter to call again. Bursts of changes to the same topic within a short window arrive as a single change. Nothing is replayed, so a client reads the current state after every (re)subscribe. |
+
+### IChartService <a name="devdertypservicesichartservice"></a>
+Charts of popular music.
+
+| Function | Parameters | Returns | Permissions | Errors | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `appleChart` <a name="devdertypservicesichartservice-applechart"></a> | `country` (`String`): Two-letter country code, for example us or de.<br>`kind` ([AppleChartKind](MODELS.md#devdertypdataapplechartkind)): Whether to get the song chart or the album chart.<br>`limit` (`Int`): Maximum number of entries. Clamped to 1..100. | [AppleChart](MODELS.md#devdertypdataapplechart) | - | IllegalArgumentException | Get the current Apple Music chart of the most played songs or albums in a country. Every chart entry is returned, entries that are in the library carry the library song or album. |
 
 ### IClientRequestService <a name="devdertypservicesiclientrequestservice"></a>
 The connection a client keeps open to the server for the lifetime of the app. It carries the tasks the server asks the calling client to perform, which the client performs through the regular RPC services and reports back so the device that asked for it is unblocked, and it doubles as the presence of the client: a session that connects with a description is listed as an online device of the user, with the cross-device features it offers, for exactly as long as it keeps the stream open.

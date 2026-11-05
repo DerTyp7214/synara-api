@@ -10,6 +10,9 @@ Services: [RPC_SERVICES.md](RPC_SERVICES.md) · REST routes: [REST_API.md](REST_
 - [AnimatedImage](#devdertypdataanimatedimage)
 - [ApiKeyInfo](#devdertypdataapikeyinfo)
 - [ApiKeyScopeInfo](#devdertypdataapikeyscopeinfo)
+- [AppleChart](#devdertypdataapplechart)
+- [AppleChartEntry](#devdertypdataapplechartentry)
+- [AppleChartKind](#devdertypdataapplechartkind)
 - [dev.dertyp.data.Artist](#devdertypdataartist)
 - [ArtistAlias](#devdertypdataartistalias)
 - [ArtistCredit](#devdertypdataartistcredit)
@@ -424,6 +427,40 @@ Describes an API key scope that can be granted to keys.
 | `name` | `String` | Human-readable scope name. |
 | `description` | `String` | Description of what the scope grants access to. |
 | `source` | `String` | Origin of the scope: "server" for built-in scopes, otherwise the id of the plugin that registered it. |
+
+### AppleChart <a name="devdertypdataapplechart"></a>
+The current Apple Music chart of a country.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `country` | `String` | Two-letter country code of the chart, in lower case. |
+| `kind` | [AppleChartKind](#devdertypdataapplechartkind) | Whether the chart lists songs or albums. |
+| `updatedAt` | `Long` | Time the chart was last updated, in epoch milliseconds. |
+| `entries` | `List`<[AppleChartEntry](#devdertypdataapplechartentry)> | The chart entries ordered by rank. |
+
+### AppleChartEntry <a name="devdertypdataapplechartentry"></a>
+One entry of an Apple Music chart, with the matching library song or album when the library has it.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `rank` | `Int` | Position in the chart, starting at 1. |
+| `appleId` | `String` | Apple Music id of the song or album. |
+| `name` | `String` | Title of the song or album. |
+| `artistName` | `String` | Artist name as shown in the chart. |
+| `releaseDate` | `String`? | Release date as an ISO date (yyyy-MM-dd), or null if unknown. |
+| `artworkUrl` | `String`? | URL of the cover art, or null if there is none. |
+| `url` | `String` | Apple Music URL of the song or album. It can be passed to the import service to import an entry that is not in the library. |
+| `genres` | `List`<`String`> | Genre names of the entry. |
+| `song` | [UserSong](#devdertypdatausersong)? | The matching library song for a song chart, or null if the library does not have it. |
+| `album` | [Album](#devdertypdataalbum)? | The matching library album for an album chart, or null if the library does not have it. |
+
+### AppleChartKind <a name="devdertypdataapplechartkind"></a>
+The kind of an Apple Music chart. SONGS is the chart of the most played songs. ALBUMS is the chart of the most played albums.
+
+| Value | Description |
+| :--- | :--- |
+| `SONGS` |  |
+| `ALBUMS` |  |
 
 ### Artist <a name="devdertypdataartist"></a>
 *Full name: `dev.dertyp.data.Artist`*

@@ -60,6 +60,7 @@ GET /backup/backups IBackupService.listBackups [] JSON
 POST /backup/backup IBackupService.createBackup [] JSON
 POST /backup/restoreBackup IBackupService.loadBackup [q:fileName] UNIT
 GET /change/observeChanges IChangeService.observeChanges [] SSE
+GET /chart/appleChart IChartService.appleChart [q:country q:kind q:limit?] JSON
 GET /clientRequest/connect IClientRequestService.connect [q:description] SSE
 GET /clientRequest/observeRequests IClientRequestService.observeRequests [] SSE
 GET /clientRequest/onlineDevices IClientRequestService.getOnlineDevices [] JSON

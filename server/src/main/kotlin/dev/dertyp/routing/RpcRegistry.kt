@@ -145,6 +145,7 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
     val lyricsCandidateService = koin.get<LyricsCandidateService>()
     val artistService = koin.get<ArtistService>()
     val artistTopSongsService = koin.get<ArtistTopSongsService>()
+    val appleChartService = koin.get<AppleChartService>()
     val importService = koin.get<ImportService>()
     val favSyncService = koin.get<FavSyncService>()
     val playlistService = koin.get<PlaylistService>()
@@ -255,6 +256,9 @@ private fun registerAuthenticated(koin: Koin, call: ApplicationCall, user: User,
         ArtistRpcService(user, artistService, artistTopSongsService).withAuthorization<IArtistService>(
             user
         ).withLogging<IArtistService>(call)
+    }
+    registrar.register(IChartService::class) {
+        RpcAppleChartService(user, appleChartService).withAuthorization<IChartService>(user).withLogging<IChartService>(call)
     }
     registrar.register(IFavSyncService::class) {
         FavSyncRpcService(

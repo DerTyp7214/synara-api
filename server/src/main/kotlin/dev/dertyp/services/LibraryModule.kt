@@ -15,6 +15,7 @@ val libraryModule = module {
     singleOf(::AlbumService) { bind<AlbumLibrary>() }
     singleOf(::ArtistService) { bind<ArtistLibrary>() }
     singleOf(::ArtistTopSongsService)
+    singleOf(::AppleChartService)
     singleOf(::GenreService)
     singleOf(::PlaylistService)
     singleOf(::UserPlaylistService) { bind<PlaylistLibrary>() }
