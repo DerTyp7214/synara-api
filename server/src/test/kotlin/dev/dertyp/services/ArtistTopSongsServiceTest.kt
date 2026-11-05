@@ -52,6 +52,7 @@ class ArtistTopSongsServiceTest : KoinTest {
         coEvery { songService.byIds(any<List<UUID>>(), any<UUID>()) } answers {
             firstArg<List<UUID>>().map { userSong(it) }
         }
+        coEvery { listenBrainzService.apiToken(any()) } returns TOKEN
         startKoin {
             modules(module {
                 single<HookBus> { mockk(relaxed = true) }
@@ -184,7 +185,7 @@ class ArtistTopSongsServiceTest : KoinTest {
             val recordingB = recordingWithIsrc("USABC1234567")
             Fixture(user, artist, mbid, byMbid, byIsrc, listOf(recordingA, recordingB, UUID.randomUUID()))
         }
-        coEvery { listenBrainzService.topRecordingsForArtist(f.mbid) } returns listOf(
+        coEvery { listenBrainzService.topRecordingsForArtist(f.mbid, TOKEN) } returns listOf(
             top(f.recordings[0], 500, 50),
             top(f.recordings[1], 900, 90),
             top(f.recordings[2], 2000, 200),
@@ -195,7 +196,7 @@ class ArtistTopSongsServiceTest : KoinTest {
 
         assertEquals(listOf(Triple(f.byIsrc, 900L, 0L), Triple(f.byMbid, 500L, 0L)), result.summary())
         assertEquals(listOf(90L, 50L), result.map { it.globalUserCount })
-        coVerify(exactly = 1) { listenBrainzService.topRecordingsForArtist(f.mbid) }
+        coVerify(exactly = 1) { listenBrainzService.topRecordingsForArtist(f.mbid, TOKEN) }
         transaction(database) {
             val stored = MBArtistTopRecordingTable.selectAll()
                 .where { MBArtistTopRecordingTable.artistId eq f.mbid }
@@ -231,7 +232,7 @@ class ArtistTopSongsServiceTest : KoinTest {
 
         assertEquals(listOf(Triple(f.song, 700L, 0L)), result.summary())
         assertEquals(emptyList<ArtistTopSong>(), empty)
-        coVerify(exactly = 0) { listenBrainzService.topRecordingsForArtist(any()) }
+        coVerify(exactly = 0) { listenBrainzService.topRecordingsForArtist(any(), any()) }
     }
 
     @ParameterizedTest
@@ -251,12 +252,12 @@ class ArtistTopSongsServiceTest : KoinTest {
             markFetched(mbid, System.currentTimeMillis() - 8.days.inWholeMilliseconds)
             Fixture(user, artist, mbid, oldSong, newSong, newRecording)
         }
-        coEvery { listenBrainzService.topRecordingsForArtist(f.mbid) } returns listOf(top(f.newRecording, 300, 30))
+        coEvery { listenBrainzService.topRecordingsForArtist(f.mbid, TOKEN) } returns listOf(top(f.newRecording, 300, 30))
 
         val result = service.topSongs(f.user, f.artist, 10, ArtistTopSongOrder.GLOBAL_LISTENS)
 
         assertEquals(listOf(Triple(f.newSong, 300L, 0L)), result.summary())
-        coVerify(exactly = 1) { listenBrainzService.topRecordingsForArtist(f.mbid) }
+        coVerify(exactly = 1) { listenBrainzService.topRecordingsForArtist(f.mbid, TOKEN) }
         transaction(database) {
             assertEquals(
                 listOf(f.newRecording),
@@ -282,13 +283,13 @@ class ArtistTopSongsServiceTest : KoinTest {
             markFetched(mbid, staleAt)
             Fixture(user, artist, mbid, song, staleAt)
         }
-        coEvery { listenBrainzService.topRecordingsForArtist(f.mbid) } returns null
+        coEvery { listenBrainzService.topRecordingsForArtist(f.mbid, TOKEN) } returns null
 
         val result = service.topSongs(f.user, f.artist, 10, ArtistTopSongOrder.GLOBAL_LISTENS)
 
         assertEquals(listOf(Triple(f.song, 700L, 0L)), result.summary())
         assertEquals(listOf(70L), result.map { it.globalUserCount })
-        coVerify(exactly = 1) { listenBrainzService.topRecordingsForArtist(f.mbid) }
+        coVerify(exactly = 1) { listenBrainzService.topRecordingsForArtist(f.mbid, TOKEN) }
         transaction(database) {
             assertEquals(
                 f.staleAt,
@@ -376,6 +377,61 @@ class ArtistTopSongsServiceTest : KoinTest {
 
         assertEquals(listOf(Triple(listened, null, 1L)), result.summary())
         assertEquals(listOf<Long?>(null), result.map { it.globalUserCount })
-        coVerify(exactly = 0) { listenBrainzService.topRecordingsForArtist(any()) }
+        coVerify(exactly = 0) { listenBrainzService.topRecordingsForArtist(any(), any()) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `a failed fetch is not retried within the backoff`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        data class Fixture(val user: UUID, val artist: UUID, val mbid: UUID, val song: UUID)
+        val f = transaction(database) {
+            val user = insertUser()
+            val artist = insertArtist()
+            val mbid = insertMbArtist(artist)
+            val song = insertSong(insertAlbum())
+            cacheRecording(mbid, linkRecording(song), 700, 70)
+            markFetched(mbid, System.currentTimeMillis() - 8.days.inWholeMilliseconds)
+            Fixture(user, artist, mbid, song)
+        }
+        coEvery { listenBrainzService.topRecordingsForArtist(f.mbid, TOKEN) } returns null
+
+        val first = service.topSongs(f.user, f.artist, 10, ArtistTopSongOrder.GLOBAL_LISTENS)
+        val second = service.topSongs(f.user, f.artist, 10, ArtistTopSongOrder.OWN_LISTENS)
+
+        assertEquals(listOf(Triple(f.song, 700L, 0L)), first.summary())
+        assertEquals(listOf(Triple(f.song, 700L, 0L)), second.summary())
+        coVerify(exactly = 1) { listenBrainzService.topRecordingsForArtist(f.mbid, TOKEN) }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `without a ListenBrainz token nothing is fetched and the cache is served`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        data class Fixture(val user: UUID, val artist: UUID, val uncachedArtist: UUID, val song: UUID)
+        val f = transaction(database) {
+            val user = insertUser()
+            val artist = insertArtist()
+            val mbid = insertMbArtist(artist)
+            val uncachedArtist = insertArtist("Uncached")
+            insertMbArtist(uncachedArtist)
+            val song = insertSong(insertAlbum())
+            cacheRecording(mbid, linkRecording(song), 700, 70)
+            markFetched(mbid, System.currentTimeMillis() - 8.days.inWholeMilliseconds)
+            Fixture(user, artist, uncachedArtist, song)
+        }
+        coEvery { listenBrainzService.apiToken(f.user) } returns null
+
+        val stale = service.topSongs(f.user, f.artist, 10, ArtistTopSongOrder.GLOBAL_LISTENS)
+        val uncached = service.topSongs(f.user, f.uncachedArtist, 10, ArtistTopSongOrder.GLOBAL_LISTENS)
+
+        assertEquals(listOf(Triple(f.song, 700L, 0L)), stale.summary())
+        assertEquals(emptyList<ArtistTopSong>(), uncached)
+        coVerify(exactly = 2) { listenBrainzService.apiToken(f.user) }
+        coVerify(exactly = 0) { listenBrainzService.topRecordingsForArtist(any(), any()) }
+    }
+
+    private companion object {
+        const val TOKEN = "lb-token"
     }
 }

@@ -21,6 +21,7 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.context.startKoin
@@ -244,5 +245,41 @@ class ListenBrainzServiceTest : KoinTest {
             val songs = ListenTable.selectAll().map { it[ListenTable.songId]?.value }
             assertEquals(listOf(songB, songB, songB), songs)
         }
+    }
+
+    private fun insertTokenAccount(token: String?, userId: UUID? = null): UUID {
+        val lbId = UUID.randomUUID()
+        ListenBrainzUserTable.insert {
+            it[id] = lbId
+            it[username] = "lb_$lbId"
+            it[ListenBrainzUserTable.token] = token
+        }
+        userId?.let { linkListenBrainzUser(it, lbId) }
+        return lbId
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `apiToken prefers the caller's token, falls back to another stored one and is null without any`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val (withoutToken, blankToken, unlinked) = transaction(database) {
+            val withoutToken = insertUser().also { insertTokenAccount(null, it) }
+            val blankToken = insertUser().also { insertTokenAccount("  ", it) }
+            Triple(withoutToken, blankToken, insertUser())
+        }
+
+        assertNull(service.apiToken(withoutToken))
+        assertNull(service.apiToken(blankToken))
+        assertNull(service.apiToken(unlinked))
+
+        transaction(database) { insertTokenAccount("other-token") }
+
+        assertEquals("other-token", service.apiToken(withoutToken))
+        assertEquals("other-token", service.apiToken(blankToken))
+        assertEquals("other-token", service.apiToken(unlinked))
+
+        val owner = transaction(database) { insertUser().also { insertTokenAccount("own-token", it) } }
+
+        assertEquals("own-token", service.apiToken(owner))
     }
 }

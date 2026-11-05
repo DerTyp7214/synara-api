@@ -293,10 +293,33 @@ class ListenBrainzService : Service() {
         }
     }
 
-    suspend fun topRecordingsForArtist(artistMbid: PlatformUUID): List<ListenBrainzTopRecording>? =
+    suspend fun apiToken(userId: PlatformUUID): String? = dbQuery {
+        linkedToken(userId)?.takeIf { it.isNotBlank() }
+            ?: ListenBrainzUserTable
+                .select(ListenBrainzUserTable.token)
+                .where { ListenBrainzUserTable.token.isNotNull() }
+                .orderBy(ListenBrainzUserTable.id)
+                .firstNotNullOfOrNull { row -> row[ListenBrainzUserTable.token]?.takeIf { it.isNotBlank() } }
+    }
+
+    suspend fun topRecordingsForArtist(artistMbid: PlatformUUID, token: String): List<ListenBrainzTopRecording>? =
         ApiClient.queueInstance.safeQueuedGet<List<ListenBrainzTopRecording>>(
             "$API_BASE/popularity/top-recordings-for-artist/$artistMbid"
-        )
+        ) {
+            header(HttpHeaders.Authorization, "Token $token")
+        }
+
+    private fun linkedToken(userId: PlatformUUID): String? =
+        UserListenBrainzLinkTable
+            .join(
+                ListenBrainzUserTable,
+                JoinType.INNER,
+                onColumn = UserListenBrainzLinkTable.listenBrainzUserId,
+                otherColumn = ListenBrainzUserTable.id,
+            )
+            .select(ListenBrainzUserTable.token)
+            .where { UserListenBrainzLinkTable.userId eq userId }
+            .singleOrNull()?.get(ListenBrainzUserTable.token)
 
     suspend fun submitManualMapping(
         userId: PlatformUUID,
@@ -305,18 +328,7 @@ class ListenBrainzService : Service() {
     ): Int {
         if (recordingMsids.isEmpty()) return 0
 
-        val token = dbQuery {
-            UserListenBrainzLinkTable
-                .join(
-                    ListenBrainzUserTable,
-                    JoinType.INNER,
-                    onColumn = UserListenBrainzLinkTable.listenBrainzUserId,
-                    otherColumn = ListenBrainzUserTable.id,
-                )
-                .select(ListenBrainzUserTable.token)
-                .where { UserListenBrainzLinkTable.userId eq userId }
-                .singleOrNull()?.get(ListenBrainzUserTable.token)
-        }
+        val token = dbQuery { linkedToken(userId) }
         if (token.isNullOrBlank()) return 0
 
         var submitted = 0

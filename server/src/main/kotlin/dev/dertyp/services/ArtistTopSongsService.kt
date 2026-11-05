@@ -12,12 +12,15 @@ import dev.dertyp.services.sync.resolveRecordingMatches
 import org.jetbrains.exposed.v1.core.*
 import org.jetbrains.exposed.v1.jdbc.*
 import org.koin.core.component.inject
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 
 class ArtistTopSongsService : Service() {
     private val listenBrainzService by inject<ListenBrainzService>()
     private val listeningStatsService by inject<ListeningStatsService>()
     private val songService by inject<SongService>()
+    private val fetchRetryAt = ConcurrentHashMap<PlatformUUID, Long>()
 
     suspend fun topSongs(
         userId: PlatformUUID,
@@ -31,7 +34,7 @@ class ArtistTopSongsService : Service() {
                 .where { ArtistMusicBrainzTable.artistId eq artistId }
                 .singleOrNull()?.get(ArtistMusicBrainzTable.musicBrainzId)?.value
         }
-        val recordings = artistMbid?.let { recordingPopularity(it) }.orEmpty()
+        val recordings = artistMbid?.let { recordingPopularity(userId, it) }.orEmpty()
 
         val global = HashMap<PlatformUUID, RecordingPopularity>()
         if (recordings.isNotEmpty()) {
@@ -82,7 +85,7 @@ class ArtistTopSongsService : Service() {
         }
     }
 
-    private suspend fun recordingPopularity(artistMbid: PlatformUUID): List<RecordingPopularity> {
+    private suspend fun recordingPopularity(userId: PlatformUUID, artistMbid: PlatformUUID): List<RecordingPopularity> {
         val fetchedAt = dbQuery {
             MBArtistTopRecordingFetchTable
                 .select(MBArtistTopRecordingFetchTable.fetchedAt)
@@ -90,9 +93,12 @@ class ArtistTopSongsService : Service() {
                 .singleOrNull()?.get(MBArtistTopRecordingFetchTable.fetchedAt)
         }
         val now = System.currentTimeMillis()
-        if (fetchedAt == null || now - fetchedAt >= CACHE_TTL_MS) {
-            val fetched = listenBrainzService.topRecordingsForArtist(artistMbid)
+        val stale = fetchedAt == null || now - fetchedAt >= CACHE_TTL_MS
+        val token = if (stale && (fetchRetryAt[artistMbid] ?: 0L) <= now) listenBrainzService.apiToken(userId) else null
+        if (token != null) {
+            val fetched = listenBrainzService.topRecordingsForArtist(artistMbid, token)
             if (fetched != null) {
+                fetchRetryAt.remove(artistMbid)
                 val recordings = fetched.mapNotNull { recording ->
                     val mbid = recording.recordingMbid?.let { runCatching { platformUUIDFromString(it) }.getOrNull() }
                     mbid?.let { RecordingPopularity(it, recording.totalListenCount, recording.totalUserCount) }
@@ -101,6 +107,7 @@ class ArtistTopSongsService : Service() {
                     .onFailure { logger.error("Storing the top recordings of artist $artistMbid failed", it) }
                 return recordings
             }
+            fetchRetryAt[artistMbid] = now + FETCH_BACKOFF_MS
             logger.warn("Fetching the top recordings of artist $artistMbid failed, serving the cached ones")
         }
         return dbQuery {
@@ -139,5 +146,6 @@ class ArtistTopSongsService : Service() {
 
     private companion object {
         val CACHE_TTL_MS = 7.days.inWholeMilliseconds
+        val FETCH_BACKOFF_MS = 1.hours.inWholeMilliseconds
     }
 }
