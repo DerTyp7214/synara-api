@@ -10,6 +10,7 @@ import dev.dertyp.core.RetryPolicy
 import dev.dertyp.core.cleanTitle
 import dev.dertyp.core.retryingGet
 import dev.dertyp.data.*
+import dev.dertyp.plugins.parsePartialDate
 import dev.dertyp.server.BuildConfig
 import dev.dertyp.services.Service
 import dev.dertyp.toPlatformUUID
@@ -24,7 +25,11 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseContextualSerialization
 import kotlinx.serialization.json.*
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.UUID
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
 @Serializable
@@ -269,11 +274,12 @@ class MusicBrainzService : Service() {
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
 
-            response?.releases?.firstOrNull { rel ->
+            val matching = response?.releases.orEmpty().filter { rel ->
                 val relArtists = rel.artistCredit?.mapNotNull { it.artist?.name?.lowercase() } ?: emptyList()
                 val targetArtists = artists.map { it.lowercase() }
                 targetArtists.any { it in relArtists }
             }
+            matching.firstOrNull { rel -> rel.media.orEmpty().any { (it.trackCount ?: 0) > 0 } } ?: matching.firstOrNull()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -550,11 +556,12 @@ class MusicBrainzService : Service() {
                 header("User-Agent", "Synara/${BuildConfig.VERSION} ( https://github.com/dertyp7214/synara )")
             }
 
-            response?.releases?.firstOrNull { rel ->
+            val matching = response?.releases.orEmpty().filter { rel ->
                 val relArtists = rel.artistCredit?.mapNotNull { it.artist?.name?.lowercase() } ?: emptyList()
                 val targetArtists = artists.map { it.lowercase() }
                 targetArtists.any { it in relArtists }
             }
+            matching.firstOrNull { rel -> rel.media.orEmpty().any { (it.trackCount ?: 0) > 0 } } ?: matching.firstOrNull()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -646,6 +653,11 @@ class CachedMusicBrainzService(
     private val musicBrainzService: MusicBrainzService,
     private val musicBrainzCacheService: MusicBrainzCacheService
 ) : IMusicBrainzService {
+    companion object {
+        private val RECENT_RELEASE_CACHE_TTL = 1.days
+        private val RECENT_RELEASE_WINDOW = 60.days
+    }
+
     override suspend fun getArtist(id: PlatformUUID) = getArtist(id, HttpClientPriority.HIGH)
 
     suspend fun getArtist(
@@ -694,11 +706,17 @@ class CachedMusicBrainzService(
         val cached = musicBrainzCacheService.getRelease(id)
         if (cached != null && cached.fetchedAt != 0L && cached.media?.isNotEmpty() == true) {
             val hasTracks = cached.media!!.firstOrNull()?.tracks?.isNotEmpty() == true
-            if (hasTracks) return cached
+            if (hasTracks && !cached.mayHaveChanged()) return cached
         }
         return musicBrainzService.fetchReleaseById(id, priority)?.also {
             musicBrainzCacheService.updateReleaseCache(it)
         } ?: cached
+    }
+
+    private fun MusicBrainzRelease.mayHaveChanged(): Boolean {
+        if (Clock.System.now().toEpochMilliseconds() - fetchedAt < RECENT_RELEASE_CACHE_TTL.inWholeMilliseconds) return false
+        val released = parsePartialDate(date) ?: return true
+        return released > LocalDate.now(ZoneOffset.UTC).minusDays(RECENT_RELEASE_WINDOW.inWholeDays)
     }
 
     override suspend fun getReleaseGroup(id: PlatformUUID) = getReleaseGroup(id, HttpClientPriority.HIGH)

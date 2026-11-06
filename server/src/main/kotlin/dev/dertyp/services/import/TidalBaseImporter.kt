@@ -192,6 +192,10 @@ abstract class TidalBaseImporter(
                             onLiveOutput("Matched MusicBrainz Release by barcode: ${mbRelease.title}")
                             val fullRelease = musicBrainzService.getRelease(mbRelease.id)
                             if (fullRelease != null) mbRelease = fullRelease
+                            if (!mbRelease.hasTracks()) {
+                                onLiveOutput("MusicBrainz Release '${mbRelease.title}' has no tracks, ignoring it")
+                                mbRelease = null
+                            }
                         }
                     }
                 } catch (e: CancellationException) {
@@ -209,7 +213,7 @@ abstract class TidalBaseImporter(
                 }
                 if (mbid != null) {
                     onLiveOutput("Using provided MusicBrainz metadata for album: ${metadata.title}")
-                    mbRelease = musicBrainzService.getRelease(mbid)
+                    mbRelease = musicBrainzService.getRelease(mbid)?.takeIf { it.hasTracks() }
                 }
             }
 
@@ -220,6 +224,10 @@ abstract class TidalBaseImporter(
                     onLiveOutput("Matched MusicBrainz Release: ${mbRelease.title}")
                     val fullRelease = musicBrainzService.getRelease(mbRelease.id)
                     if (fullRelease != null) mbRelease = fullRelease
+                    if (!mbRelease.hasTracks()) {
+                        onLiveOutput("MusicBrainz Release '${mbRelease.title}' has no tracks, ignoring it")
+                        mbRelease = null
+                    }
                 } else {
                     onLiveOutput("No direct MusicBrainz match found for album: $albumTitle")
                 }
@@ -263,12 +271,7 @@ abstract class TidalBaseImporter(
                 val matchIsrcs = listOfNotNull(tidalTrack.isrc, provided?.isrc)
                 val matchTitles = listOfNotNull(tidalTrack.title, provided?.title)
 
-                val mbTrack = mbRelease?.media?.flatMap { it.tracks ?: emptyList() }?.find { track ->
-                    track.recording?.isrcs?.any { it in matchIsrcs } == true ||
-                        matchTitles.any { title ->
-                            track.title?.cleanTitle()?.equals(title.cleanTitle(), true) == true
-                        }
-                }
+                val mbTrack = mbRelease?.findTrack(matchIsrcs, matchTitles)
 
                 if (mbTrack != null) {
                     onLiveOutput("Found track '${tidalTrack.title}' in matched release '${mbRelease.title}'")

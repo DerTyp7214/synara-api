@@ -7,7 +7,11 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.UUID
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 
 class CachedMusicBrainzServiceTest {
 
@@ -133,10 +137,50 @@ class CachedMusicBrainzServiceTest {
             cacheGet = { musicBrainzCacheService.getRelease(any()) },
             networkFetch = { musicBrainzService.fetchReleaseById(any(), any()) },
             cacheUpdate = { musicBrainzCacheService.updateReleaseCache(any()) },
-            cachedValue = MusicBrainzRelease(id = id, fetchedAt = 123L, media = mediaWithTracks),
+            cachedValue = MusicBrainzRelease(id = id, date = "2001-03-12", fetchedAt = 123L, media = mediaWithTracks),
             fetchedValue = MusicBrainzRelease(id = id, fetchedAt = 456L, media = mediaWithTracks),
             fetchedAtZeroValue = MusicBrainzRelease(id = id, fetchedAt = 0L, media = mediaWithTracks)
         )
+    }
+
+    @Test
+    fun `getRelease refetches a recent release whose cache entry is older than a day`(): Unit = runBlocking {
+        val id = UUID.randomUUID()
+        val mediaWithTracks = listOf(MusicBrainzMedia(tracks = listOf(MusicBrainzTrack(id = UUID.randomUUID()))))
+        val now = System.currentTimeMillis()
+        val recentDate = LocalDate.now(ZoneOffset.UTC).minusDays(3).toString()
+        val stale = MusicBrainzRelease(id = id, date = recentDate, fetchedAt = now - 2.days.inWholeMilliseconds, media = mediaWithTracks)
+        val fetched = MusicBrainzRelease(id = id, date = recentDate, fetchedAt = now, media = mediaWithTracks)
+
+        coEvery { musicBrainzCacheService.getRelease(id) } returns stale
+        coEvery { musicBrainzService.fetchReleaseById(id, any()) } returns fetched
+        coEvery { musicBrainzCacheService.updateReleaseCache(fetched) } returns Unit
+        assertEquals(fetched, rpcService.getRelease(id))
+        coVerify(exactly = 1) { musicBrainzCacheService.updateReleaseCache(fetched) }
+
+        coEvery { musicBrainzService.fetchReleaseById(id, any()) } returns null
+        assertEquals(stale, rpcService.getRelease(id))
+
+        val undated = stale.copy(date = null)
+        coEvery { musicBrainzCacheService.getRelease(id) } returns undated
+        assertEquals(undated, rpcService.getRelease(id))
+        coVerify(exactly = 3) { musicBrainzService.fetchReleaseById(id, any()) }
+    }
+
+    @Test
+    fun `getRelease serves a recent release fetched within the last day from the cache`(): Unit = runBlocking {
+        val id = UUID.randomUUID()
+        val mediaWithTracks = listOf(MusicBrainzMedia(tracks = listOf(MusicBrainzTrack(id = UUID.randomUUID()))))
+        val fresh = MusicBrainzRelease(
+            id = id,
+            date = LocalDate.now(ZoneOffset.UTC).toString(),
+            fetchedAt = System.currentTimeMillis() - 1.hours.inWholeMilliseconds,
+            media = mediaWithTracks
+        )
+
+        coEvery { musicBrainzCacheService.getRelease(id) } returns fresh
+        assertEquals(fresh, rpcService.getRelease(id))
+        coVerify(exactly = 0) { musicBrainzService.fetchReleaseById(any(), any()) }
     }
 
     @Test

@@ -2,9 +2,7 @@ package dev.dertyp.services.metadata
 
 import dev.dertyp.DbDialect
 import dev.dertyp.TestDatabase
-import dev.dertyp.data.MusicBrainzAlias
-import dev.dertyp.data.MusicBrainzArtist
-import dev.dertyp.data.MusicBrainzTag
+import dev.dertyp.data.*
 import dev.dertyp.db.*
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -212,5 +210,102 @@ class MusicBrainzCacheServiceTest {
             assertEquals(0, MBArtistTagTable.selectAll().count())
             assertEquals(0, MBArtistAliasTable.selectAll().count())
         }
+    }
+
+    private fun releaseWithIsrcs(releaseId: UUID, recordingIds: List<UUID>, artist: MusicBrainzArtist) = MusicBrainzRelease(
+        id = releaseId,
+        title = "FRESH",
+        artistCredit = listOf(MusicBrainzArtistCredit(name = artist.name, artist = artist)),
+        media = listOf(
+            MusicBrainzMedia(
+                format = "Digital Media",
+                trackCount = recordingIds.size,
+                tracks = recordingIds.mapIndexed { index, recordingId ->
+                    MusicBrainzTrack(
+                        id = UUID.randomUUID(),
+                        position = index + 1,
+                        number = "${index + 1}",
+                        title = "Track ${index + 1}",
+                        recording = MusicBrainzRecording(
+                            id = recordingId,
+                            title = "Track ${index + 1}",
+                            artistCredit = listOf(MusicBrainzArtistCredit(name = artist.name, artist = artist)),
+                            isrcs = listOf("USUG1250000$index")
+                        )
+                    )
+                }
+            )
+        )
+    )
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `getRelease returns the ISRCs and artist credits of the track recordings`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val releaseId = UUID.randomUUID()
+        val recordingIds = listOf(UUID.randomUUID(), UUID.randomUUID())
+        val artist = MusicBrainzArtist(id = UUID.randomUUID(), name = "Lil Baby", sortName = "Lil Baby")
+
+        service.updateReleaseCache(releaseWithIsrcs(releaseId, recordingIds, artist))
+
+        val tracks = service.getRelease(releaseId)?.media?.single()?.tracks.orEmpty()
+        assertEquals(listOf("Track 1", "Track 2"), tracks.map { it.title })
+        assertEquals(listOf(listOf("USUG12500000"), listOf("USUG12500001")), tracks.map { it.recording?.isrcs })
+        assertEquals(listOf(recordingIds[0], recordingIds[1]), tracks.map { it.recording?.id })
+        tracks.forEach { track ->
+            assertEquals(listOf("Lil Baby"), track.recording?.artistCredit?.map { it.name })
+            assertEquals(artist.id, track.recording?.artistCredit?.single()?.artist?.id)
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `updateRecordingCache keeps ISRCs and artist credits when they were not fetched`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val recordingId = UUID.randomUUID()
+        val artist = MusicBrainzArtist(id = UUID.randomUUID(), name = "Lil Baby", sortName = "Lil Baby")
+        service.updateRecordingCache(
+            MusicBrainzRecording(
+                id = recordingId,
+                title = "Dead Fresh",
+                artistCredit = listOf(MusicBrainzArtistCredit(name = artist.name, artist = artist)),
+                isrcs = listOf("USUG12500001")
+            )
+        )
+
+        service.updateRecordingCache(MusicBrainzRecording(id = recordingId, title = "Dead Fresh"))
+
+        val cached = service.getRecording(recordingId)
+        assertEquals(listOf("USUG12500001"), cached?.isrcs)
+        assertEquals(listOf(artist.id), cached?.artistCredit?.map { it.artist?.id })
+
+        service.updateRecordingCache(
+            MusicBrainzRecording(id = recordingId, title = "Dead Fresh", artistCredit = emptyList(), isrcs = emptyList())
+        )
+
+        val cleared = service.getRecording(recordingId)
+        assertEquals(emptyList<String>(), cleared?.isrcs)
+        assertEquals(emptyList<MusicBrainzArtistCredit>(), cleared?.artistCredit)
+    }
+
+    @ParameterizedTest
+    @EnumSource(DbDialect::class)
+    fun `updateReleaseCache keeps the tracklist when the release comes without tracks`(dialect: DbDialect): Unit = runBlocking {
+        setup(dialect)
+        val releaseId = UUID.randomUUID()
+        val recordingIds = listOf(UUID.randomUUID(), UUID.randomUUID())
+        val artist = MusicBrainzArtist(id = UUID.randomUUID(), name = "Lil Baby", sortName = "Lil Baby")
+        service.updateReleaseCache(releaseWithIsrcs(releaseId, recordingIds, artist))
+        val fetchedAt = service.getRelease(releaseId)?.fetchedAt
+
+        service.updateReleaseCache(MusicBrainzRelease(id = releaseId, title = "FRESH"))
+        service.updateReleaseCache(
+            MusicBrainzRelease(id = releaseId, title = "FRESH", media = listOf(MusicBrainzMedia(format = "Digital Media", trackCount = 2)))
+        )
+
+        val cached = service.getRelease(releaseId)
+        assertEquals(2, cached?.media?.single()?.tracks?.size)
+        assertEquals(listOf(artist.id), cached?.artistCredit?.map { it.artist?.id })
+        assertEquals(fetchedAt, cached?.fetchedAt)
     }
 }

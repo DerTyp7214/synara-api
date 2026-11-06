@@ -167,13 +167,14 @@ class MusicBrainzCacheService : Service() {
             }
     }
 
-    private fun mapRecording(id: UUID, row: ResultRow): MusicBrainzRecording {
-        val artistCredits = MBRecordingArtistCreditTable
+    private fun recordingArtistCredits(recordingIds: List<UUID>): Map<UUID, List<MusicBrainzArtistCredit>> {
+        if (recordingIds.isEmpty()) return emptyMap()
+        return MBRecordingArtistCreditTable
             .leftJoin(MBArtistTable)
             .selectAll()
-            .where { MBRecordingArtistCreditTable.recordingId eq id }
+            .where { MBRecordingArtistCreditTable.recordingId inList recordingIds }
             .orderBy(MBRecordingArtistCreditTable.position)
-            .map { creditRow ->
+            .groupBy({ it[MBRecordingArtistCreditTable.recordingId].value }) { creditRow ->
                 MusicBrainzArtistCredit(
                     name = creditRow[MBRecordingArtistCreditTable.name],
                     joinphrase = creditRow[MBRecordingArtistCreditTable.joinPhrase],
@@ -184,6 +185,18 @@ class MusicBrainzCacheService : Service() {
                     )
                 )
             }
+    }
+
+    private fun recordingIsrcs(recordingIds: List<UUID>): Map<UUID, List<String>> {
+        if (recordingIds.isEmpty()) return emptyMap()
+        return MBRecordingIsrcTable
+            .select(MBRecordingIsrcTable.recordingId, MBRecordingIsrcTable.isrc)
+            .where { MBRecordingIsrcTable.recordingId inList recordingIds }
+            .groupBy({ it[MBRecordingIsrcTable.recordingId].value }) { it[MBRecordingIsrcTable.isrc] }
+    }
+
+    private fun mapRecording(id: UUID, row: ResultRow): MusicBrainzRecording {
+        val artistCredits = recordingArtistCredits(listOf(id))[id].orEmpty()
 
         val releases = MBRecordingReleaseTable
             .leftJoin(MBReleaseTable)
@@ -196,10 +209,7 @@ class MusicBrainzCacheService : Service() {
                 )
             }
 
-        val isrcs = MBRecordingIsrcTable
-            .selectAll()
-            .where { MBRecordingIsrcTable.recordingId eq id }
-            .map { it[MBRecordingIsrcTable.isrc] }
+        val isrcs = recordingIsrcs(listOf(id))[id].orEmpty()
 
         val relations = MBRelationTable
             .selectAll()
@@ -246,38 +256,48 @@ class MusicBrainzCacheService : Service() {
                     )
                 }
 
-            val media = MBMediaTable.selectAll().where { MBMediaTable.releaseId eq id }.orderBy(MBMediaTable.position)
-                .map { mediaRow ->
-                    val mediaId = mediaRow[MBMediaTable.id].value
-                    val tracks = MBTrackTable
-                        .leftJoin(MBRecordingTable)
-                        .selectAll()
-                        .where { MBTrackTable.mediaId eq mediaId }
-                        .orderBy(MBTrackTable.position)
-                        .map { trackRow ->
-                            val recordingId = trackRow[MBTrackTable.recordingId]?.value
-                            val recording = if (recordingId != null) {
-                                MusicBrainzRecording(
-                                    id = recordingId,
-                                    title = trackRow[MBRecordingTable.title]
-                                )
-                            } else null
+            val mediaRows = MBMediaTable.selectAll().where { MBMediaTable.releaseId eq id }
+                .orderBy(MBMediaTable.position)
+                .toList()
+            val mediaIds = mediaRows.map { it[MBMediaTable.id].value }
+            val trackRows = if (mediaIds.isEmpty()) emptyList() else MBTrackTable
+                .leftJoin(MBRecordingTable)
+                .selectAll()
+                .where { MBTrackTable.mediaId inList mediaIds }
+                .orderBy(MBTrackTable.position)
+                .toList()
+            val recordingIds = trackRows.mapNotNull { it[MBTrackTable.recordingId]?.value }.distinct()
+            val isrcsByRecording = recordingIsrcs(recordingIds)
+            val creditsByRecording = recordingArtistCredits(recordingIds)
+            val tracksByMedia = trackRows.groupBy { it[MBTrackTable.mediaId].value }
 
-                            MusicBrainzTrack(
-                                id = trackRow[MBTrackTable.id].value,
-                                position = trackRow[MBTrackTable.position],
-                                number = trackRow[MBTrackTable.number],
-                                title = trackRow[MBTrackTable.title],
-                                recording = recording
-                            )
-                        }
+            val media = mediaRows.map { mediaRow ->
+                val tracks = tracksByMedia[mediaRow[MBMediaTable.id].value].orEmpty().map { trackRow ->
+                    val recordingId = trackRow[MBTrackTable.recordingId]?.value
+                    val recording = if (recordingId != null) {
+                        MusicBrainzRecording(
+                            id = recordingId,
+                            title = trackRow[MBRecordingTable.title],
+                            artistCredit = creditsByRecording[recordingId],
+                            isrcs = isrcsByRecording[recordingId]
+                        )
+                    } else null
 
-                    MusicBrainzMedia(
-                        format = mediaRow[MBMediaTable.format],
-                        trackCount = mediaRow[MBMediaTable.trackCount],
-                        tracks = tracks
+                    MusicBrainzTrack(
+                        id = trackRow[MBTrackTable.id].value,
+                        position = trackRow[MBTrackTable.position],
+                        number = trackRow[MBTrackTable.number],
+                        title = trackRow[MBTrackTable.title],
+                        recording = recording
                     )
                 }
+
+                MusicBrainzMedia(
+                    format = mediaRow[MBMediaTable.format],
+                    trackCount = mediaRow[MBMediaTable.trackCount],
+                    tracks = tracks
+                )
+            }
 
             val relations = MBRelationTable
                 .selectAll()
@@ -416,21 +436,23 @@ class MusicBrainzCacheService : Service() {
             b[lastUpdate] = Clock.System.now().toEpochMilliseconds()
         }
 
-        MBRecordingArtistCreditTable.deleteWhere { MBRecordingArtistCreditTable.recordingId eq recording.id }
-        recording.artistCredit?.forEachIndexed { index, credit ->
-            credit.artist?.let { mbArtist ->
-                updateArtistCache(mbArtist)
+        recording.artistCredit?.let { credits ->
+            MBRecordingArtistCreditTable.deleteWhere { MBRecordingArtistCreditTable.recordingId eq recording.id }
+            credits.forEachIndexed { index, credit ->
+                credit.artist?.let { mbArtist ->
+                    updateArtistCache(mbArtist)
 
-                MBRecordingArtistCreditTable.upsert(
-                    MBRecordingArtistCreditTable.recordingId,
-                    MBRecordingArtistCreditTable.artistId,
-                    MBRecordingArtistCreditTable.position
-                ) {
-                    it[recordingId] = recording.id
-                    it[artistId] = mbArtist.id
-                    it[name] = credit.name ?: ""
-                    it[joinPhrase] = credit.joinphrase
-                    it[position] = index
+                    MBRecordingArtistCreditTable.upsert(
+                        MBRecordingArtistCreditTable.recordingId,
+                        MBRecordingArtistCreditTable.artistId,
+                        MBRecordingArtistCreditTable.position
+                    ) {
+                        it[recordingId] = recording.id
+                        it[artistId] = mbArtist.id
+                        it[name] = credit.name ?: ""
+                        it[joinPhrase] = credit.joinphrase
+                        it[position] = index
+                    }
                 }
             }
         }
@@ -443,11 +465,13 @@ class MusicBrainzCacheService : Service() {
             }
         }
 
-        MBRecordingIsrcTable.deleteWhere { MBRecordingIsrcTable.recordingId eq recording.id }
-        recording.isrcs?.forEach { isrc ->
-            MBRecordingIsrcTable.upsert(MBRecordingIsrcTable.recordingId, MBRecordingIsrcTable.isrc) {
-                it[recordingId] = recording.id
-                it[this.isrc] = isrc
+        recording.isrcs?.let { isrcs ->
+            MBRecordingIsrcTable.deleteWhere { MBRecordingIsrcTable.recordingId eq recording.id }
+            isrcs.forEach { isrc ->
+                MBRecordingIsrcTable.upsert(MBRecordingIsrcTable.recordingId, MBRecordingIsrcTable.isrc) {
+                    it[recordingId] = recording.id
+                    it[this.isrc] = isrc
+                }
             }
         }
 
@@ -455,6 +479,7 @@ class MusicBrainzCacheService : Service() {
     }
 
     suspend fun updateReleaseCache(release: MusicBrainzRelease): Unit = dbQuery {
+        val fetchedMedia = release.media?.takeIf { media -> media.all { it.tracks != null } }
         MBReleaseTable.upsert(MBReleaseTable.id) { b ->
             b[id] = release.id
             b[title] = release.title ?: ""
@@ -464,7 +489,7 @@ class MusicBrainzCacheService : Service() {
             release.country?.let { b[country] = it }
             release.date?.let { b[date] = it }
             release.disambiguation?.let { b[disambiguation] = it }
-            b[lastUpdate] = Clock.System.now().toEpochMilliseconds()
+            if (fetchedMedia != null) b[lastUpdate] = Clock.System.now().toEpochMilliseconds()
         }
 
         release.releaseGroup?.let { group ->
@@ -474,46 +499,50 @@ class MusicBrainzCacheService : Service() {
             }
         }
 
-        MBReleaseArtistCreditTable.deleteWhere { MBReleaseArtistCreditTable.releaseId eq release.id }
-        release.artistCredit?.forEachIndexed { index, credit ->
-            credit.artist?.let { mbArtist ->
-                updateArtistCache(mbArtist)
+        release.artistCredit?.let { credits ->
+            MBReleaseArtistCreditTable.deleteWhere { MBReleaseArtistCreditTable.releaseId eq release.id }
+            credits.forEachIndexed { index, credit ->
+                credit.artist?.let { mbArtist ->
+                    updateArtistCache(mbArtist)
 
-                MBReleaseArtistCreditTable.upsert(
-                    MBReleaseArtistCreditTable.releaseId,
-                    MBReleaseArtistCreditTable.artistId,
-                    MBReleaseArtistCreditTable.position
-                ) {
-                    it[releaseId] = release.id
-                    it[artistId] = mbArtist.id
-                    it[name] = credit.name ?: ""
-                    it[joinPhrase] = credit.joinphrase
-                    it[position] = index
+                    MBReleaseArtistCreditTable.upsert(
+                        MBReleaseArtistCreditTable.releaseId,
+                        MBReleaseArtistCreditTable.artistId,
+                        MBReleaseArtistCreditTable.position
+                    ) {
+                        it[releaseId] = release.id
+                        it[artistId] = mbArtist.id
+                        it[name] = credit.name ?: ""
+                        it[joinPhrase] = credit.joinphrase
+                        it[position] = index
+                    }
                 }
             }
         }
 
-        MBMediaTable.deleteWhere { MBMediaTable.releaseId eq release.id }
-        release.media?.forEachIndexed { index, media ->
-            val mediaId = MBMediaTable.insertAndGetId {
-                it[releaseId] = release.id
-                it[position] = index
-                it[format] = media.format
-                it[trackCount] = media.trackCount ?: 0
-            }
-
-            media.tracks?.forEach { track ->
-                track.recording?.let { recording ->
-                    updateRecordingCache(recording)
+        fetchedMedia?.let { mediaList ->
+            MBMediaTable.deleteWhere { MBMediaTable.releaseId eq release.id }
+            mediaList.forEachIndexed { index, media ->
+                val mediaId = MBMediaTable.insertAndGetId {
+                    it[releaseId] = release.id
+                    it[position] = index
+                    it[format] = media.format
+                    it[trackCount] = media.trackCount ?: 0
                 }
 
-                MBTrackTable.upsert(MBTrackTable.id) { b ->
-                    b[id] = track.id
-                    b[MBTrackTable.mediaId] = mediaId
-                    track.position?.let { b[position] = it }
-                    track.number?.let { b[number] = it }
-                    track.title?.let { b[title] = it }
-                    track.recording?.id?.let { b[recordingId] = it }
+                media.tracks?.forEach { track ->
+                    track.recording?.let { recording ->
+                        updateRecordingCache(recording)
+                    }
+
+                    MBTrackTable.upsert(MBTrackTable.id) { b ->
+                        b[id] = track.id
+                        b[MBTrackTable.mediaId] = mediaId
+                        track.position?.let { b[position] = it }
+                        track.number?.let { b[number] = it }
+                        track.title?.let { b[title] = it }
+                        track.recording?.id?.let { b[recordingId] = it }
+                    }
                 }
             }
         }

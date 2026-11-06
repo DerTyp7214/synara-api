@@ -9,6 +9,7 @@ import dev.dertyp.services.metadata.*
 import dev.dertyp.services.release.AlbumEditions
 import dev.dertyp.services.release.AppleMusicReleaseService
 import dev.dertyp.utils.Barcodes
+import dev.dertyp.utils.Isrcs
 import dev.dertyp.utils.parsers.ParserFactory
 import io.ktor.server.application.ApplicationEnvironment
 import kotlinx.coroutines.async
@@ -118,7 +119,7 @@ class UpcomingReleaseImportService(
             }
         }
 
-        val sourceIsrcs = appleTracks.flatMap { it.isrcs }.map { normalizeIsrc(it) }.toSet()
+        val sourceIsrcs = appleTracks.flatMap { it.isrcs }.map(Isrcs::normalize).toSet()
         val candidates = musicBrainzCandidates(release, upc)
 
         var selected = pickRelease(candidates, upc, sourceIsrcs)
@@ -356,12 +357,12 @@ class UpcomingReleaseImportService(
         val byIsrc = mutableMapOf<String, SourceTrack>()
         val byTitle = mutableMapOf<String, SourceTrack>()
         mbTracks.forEach { mb ->
-            mb.isrcs.forEach { byIsrc.putIfAbsent(normalizeIsrc(it), mb) }
+            mb.isrcs.forEach { byIsrc.putIfAbsent(Isrcs.normalize(it), mb) }
             byTitle.putIfAbsent(mb.title.cleanTitle().lowercase(), mb)
         }
 
         return sourceTracks.map { track ->
-            val match = track.isrcs.firstNotNullOfOrNull { byIsrc[normalizeIsrc(it)] }
+            val match = track.isrcs.firstNotNullOfOrNull { byIsrc[Isrcs.normalize(it)] }
                 ?: byTitle[track.title.cleanTitle().lowercase()]
                 ?: return@map track
 
@@ -370,7 +371,7 @@ class UpcomingReleaseImportService(
                 artists = match.artists.takeIf { it.isNotEmpty() } ?: track.artists,
                 trackNumber = match.trackNumber ?: track.trackNumber,
                 discNumber = match.discNumber ?: track.discNumber,
-                isrcs = (track.isrcs + match.isrcs).distinctBy { normalizeIsrc(it) }
+                isrcs = (track.isrcs + match.isrcs).distinctBy(Isrcs::normalize)
             )
         }
     }
@@ -409,7 +410,7 @@ class UpcomingReleaseImportService(
         if (sourceIsrcs.isEmpty()) return 0
         return release.media.orEmpty().sumOf { media ->
             media.tracks.orEmpty().count { track ->
-                track.recording?.isrcs.orEmpty().any { normalizeIsrc(it) in sourceIsrcs }
+                track.recording?.isrcs.orEmpty().any { Isrcs.normalize(it) in sourceIsrcs }
             }
         }
     }
@@ -437,8 +438,6 @@ class UpcomingReleaseImportService(
         discNumber = discNumber,
         isrcs = listOfNotNull(isrc?.takeIf { it.isNotBlank() })
     )
-
-    private fun normalizeIsrc(isrc: String): String = isrc.filter { it.isLetterOrDigit() }.uppercase()
 
     private fun String.toUuidOrNull(): UUID? = runCatching { UUID.fromString(this) }.getOrNull()
 
