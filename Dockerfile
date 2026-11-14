@@ -60,7 +60,7 @@ RUN wget https://github.com/acoustid/chromaprint/releases/download/v${CHROMAPRIN
     tar xf chromaprint-fpcalc-${CHROMAPRINT_VERSION}-linux-x86_64.tar.gz
 
 # Stage 5: Create the Runtime Image
-FROM amazoncorretto:25 AS runtime
+FROM amazoncorretto:27 AS runtime
 
 ARG APP_USER_ID=1000
 ARG APP_GROUP_ID=1000
